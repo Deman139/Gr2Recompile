@@ -14,8 +14,8 @@ Requisitos
   - GPU con Vulkan 1.3 y 8 GB de VRAM recomendados. Probado en NVIDIA RTX 2060 Super;
     AMD e Intel todavía no están probadas.
   - 16 GB de RAM recomendados.
-  - Tu dump de Killzone Shadow Fall: CUSA00190 versión 01.81, desencriptado
-    (por ejemplo, con GoldHEN). Si tu dump base es 01.00, también la actualización 01.81.
+  - Tu propia copia dumpeada de Killzone Shadow Fall: CUSA00190 versión 01.81.
+    Si tu dump base es 01.00, también la actualización 01.81.
 
 Cómo jugar
   1. Descomprimí esta carpeta donde quieras (fuera de "Archivos de programa").
@@ -69,7 +69,7 @@ Requirements
   - A Vulkan 1.3 GPU; 8 GB of VRAM recommended. Tested on an NVIDIA RTX 2060 Super;
     AMD and Intel are not tested yet.
   - 16 GB of RAM recommended.
-  - Your Killzone Shadow Fall dump: CUSA00190 version 01.81, decrypted (e.g. with GoldHEN).
+  - Your own dumped copy of Killzone Shadow Fall: CUSA00190 version 01.81.
     If your base dump is 01.00, also the 01.81 update.
 
 How to play
