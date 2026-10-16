@@ -1,0 +1,3 @@
+NotoSans-Regular.ttf: Noto Sans by Google, SIL Open Font License 1.1
+(https://openfontlicense.org). Copied from shadPS4 (src/imgui/renderer/fonts).
+Used by src/runtime_font.c for the PS4 system font sets.
