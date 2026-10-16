@@ -17,8 +17,12 @@ it keeps improving with testers' reports.
 2. Open **Killzone Shadow Fall.exe**, choose your dump's folder (the one holding `eboot.bin`) and
    press **PLAY**.
 
-Requirements: Windows 10 (1903+) or 11 64-bit, a Vulkan 1.3 GPU (8 GB of VRAM recommended),
-16 GB of RAM. Tested on a Ryzen 7 5700 + RTX 2060 Super; AMD and Intel GPUs are not tested yet.
+Requirements: Windows 10 (1903+) or 11 64-bit, a Vulkan 1.3 GPU, 16 GB of RAM. We don't
+recommend playing with less than 8 GB of VRAM.
+
+Tested on a Ryzen 7 5700 + RTX 2060 Super: the game should be playable from start to finish.
+The first times, and the first loads above all, can stutter quite a bit while shaders compile;
+once loaded the game runs well, 40-60 FPS on that GPU. Not tested yet on AMD GPUs or Intel CPUs.
 
 ## What's included
 
@@ -28,8 +32,9 @@ Requirements: Windows 10 (1903+) or 11 64-bit, a Vulkan 1.3 GPU (8 GB of VRAM re
 - Touchpad without one (OWL drone): hold **Delete** and drag the mouse.
 - In-game menu with **Insert** (R3 + L2 on a controller); **F12** takes a screenshot.
 
-Known issues: stutters the first time an effect appears (shaders compile, then stay cached), a
-shader cache of several GB, multiplayer offline only (Botzone).
+Known issues: stutters the first time an effect appears (shaders compile, then stay cached); in
+chapter 2, slight lighting flicker at some moments while shaders load, which goes away with time;
+a shader cache of several GB; multiplayer offline only (Botzone).
 
 ## Reporting bugs
 
@@ -61,9 +66,13 @@ campaña completa, y se sigue puliendo con los reportes de los testers.
 2. Abrí **Killzone Shadow Fall.exe**, elegí la carpeta de tu dump (la que tiene `eboot.bin`) y
    dale a **JUGAR**.
 
-Requisitos: Windows 10 (1903+) u 11 de 64 bits, GPU con Vulkan 1.3 (8 GB de VRAM recomendados),
-16 GB de RAM. Probado en Ryzen 7 5700 + RTX 2060 Super; las GPUs AMD e Intel todavía no están
-probadas.
+Requisitos: Windows 10 (1903+) u 11 de 64 bits, GPU con Vulkan 1.3, 16 GB de RAM. No
+recomendamos jugarlo con menos de 8 GB de VRAM.
+
+Probado en Ryzen 7 5700 + RTX 2060 Super: el juego debería poder jugarse completo, de principio a
+fin. Las primeras veces, y sobre todo en las primeras cargas, puede dar bastantes tirones mientras
+se compilan los shaders; una vez cargado corre bastante bien, 40-60 FPS en esa gráfica. Todavía no
+fue probado en gráficas AMD ni en procesadores Intel.
 
 ## Qué incluye
 
@@ -74,7 +83,9 @@ probadas.
 - Menú dentro del juego con **Insert** (R3 + L2 en el mando); **F12** saca una captura.
 
 Problemas conocidos: tirones la primera vez que aparece un efecto (compilación de shaders, luego
-quedan en caché), caché de shaders de varios GB, multijugador solo sin conexión (Botzone).
+quedan en caché); en el capítulo 2, parpadeo leve de iluminación en ciertos momentos de carga de
+shaders, que se soluciona con el tiempo; caché de shaders de varios GB; multijugador solo sin
+conexión (Botzone).
 
 ## Reportar errores
 
