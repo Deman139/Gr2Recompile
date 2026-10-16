@@ -32,9 +32,34 @@ once loaded the game runs well, 40-60 FPS on that GPU. Not tested yet on AMD GPU
 - Touchpad without one (OWL drone): hold **Delete** and drag the mouse.
 - In-game menu with **Insert** (R3 + L2 on a controller); **F12** takes a screenshot.
 
-Known issues: stutters the first time an effect appears (shaders compile, then stay cached); in
-chapter 2, slight lighting flicker at some moments while shaders load, which goes away with time;
-a shader cache of several GB; multiplayer offline only (Botzone).
+## Known issues
+
+- **First campaign load:** the very first time you start the campaign it can take a long time
+  while many shaders compile, and it may even crash. Start the game again and it should load
+  fine: the shaders stay cached.
+- **Stutters** the first time an effect appears (the shader compiles, then stays cached).
+- **Chapter 2:** slight lighting flicker at some moments while shaders load; it goes away with time.
+- **No resolution scaling yet:** the game draws internally at a fixed 1080p, and its render
+  targets, shadows and post-processing effects are all sized for it. Rendering at a higher
+  resolution means patching every place in the game's code that assumes 1080p; doing it partially
+  breaks effects (misplaced or half-resolution effects, black borders). It is the top item in the
+  future plans. Meanwhile, on screens above 1080p, turn on **FSR 1 upscaling** (Graphics) for a
+  sharper image than plain stretching.
+- The shader cache can take several GB ("Clear cache" in the launcher).
+- Multiplayer: offline only (Botzone).
+
+## Future plans
+
+**High priority**
+- Resolution scaling up to 4K.
+- Optimizations: GPU usage and shader loading.
+
+**Medium priority**
+- Unlocked frame rate above 60 FPS (120, 144, 240...).
+
+**Later**
+- Upscalers: DLSS, FSR 3.1 and FSR 4.
+- Any patches or cheats that turn out to be needed.
 
 ## Reporting bugs
 
@@ -82,10 +107,35 @@ fue probado en gráficas AMD ni en procesadores Intel.
 - Touchpad sin touchpad (dron OWL): mantener **Suprimir** y arrastrar el mouse.
 - Menú dentro del juego con **Insert** (R3 + L2 en el mando); **F12** saca una captura.
 
-Problemas conocidos: tirones la primera vez que aparece un efecto (compilación de shaders, luego
-quedan en caché); en el capítulo 2, parpadeo leve de iluminación en ciertos momentos de carga de
-shaders, que se soluciona con el tiempo; caché de shaders de varios GB; multijugador solo sin
-conexión (Botzone).
+## Problemas conocidos
+
+- **Primera carga de la campaña:** la primera vez que iniciás la campaña puede demorar bastante
+  mientras se compilan muchos shaders, e incluso puede crashear. Volvé a entrar y debería cargar
+  bien: los shaders quedan en caché.
+- **Tirones** la primera vez que aparece un efecto (el shader se compila y después queda en caché).
+- **Capítulo 2:** parpadeo leve de iluminación en ciertos momentos de carga de shaders; se
+  soluciona con el tiempo.
+- **Todavía no se puede escalar la resolución:** el juego dibuja internamente a 1080p fijo, y sus
+  buffers de render, sombras y efectos de post-procesado están hechos para ese tamaño. Renderizar
+  a más resolución obliga a parchear todos los lugares del código del juego que asumen 1080p;
+  hacerlo a medias rompe efectos (efectos desplazados o a media resolución, bordes negros). Es lo
+  primero en los planes futuros. Mientras tanto, en pantallas de más de 1080p, activá **Escalado
+  FSR 1** (Gráficos) para una imagen más nítida que el estirado normal.
+- La caché de shaders puede ocupar varios GB ("Borrar caché" en el launcher).
+- Multijugador: solo sin conexión (Botzone).
+
+## Planes futuros
+
+**Prioridad alta**
+- Escala de resolución hasta 4K.
+- Optimizaciones: uso de GPU y carga de shaders.
+
+**Prioridad media**
+- Desbloqueo de FPS por encima de 60 (120, 144, 240...).
+
+**Más adelante**
+- Reescalado: DLSS, FSR 3.1 y FSR 4.
+- Parches o trucos que hagan falta.
 
 ## Reportar errores
 
