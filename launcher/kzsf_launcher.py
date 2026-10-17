@@ -36,7 +36,7 @@ FROZEN = getattr(sys, 'frozen', False)
 PORT_DIR = Path(sys.executable).resolve().parent if FROZEN else Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PORT_DIR / 'scripts'))
 
-VERSION = '0.1.1'
+VERSION = '0.2.0'
 TITLE_ID = 'CUSA00190'
 GAME_VERSION = '01.81'
 USER_DIR = Path(os.environ.get('KZSF_USER_DIR', PORT_DIR / 'user'))
@@ -95,8 +95,14 @@ TEXTS = {
         'display_mode': 'Modo de pantalla', 'mode_windowed': 'Ventana', 'mode_borderless': 'Ventana sin bordes',
         'mode_fullscreen': 'Pantalla completa',
         'window_size': 'Tamaño de ventana',
-        'window_size_help': 'Solo en modo ventana. El juego se dibuja a 1080p (como en PS4) y se escala a la ventana.',
+        'window_size_help': 'Solo en modo ventana. La imagen del juego se escala a la ventana.',
+        'render_res': 'Resolución de render', 'res_native': '1080p (como en PS4)',
+        'render_res_help': 'Resolución interna del juego. Más alta = más nítida pero más GPU y VRAM. '
+                           'Probado con 8 GB de VRAM hasta 4K (~5 GB). Se aplica al iniciar el juego.',
         'fps_limit': 'Límite de FPS', 'vsync': 'VSync (sincronización vertical)',
+        'fps_unlimited': 'Sin límite (experimental)', 'fps_experimental': 'experimental',
+        'fps_limit_help': '144 / 240 / sin límite son experimentales. Con un monitor de 60 Hz desactivá '
+                          'VSync o quedará en 60. Se aplica al iniciar el juego.',
         'vsync_help': 'Evita el tearing. Desactivado: un poco menos de latencia.',
         'anisotropy': 'Filtrado anisotrópico', 'aniso_game': 'El del juego',
         'sharpen': 'Nitidez (RCAS)', 'show_fps': 'Mostrar FPS en pantalla',
@@ -159,8 +165,15 @@ TEXTS = {
         'display_mode': 'Display mode', 'mode_windowed': 'Windowed', 'mode_borderless': 'Borderless window',
         'mode_fullscreen': 'Fullscreen',
         'window_size': 'Window size',
-        'window_size_help': 'Windowed mode only. The game draws at 1080p (as on PS4), scaled to the window.',
+        'window_size_help': 'Windowed mode only. The game image is scaled to the window.',
+        'render_res': 'Render resolution', 'res_native': '1080p (as on PS4)',
+        'render_res_help': "The game's internal resolution. "
+                           'Higher = sharper but more GPU and VRAM. '
+                           'Tested with 8 GB of VRAM up to 4K (~5 GB). Applied when the game starts.',
         'fps_limit': 'Frame rate limit', 'vsync': 'VSync (vertical sync)',
+        'fps_unlimited': 'Unlimited (experimental)', 'fps_experimental': 'experimental',
+        'fps_limit_help': '144 / 240 / unlimited are experimental. On a 60 Hz monitor turn VSync off '
+                          'or it stays at 60. Applied when the game starts.',
         'vsync_help': 'Prevents tearing. Off: slightly lower latency.',
         'anisotropy': 'Anisotropic filtering', 'aniso_game': 'Game default',
         'sharpen': 'Sharpening (RCAS)', 'show_fps': 'Show FPS on screen',
@@ -301,7 +314,8 @@ def clean_title(title):
 # Settings.
 
 GRAPHICS_DEFAULTS = {
-    'display_mode': 'windowed', 'fps_limit': '60', 'vsync': '1', 'anisotropy': '16', 'rcas': '0', 'fsr1': '0',
+    'display_mode': 'windowed', 'render_resolution': 'native', 'fps_limit': '60', 'vsync': '1', 'anisotropy': '16',
+    'rcas': '0', 'fsr1': '0',
     'show_fps': '0', 'vibration': '100', 'async_shaders': '1', 'stale_readback': '1',
     'deferred_readback': '1', 'frames_queued': '1',
 }
@@ -310,7 +324,11 @@ LAUNCHER_DEFAULTS = {'game_dir': '', 'update_dir': '', 'language': '', 'window_s
                      'mouse_invert': False}
 WINDOW_SIZES = ('1280x720', '1600x900', '1920x1080', '2560x1440', '3840x2160')
 DISPLAY_MODES = ('windowed', 'borderless', 'fullscreen')
-FPS_LIMITS = ('30', '60')
+FPS_LIMITS = ('30', '60', '144', '240', '0')
+# Above 60 the game is not vblank paced: vblank runs at 480 Hz and the present thread caps the rate
+# (GOW3_FPS_LIMIT). The engine measures frame time with the guest TSC, so game speed is unchanged.
+EXPERIMENTAL_FPS = ('144', '240', '0')
+RENDER_RESOLUTIONS = ('720p', 'native', '1440p', '1800p', '4K')  # patches/Killzone_Shadow_Fall.xml
 ANISOTROPY = ('0', '2', '4', '8', '16')
 FRAMES_QUEUED = ('1', '2', '0')
 
@@ -390,6 +408,8 @@ def load_graphics():
     # Values the launcher does not offer (the in-game menu has more) fall back to the closest one.
     if values['display_mode'] not in DISPLAY_MODES:
         values['display_mode'] = 'windowed'
+    if values['render_resolution'] not in RENDER_RESOLUTIONS:
+        values['render_resolution'] = 'native'
     if values['fps_limit'] not in FPS_LIMITS:
         values['fps_limit'] = '60'
     if values['anisotropy'] not in ANISOTROPY:
@@ -797,8 +817,14 @@ class Launcher:
         size = self.settings.get('window_size') if self.settings.get('window_size') in WINDOW_SIZES else '1920x1080'
         self.choice(parent, tr('window_size'), WINDOW_SIZES, [s.replace('x', ' × ') for s in WINDOW_SIZES], size,
                     self.set_window_size, tr('window_size_help'))
-        self.choice(parent, tr('fps_limit'), FPS_LIMITS, ['30 FPS', '60 FPS'], self.graphics['fps_limit'],
-                    lambda v: self.set_graphic('fps_limit', v))
+        self.choice(parent, tr('render_res'), RENDER_RESOLUTIONS,
+                    ['720p (1280 × 720)', tr('res_native'), '1440p (2560 × 1440)', '1800p (3200 × 1800)',
+                     '4K (3840 × 2160)'], self.graphics['render_resolution'],
+                    lambda v: self.set_graphic('render_resolution', v), tr('render_res_help'))
+        self.choice(parent, tr('fps_limit'), FPS_LIMITS,
+                    ['30 FPS', '60 FPS', f"144 FPS ({tr('fps_experimental')})",
+                     f"240 FPS ({tr('fps_experimental')})", tr('fps_unlimited')],
+                    self.graphics['fps_limit'], lambda v: self.set_graphic('fps_limit', v), tr('fps_limit_help'))
         self.choice(parent, tr('anisotropy'), ANISOTROPY, [tr('aniso_game'), '2x', '4x', '8x', '16x'],
                     self.graphics['anisotropy'], lambda v: self.set_graphic('anisotropy', v))
         self.tk.Frame(parent, bg=PANEL, height=self.px(8)).pack()
@@ -1033,6 +1059,12 @@ class Launcher:
             'GOW3_MOUSE_INVERT_Y': '1' if self.settings.get('mouse_invert') else '0',
             'GOW3_DISCORD': '0',  # its Discord presence is God of War III's
         })
+        if self.graphics['fps_limit'] in EXPERIMENTAL_FPS:
+            env['GOW3_VBLANK_HZ'] = '0'
+            env['GOW3_FPS_LIMIT'] = self.graphics['fps_limit']
+        else:
+            env.pop('GOW3_VBLANK_HZ', None)
+            env.pop('GOW3_FPS_LIMIT', None)
         if needs_update and self.settings['update_dir']:
             env['GOW3_PATCH_DIR'] = self.settings['update_dir']
         else:

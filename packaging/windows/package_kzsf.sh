@@ -49,12 +49,14 @@ ldd "$dest/bin/KillzoneShadowFall.exe" | awk '/\/clang64\/bin\// {print $3}' | s
 done
 cp -r scripts "$dest/"
 cp run.py LICENSE "$dest/"
+# The render resolution patches (tools/make_kzsf_res_patches.py): our own file, no game data.
+cp patches/Killzone_Shadow_Fall.xml "$dest/patches/"
 cp packaging/windows/LEEME-README.txt "$dest/LEEME - README.txt"
 find "$dest" -name __pycache__ -prune -exec rm -r {} +
 # No game files and nothing a player made (saves, caches, settings, logs) may ship.
 forbidden=$(find "$dest" \( -iname eboot.bin -o -iname sce_module -o -iname sce_sys -o -iname savedata \
     -o -iname user -o -iname cache -o -iname '*.log' -o -iname '*.ini' -o -iname launcher.json \
-    -o -iname '*.spv' -o -iname '*.pkg' -o -iname '*.sprx' -o -iname '*.prx' -o -iname '*.xml' \) -print)
+    -o -iname '*.spv' -o -iname '*.pkg' -o -iname '*.sprx' -o -iname '*.prx' -o \( -iname '*.xml' -not -path "$dest/patches/Killzone_Shadow_Fall.xml" \) \) -print)
 if [[ -n $forbidden ]]; then
     echo "Package holds files that must not ship:" >&2
     echo "$forbidden" >&2

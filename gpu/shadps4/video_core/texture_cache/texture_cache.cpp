@@ -24,6 +24,8 @@
 #include "video_core/texture_cache/texture_cache.h"
 #include "video_core/texture_cache/tile_manager.h"
 
+#include <vk_mem_alloc.h>
+
 namespace VideoCore {
 
 static constexpr u64 PageShift = 12;
@@ -1121,6 +1123,14 @@ ImageId TextureCache::FindImage(ImageDesc& desc, bool exact_fmt) {
     return image_id;
 }
 
+bool TextureCache::HasGpuModifiedImage(VAddr address, size_t size) {
+    bool found = false;
+    ForEachImageInRegion(address, size, [&](ImageId, Image& image) {
+        found |= True(image.flags & ImageFlagBits::GpuModified);
+    });
+    return found;
+}
+
 ImageId TextureCache::FindImageFromRange(VAddr address, size_t size, bool ensure_valid) {
     ImageIds image_ids;
     ForEachImageInRegion(address, size, [&](ImageId image_id, Image& image) {
@@ -1371,6 +1381,8 @@ void TextureCache::RegisterImage(ImageId image_id) {
     TraceImage("registered", image);
     ++registry_generation;
     total_used_memory += Common::AlignUp(image.info.guest_size, 1024);
+    registered_image_bytes += image.info.guest_size;
+    ++registered_images;
     image.lru_id = lru_cache.Insert(image_id, gc_tick);
     image.lru_touched_tick = gc_tick;
 
@@ -1407,6 +1419,8 @@ void TextureCache::UnregisterImage(ImageId image_id) {
     ++registry_generation;
     lru_cache.Free(image.lru_id);
     total_used_memory -= Common::AlignUp(image.info.guest_size, 1024);
+    registered_image_bytes -= image.info.guest_size;
+    --registered_images;
     ForEachPage(image.info.guest_address, image.info.guest_size, [this, image_id](u64 page) {
         const auto page_it = page_table.find(page);
         if (page_it == nullptr) {
@@ -1551,6 +1565,44 @@ void TextureCache::GarbageCollectImages() {
                 trigger_gc_memory = budget / 10 * 7;
                 pressure_gc_memory = budget / 100 * 85;
                 critical_gc_memory = budget / 100 * 95;
+            }
+        }
+    }
+    // gow3: where device memory goes, every 10 s (images by guest size, buffer arena blocks).
+    if (const auto now = std::chrono::steady_clock::now(); now - vram_report_time >= std::chrono::seconds(10)) {
+        vram_report_time = now;
+        std::printf("VRAM: device usage %llu MiB; %u images %llu MiB; buffer arena %llu MiB "
+                    "(+%llu MiB in system memory)\n",
+                    (unsigned long long)(instance.GetDeviceMemoryUsage() >> 20), registered_images,
+                    (unsigned long long)(registered_image_bytes >> 20),
+                    (unsigned long long)(buffer_cache.ResidentDeviceBytes() >> 20),
+                    (unsigned long long)(buffer_cache.ResidentFallbackBytes() >> 20));
+        ReportImageMemory();
+        ReportBufferMemory();
+        buffer_cache.ReportResidency();
+        // VMA (images, staging/stream buffers): blocks reserved and bytes allocated in them.
+        VmaTotalStatistics stats{};
+        vmaCalculateStatistics(instance.GetAllocator(), &stats);
+        const auto& props = instance.GetMemoryProperties();
+        for (u32 heap = 0; heap < props.memoryHeapCount; ++heap) {
+            const auto& st = stats.memoryHeap[heap].statistics;
+            if (st.blockBytes == 0) {
+                continue;
+            }
+            std::printf("VRAM:   VMA heap %u (%s): %u blocks %llu MiB, %u allocations %llu MiB\n",
+                        heap,
+                        (props.memoryHeaps[heap].flags & vk::MemoryHeapFlagBits::eDeviceLocal)
+                            ? "device" : "system",
+                        st.blockCount, (unsigned long long)(st.blockBytes >> 20), st.allocationCount,
+                        (unsigned long long)(st.allocationBytes >> 20));
+        }
+        for (u32 type = 0; type < props.memoryTypeCount; ++type) {
+            const auto& st = stats.memoryType[type].statistics;
+            if (st.blockBytes >= 64_MB) {
+                std::printf("VRAM:     type %u (flags 0x%x): %llu MiB in %u blocks, %llu MiB used\n",
+                            type, u32(props.memoryTypes[type].propertyFlags),
+                            (unsigned long long)(st.blockBytes >> 20), st.blockCount,
+                            (unsigned long long)(st.allocationBytes >> 20));
             }
         }
     }

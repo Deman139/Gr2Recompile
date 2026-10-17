@@ -92,6 +92,14 @@ BufferCache::BufferCache(const Vulkan::Instance& instance_, Vulkan::Scheduler& s
         FindMemoryType(instance.GetMemoryProperties(), vk::MemoryPropertyFlagBits::eDeviceLocal,
                        reqs.memoryTypeBits)
             .value();
+    // gow3: on 8 GB GPUs higher render resolutions ran out of device memory (the arena blocks
+    // are never released): later blocks then live in system memory, slower but no crash.
+    arena_fallback_type_index =
+        FindMemoryType(instance.GetMemoryProperties(), vk::MemoryPropertyFlagBits::eHostVisible,
+                       reqs.memoryTypeBits & ~(1u << arena_memory_type_index));
+    std::printf("GPU: buffer arena blocks of %u KiB, %s\n", block_size >> 10,
+                arena_fallback_type_index ? "system memory fallback available"
+                                          : "no system memory fallback");
 
     const u64 bda_pagetable_size =
         (blocks_per_arena_page * num_arena_pages) * sizeof(vk::DeviceAddress);
@@ -350,6 +358,7 @@ std::pair<const Buffer*, u64> BufferCache::ObtainBuffer(VAddr device_addr, u32 s
 }
 
 std::pair<const Buffer*, u64> BufferCache::ObtainBufferForImage(VAddr device_addr, u32 size) {
+    const ResidencyTag tag{"image-upload"};
     texture_cache.ResolveReadbacks(device_addr, size, true, ReadbackSource::BufferForImage);
     if (IsRegionGpuModified(device_addr, size)) {
         return ObtainBuffer(device_addr, size, false);
@@ -457,6 +466,24 @@ const Buffer* BufferCache::GetArena(u64 first_block, u64 last_block) {
     return new_arena;
 }
 
+void BufferCache::ReportResidency() const {
+    std::vector<std::pair<u64, u64>> regions;
+    for (const auto& [region, bytes] : resident_by_region) {
+        regions.push_back({bytes, region});
+    }
+    std::sort(regions.rbegin(), regions.rend());
+    std::printf("VRAM:   arena by guest region:");
+    for (size_t i = 0; i < regions.size() && i < 10; ++i) {
+        std::printf(" %#llx:%llu MiB", (unsigned long long)(regions[i].second << 28),
+                    (unsigned long long)(regions[i].first >> 20));
+    }
+    std::printf(" | by use:");
+    for (const auto& [tag, bytes] : resident_by_tag) {
+        std::printf(" %s %llu MiB", tag.c_str(), (unsigned long long)(bytes >> 20));
+    }
+    std::printf("\n");
+}
+
 void BufferCache::EnsureResident(const Buffer* arena, u64 first_block, u64 last_block) {
     u32 resident_blocks{};
     IntervalList bind_ranges;
@@ -470,11 +497,41 @@ void BufferCache::EnsureResident(const Buffer* arena, u64 first_block, u64 last_
     }
     Gow3Stats::Timer timer{Gow3Stats::t_resident};
 
-    const vk::MemoryAllocateInfo alloc_info = {
+    vk::MemoryAllocateInfo alloc_info = {
         .allocationSize = resident_blocks << block_shift,
         .memoryTypeIndex = arena_memory_type_index,
     };
-    const auto device_memory = Vulkan::Check(instance.GetDevice().allocateMemory(alloc_info));
+    vk::DeviceMemory device_memory;
+    auto result = instance.GetDevice().allocateMemory(&alloc_info, nullptr, &device_memory);
+    bool fallback = false;
+    if (result == vk::Result::eErrorOutOfDeviceMemory && arena_fallback_type_index) {
+        if (resident_fallback_bytes == 0) {
+            std::printf("GPU: device memory exhausted (%llu MiB of buffer arena blocks): new "
+                        "blocks use system memory\n",
+                        (unsigned long long)(resident_device_bytes >> 20));
+        }
+        alloc_info.memoryTypeIndex = *arena_fallback_type_index;
+        result = instance.GetDevice().allocateMemory(&alloc_info, nullptr, &device_memory);
+        fallback = true;
+    }
+    if (result != vk::Result::eSuccess) {
+        std::printf("GPU: buffer arena allocation of %llu KiB failed (%s; %llu MiB device, %llu "
+                    "MiB system so far)\n",
+                    (unsigned long long)(alloc_info.allocationSize >> 10),
+                    vk::to_string(result).c_str(), (unsigned long long)(resident_device_bytes >> 20),
+                    (unsigned long long)(resident_fallback_bytes >> 20));
+        std::fflush(stdout);
+    }
+    Vulkan::Check(result);
+    (fallback ? resident_fallback_bytes : resident_device_bytes) += alloc_info.allocationSize;
+    if (resident_device_bytes + resident_fallback_bytes >= resident_report_mark) {
+        resident_report_mark = resident_device_bytes + resident_fallback_bytes + 256_MB;
+        std::printf("GPU: buffer arena blocks %llu MiB in device memory, %llu MiB in system "
+                    "memory (device usage %llu MiB)\n",
+                    (unsigned long long)(resident_device_bytes >> 20),
+                    (unsigned long long)(resident_fallback_bytes >> 20),
+                    (unsigned long long)(instance.GetDeviceMemoryUsage() >> 20));
+    }
 
     boost::container::small_vector<vk::BufferCopy, 8> copies;
     const auto staging =
@@ -491,6 +548,10 @@ void BufferCache::EnsureResident(const Buffer* arena, u64 first_block, u64 last_
         backing.memory = device_memory;
         backing.offset = memory_offset;
         resident_ranges.Add(backing);
+        for (u64 block = range.start; block < range.end; ++block) {
+            resident_by_region[(block << block_shift) >> 28] += block_size;
+        }
+        resident_by_tag[residency_tag] += (range.end - range.start) << block_shift;
 
         LOG_INFO(Render, "Making range start={}, end={} resident", backing.start, backing.end);
 

@@ -257,6 +257,9 @@ def main():
             names = graphics_options.restrict_to_available(names, patches.available_patches(profile[1], profile[2]))
             env['GOW3_PATCHES'] = ';'.join(names)
             env['GOW3_PATCHES_ONLY'] = '1'
+            # The in-game menu offers the engine frame rate only when this game has such patches.
+            env['GOW3_FPS_PATCHES'] = '1' if any(n.startswith(graphics_options.FPS_PREFIX) for n in
+                                                 patches.available_patches(profile[1], profile[2])) else '0'
         (out / 'patch_status.json').unlink(missing_ok=True)
         run_script('patches.py', '--out', out, '--extra', env.get('GOW3_PATCHES', ''), '--game-dir', game,
                    '--patches-dir', env.get('GOW3_PATCHES_DIR', data / 'patches'),

@@ -1,7 +1,12 @@
 // SPDX-FileCopyrightText: Copyright 2024 shadPS4 Emulator Project
 // SPDX-License-Identifier: GPL-2.0-or-later
 
+#include <algorithm>
 #include <cstdlib>
+#include <map>
+#include <mutex>
+#include <string>
+#include <vector>
 #include <numeric>
 #include <string_view>
 
@@ -93,6 +98,52 @@ static StreamPlacement StreamMemory() {
     }
 }
 
+namespace {
+// gow3: VMA buffers alive by debug name (VRAM report).
+struct BufferMemory {
+    std::mutex mutex;
+    std::map<VmaAllocation, std::pair<std::string, u64>> live;
+};
+BufferMemory& LiveBuffers() {
+    static BufferMemory memory;
+    return memory;
+}
+void NoteBuffer(VmaAllocation allocation, std::string label, u64 size) {
+    auto& m = LiveBuffers();
+    std::scoped_lock lock{m.mutex};
+    m.live[allocation] = {std::move(label), size};
+}
+void ForgetBuffer(VmaAllocation allocation) {
+    auto& m = LiveBuffers();
+    std::scoped_lock lock{m.mutex};
+    m.live.erase(allocation);
+}
+} // namespace
+
+void ReportBufferMemory() {
+    std::map<std::string, std::pair<u32, u64>> by_label;
+    u64 total = 0;
+    {
+        auto& m = LiveBuffers();
+        std::scoped_lock lock{m.mutex};
+        for (const auto& [allocation, entry] : m.live) {
+            auto& e = by_label[entry.first];
+            ++e.first, e.second += entry.second, total += entry.second;
+        }
+    }
+    std::vector<std::pair<u64, std::pair<std::string, u32>>> sorted;
+    for (const auto& [label, e] : by_label) {
+        sorted.push_back({e.second, {label, e.first}});
+    }
+    std::sort(sorted.rbegin(), sorted.rend());
+    std::printf("VRAM:   VMA buffers %llu MiB:", (unsigned long long)(total >> 20));
+    for (size_t i = 0; i < sorted.size() && i < 10; ++i) {
+        std::printf(" [%s x%u %llu MiB]", sorted[i].second.first.c_str(), sorted[i].second.second,
+                    (unsigned long long)(sorted[i].first >> 20));
+    }
+    std::printf("\n");
+}
+
 UniqueBuffer::UniqueBuffer(vk::Device device_, VmaAllocator allocator_)
     : device{device_}, allocator{allocator_} {}
 
@@ -102,6 +153,7 @@ UniqueBuffer::~UniqueBuffer() {
 
 void UniqueBuffer::Destroy() {
     if (allocation) {
+        ForgetBuffer(allocation);
         vmaDestroyBuffer(allocator, buffer, allocation);
     } else if (buffer) {
         device.destroyBuffer(buffer);
@@ -171,6 +223,10 @@ Buffer::Buffer(const Vulkan::Instance& instance, VAddr cpu_addr_, u64 size_bytes
     }
 
     if (mem_type != MemoryType::Sparse) {
+        NoteBuffer(buffer.allocation,
+                   (debug_name.empty() ? std::string{"unnamed"} : std::string{debug_name}) +
+                       " type" + std::to_string(int(mem_type)),
+                   alloc_info.size);
         VkMemoryPropertyFlags property_flags{};
         vmaGetAllocationMemoryProperties(instance.GetAllocator(), buffer.allocation,
                                          &property_flags);

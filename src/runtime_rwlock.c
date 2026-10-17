@@ -121,7 +121,21 @@ static ABI int32_t rw_unlock(Rwlock **handle) {
     if (!r) { pthread_mutex_unlock(&registry_lock); return error(EINVAL); }
     Holder *h=r->holders;
     while (h && !pthread_equal(h->thread,pthread_self())) h=h->next;
-    if (!h || (!h->readers && !h->writer)) { pthread_mutex_unlock(&registry_lock); return error(EPERM); }
+    if (!h || (!h->readers && !h->writer)) {
+        /* FreeBSD (libthr) lets any thread drop a read hold: Killzone takes read locks on
+           one thread and releases them on another. Refusing leaked the holds until a
+           writer (the asset streamer on level change) waited forever. */
+        Holder *owner=r->holders;
+        while (owner && !owner->readers) owner=owner->next;
+        for (Holder *w=r->holders; w; w=w->next) if (w->writer) owner=NULL;
+        if (!owner) { pthread_mutex_unlock(&registry_lock); return error(EPERM); }
+        static int reported;
+        if (!reported++) fputs("Runtime: rwlock read hold released by another thread\n",stderr);
+        int e=pthread_rwlock_unlock(&r->native);
+        if (!e) { --owner->readers; ++unlocks; }
+        prune_locked(r,owner);
+        pthread_mutex_unlock(&registry_lock); return error(e);
+    }
     int e=pthread_rwlock_unlock(&r->native);
     if (!e) { if (h->writer) h->writer=0; else --h->readers; ++unlocks; }
     prune_locked(r,h);

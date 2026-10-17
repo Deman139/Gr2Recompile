@@ -30,6 +30,11 @@ constexpr u64 LARGE_IDLE_FRAMES = 3000;
 constexpr u64 PREWARM_BLOCKS = 8;
 constexpr u64 LARGE_MIN_GRANULARITY = 64_KB;
 constexpr u64 BLOCK_SIZE = 16_MB;
+// gow3: device-local staging (detiling, copies) has no first-touch cost, but the ring kept every
+// block it ever grew to: Killzone held 1.7 GiB of VRAM there (109 blocks), never trimmed because
+// the ring rotation kept them all recently used. That ring is now first-fit (the tail goes idle)
+// and keeps GOW3_STAGING_DEVICE_KEEP_MB (64) beyond 5 s idle; large device buffers also go at 5 s.
+constexpr u64 DEVICE_IDLE_FRAMES = 300;
 
 u64 RoundAllocationSize(u64 size) {
     const u64 step = std::max(std::bit_floor(size) / 4, LARGE_MIN_GRANULARITY);
@@ -42,6 +47,8 @@ StagingBufferPool::StagingBufferPool(const Instance& instance_, Scheduler& sched
     : instance{instance_}, scheduler{scheduler_} {
     const char* env = std::getenv("GOW3_STAGING_KEEP_MB");
     keep_blocks = (env ? std::strtoull(env, nullptr, 10) : 512) * 1_MB / BLOCK_SIZE;
+    const char* device_env = std::getenv("GOW3_STAGING_DEVICE_KEEP_MB");
+    keep_device_blocks = (device_env ? std::strtoull(device_env, nullptr, 10) : 64) * 1_MB / BLOCK_SIZE;
     Ring& ring = rings[u32(MemoryType::HostUncached)];
     for (u64 i = 0; i < PREWARM_BLOCKS; ++i) {
         auto& block = ring.blocks.emplace_back(Block{
@@ -70,8 +77,9 @@ StagingBufferRef StagingBufferPool::RequestFromRing(Ring& ring, u64 size, u64 al
                                                     MemoryType type) {
     Block* best{};
     u64 best_offset{};
+    const size_t start = type == MemoryType::DeviceLocal ? 0 : ring.current;
     for (size_t i = 0; i < ring.blocks.size(); ++i) {
-        const size_t index = (ring.current + i) % ring.blocks.size();
+        const size_t index = (start + i) % ring.blocks.size();
         Block* block = &ring.blocks[index];
         if (const auto offset = block->buffer->Reserve(size, alignment, false)) {
             ring.current = index;
@@ -161,20 +169,20 @@ void StagingBufferPool::FreeDeferred(const StagingBufferRef& ref) {
 
 void StagingBufferPool::TickFrame() {
     ++frame;
-    for (Ring& ring : rings) {
-        TrimRing(ring);
-    }
-    for (auto& cache : large_caches) {
-        TrimLarge(cache);
+    for (size_t i = 0; i < NUM_TYPES; ++i) {
+        const bool device = i == u32(MemoryType::DeviceLocal);
+        TrimRing(rings[i], device ? keep_device_blocks : keep_blocks,
+                 device ? DEVICE_IDLE_FRAMES : RING_IDLE_FRAMES);
+        TrimLarge(large_caches[i], device ? DEVICE_IDLE_FRAMES : LARGE_IDLE_FRAMES);
     }
     PublishStats();
 }
 
-void StagingBufferPool::TrimRing(Ring& ring) {
+void StagingBufferPool::TrimRing(Ring& ring, u64 keep, u64 idle_frames) {
     auto& blocks = ring.blocks;
     for (size_t i = blocks.size(); i-- > 0;) {
         const Block& block = blocks[i];
-        if (blocks.size() <= keep_blocks || frame - block.last_used_frame < RING_IDLE_FRAMES ||
+        if (blocks.size() <= keep || frame - block.last_used_frame < idle_frames ||
             !scheduler.IsFree(block.buffer->LastTick())) {
             continue;
         }
@@ -190,9 +198,9 @@ void StagingBufferPool::TrimRing(Ring& ring) {
     }
 }
 
-void StagingBufferPool::TrimLarge(std::vector<LargeBuffer>& cache) {
-    std::erase_if(cache, [this](const LargeBuffer& entry) {
-        return !entry.held && frame - entry.last_used_frame >= LARGE_IDLE_FRAMES &&
+void StagingBufferPool::TrimLarge(std::vector<LargeBuffer>& cache, u64 idle_frames) {
+    std::erase_if(cache, [this, idle_frames](const LargeBuffer& entry) {
+        return !entry.held && frame - entry.last_used_frame >= idle_frames &&
                scheduler.IsFree(entry.tick);
     });
 }

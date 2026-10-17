@@ -1900,6 +1900,7 @@ void Rasterizer::ResolveVertexBuffers(const GraphicsPipeline* pipeline,
     // Map buffers for merged ranges
     for (auto& range : ranges_merged) {
         const u64 size = memory->ClampRangeSize(range.base_address, range.GetSize());
+        const VideoCore::ResidencyTag tag{"vertex"};
         std::tie(range.buffer, range.offset) =
             buffer_cache.ObtainBuffer(range.base_address, size, false);
         needs_barrier |= runtime.IsBufferAccessed(range.buffer, range.offset, size);
@@ -1958,6 +1959,7 @@ void Rasterizer::ResolveIndexBuffer(u32 index_offset) {
 
     // Bind index buffer.
     const u32 index_buffer_size = regs.num_indices * index_size;
+    const VideoCore::ResidencyTag tag{"index"};
     const auto [buffer, offset] =
         buffer_cache.ObtainBuffer(index_address, index_buffer_size, false);
     needs_barrier |= runtime.IsBufferAccessed(buffer, offset, index_buffer_size);
@@ -2237,6 +2239,22 @@ void Rasterizer::BindBuffers(const Shader::Info& stage, const PreparedStage* pre
                 if (size != vsharp.GetSize()) {
                     LOG_ERROR(Render, "Clamped size from {} to {} for stage {:#x}",
                               vsharp.GetSize(), size, stage.pgm_hash);
+                }
+                const VideoCore::ResidencyTag tag{desc.is_written ? "shader-rw" : "shader-ro"};
+                // gow3: large shader buffer bindings make their whole range resident (VRAM).
+                if (size >= 32_MB) {
+                    static std::atomic<int> logged{0};
+                    if (logged.fetch_add(1) < 40) {
+                        std::printf("VRAM: large buffer binding %#llx size %llu MiB written %d "
+                                    "formatted %d stage %#llx stride %u records %u cs groups %u "
+                                    "threads %u prepared %d\n",
+                                    (unsigned long long)vsharp.base_address,
+                                    (unsigned long long)(size >> 20), int(desc.is_written),
+                                    int(desc.is_formatted), (unsigned long long)stage.pgm_hash,
+                                    u32(vsharp.GetStride()), u32(vsharp.num_records),
+                                    CsRegs().NumWorkgroups(), u32(CsRegs().num_thread_x.full),
+                                    int(prepared != nullptr));
+                    }
                 }
                 const auto [buffer, offset] = buffer_cache.ObtainBuffer(
                     vsharp.base_address, size, desc.is_written, desc.is_formatted);
@@ -3238,6 +3256,7 @@ void Rasterizer::DepthStencilCopy(bool is_depth, bool is_stencil) {
 
 void Rasterizer::FillBuffer(VAddr address, u32 num_bytes, u32 value, bool is_gds) {
     DrainDrawPipe();
+    const VideoCore::ResidencyTag tag{"dma-fill"};
     ASSERT_MSG(address % 4 == 0 && num_bytes % 4 == 0,
                "FillBuffer address and size must be a multiple of 4 bytes");
     if (!is_gds) {
@@ -3259,6 +3278,7 @@ void Rasterizer::FillBuffer(VAddr address, u32 num_bytes, u32 value, bool is_gds
 
 void Rasterizer::CopyBuffer(VAddr dst, VAddr src, u32 num_bytes, bool dst_gds, bool src_gds) {
     DrainDrawPipe();
+    const VideoCore::ResidencyTag tag{"dma-copy"};
     if (!dst_gds && !buffer_cache.IsRegionGpuModified(dst, num_bytes)) {
         if (!src_gds && !buffer_cache.IsRegionGpuModified(src, num_bytes) &&
             !texture_cache.FindImageFromRange(src, num_bytes)) {

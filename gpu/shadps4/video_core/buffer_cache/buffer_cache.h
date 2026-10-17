@@ -3,6 +3,10 @@
 
 #pragma once
 
+#include <map>
+#include <string>
+#include <optional>
+
 #include "gow3_copy.h"
 
 #include <deque>
@@ -32,6 +36,14 @@ class StagingBufferPool;
 
 namespace VideoCore {
 
+/// gow3: who asked for the arena blocks being made resident (VRAM report).
+inline thread_local const char* residency_tag = "other";
+struct ResidencyTag {
+    const char* previous;
+    explicit ResidencyTag(const char* tag) : previous{residency_tag} { residency_tag = tag; }
+    ~ResidencyTag() { residency_tag = previous; }
+};
+
 class TextureCache;
 class MemoryTracker;
 class PageManager;
@@ -46,6 +58,12 @@ class BufferCache {
     static constexpr u64 MIN_BLOCK_SIZE = 16_KB;
 
 public:
+    /// gow3: arena block memory allocated in device / system memory (VRAM report).
+    [[nodiscard]] u64 ResidentDeviceBytes() const { return resident_device_bytes; }
+    [[nodiscard]] u64 ResidentFallbackBytes() const { return resident_fallback_bytes; }
+    /// gow3: prints the arena blocks by 256 MiB guest region (VRAM report).
+    void ReportResidency() const;
+
     /// Read-only bindings up to this size are copied into a stream buffer (gow3: public for
     /// the draw pipeline's constant ring).
     static constexpr u64 STREAM_THRESHOLD = 16_KB;
@@ -188,6 +206,14 @@ private:
     IntervalList<Backing> resident_ranges;
 
     u32 arena_memory_type_index{};
+    /// gow3: memory type (system RAM) for arena blocks once device memory is exhausted.
+    std::optional<u32> arena_fallback_type_index;
+    /// gow3: arena block memory allocated so far (device, fallback) and the next report mark.
+    u64 resident_device_bytes{};
+    u64 resident_fallback_bytes{};
+    u64 resident_report_mark{};
+    std::map<u64, u64> resident_by_region; ///< guest address >> 28 -> arena block bytes
+    std::map<std::string, u64> resident_by_tag; ///< ResidencyTag -> arena block bytes
     u32 block_size{};
     u32 block_shift{};
     u32 blocks_per_arena_page{};

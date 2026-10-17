@@ -448,14 +448,15 @@ void PerformanceTab() {
     auto& s = Gow3Settings::Get();
     ImGui::SeparatorText("Live");
     if (BeginRows("##live")) {
-        static const char* const fps_labels[] = {"30", "60", "120", "240", "Unlimited"};
+        static const char* const fps_labels[] = {"30", "60", "120", "144", "240", "Unlimited"};
         ChoiceRow("Frame rate limit", s.fps_limit, fps_labels, G::FpsLimits.data(), int(G::FpsLimits.size()),
                   "Caps the frame rate. The engine frame rate (below) is the highest it can go.");
         const int effective = G::EffectiveFps(s.fps_limit, s.applied_engine_fps);
         // gow3: games without frame rate patches (Killzone) have no engine frame rate to show.
         static const bool game_patches = [] {
             const char* env = std::getenv("GOW3_PATCHES_ONLY");
-            return env && env[0] == '1';
+            const char* fps = std::getenv("GOW3_FPS_PATCHES");
+            return env && env[0] == '1' && !(fps && fps[0] == '0');
         }();
         if (game_patches && (s.fps_limit == 0 || effective < s.fps_limit)) {
             char text[48];
@@ -482,9 +483,15 @@ void PerformanceTab() {
         static const char* const resolution_labels[] = {"Native (1080p)", "480p", "720p", "1440p", "1800p", "4K"};
         ChoiceRow("Render resolution", s.render_resolution, resolution_labels, nullptr, int(G::Resolutions.size()),
                   "The resolution the game draws at. Higher is sharper and slower.");
+        static const bool fps_patches = [] {
+            const char* env = std::getenv("GOW3_FPS_PATCHES");
+            return !(env && env[0] == '0');
+        }();
+        if (fps_patches) {
         static const char* const engine_labels[] = {"60 (original)", "120", "240"};
         ChoiceRow("Engine frame rate", s.engine_fps, engine_labels, G::EngineFps.data(), int(G::EngineFps.size()),
                   "The highest frame rate the game itself runs at.");
+        }
         }
         CheckRow("Game reads GPU data without waiting", s.stale_readback,
                  "Big FPS gain. Switch it off if lighting or objects look wrong.");

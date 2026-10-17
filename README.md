@@ -17,17 +17,19 @@ it keeps improving with testers' reports.
 2. Open **Killzone Shadow Fall.exe**, choose your dump's folder (the one holding `eboot.bin`) and
    press **PLAY**.
 
-Requirements: Windows 10 (1903+) or 11 64-bit, a Vulkan 1.3 GPU, 16 GB of RAM. We don't
-recommend playing with less than 8 GB of VRAM.
+Requirements: Windows 10 (1903+) or 11 64-bit, a Vulkan 1.3 GPU, 16 GB of RAM. **6 GB of VRAM**
+recommended for 1080p-1440p (the game uses about 4 GB); 8 GB for 1800p and 4K (about 5.5 GB).
 
-Tested on a Ryzen 7 5700 + RTX 2060 Super: the game should be playable from start to finish.
-The first times, and the first loads above all, can stutter quite a bit while shaders compile;
-once loaded the game runs well, 40-60 FPS on that GPU. Not tested yet on AMD GPUs or Intel CPUs.
+Tested on a Ryzen 7 5700 + RTX 2060 Super (8 GB): the game should be playable from start to
+finish. The first times, and the first loads above all, can stutter while shaders compile. Once
+loaded: a steady 60 FPS at 1080p (up to ~110 FPS unlocked in lighter levels), ~50 FPS at 1440p,
+~28 FPS at 4K. Not tested yet on AMD GPUs or Intel CPUs.
 
 ## What's included
 
-- Launcher in English and Spanish: dump check, display mode, window size, 30/60 FPS limit, VSync,
-  anisotropic filtering, FSR 1, keyboard, mouse and controller mapping.
+- Launcher in English and Spanish: dump check, display mode, window size, **render resolution
+  (720p, 1080p, 1440p, 1800p, 4K)**, frame rate limit (30, 60, and experimental 144, 240 and
+  unlimited), VSync, anisotropic filtering, FSR 1, keyboard, mouse and controller mapping.
 - Mouse aim (as the right stick), keyboard, and Xbox / PlayStation controllers.
 - Touchpad without one (OWL drone): hold **Delete** and drag the mouse.
 - In-game menu with **Insert** (R3 + L2 on a controller); **F12** takes a screenshot.
@@ -39,27 +41,19 @@ once loaded the game runs well, 40-60 FPS on that GPU. Not tested yet on AMD GPU
   fine: the shaders stay cached.
 - **Stutters** the first time an effect appears (the shader compiles, then stays cached).
 - **Chapter 2:** slight lighting flicker at some moments while shaders load; it goes away with time.
-- **No resolution scaling yet:** the game draws internally at a fixed 1080p, and its render
-  targets, shadows and post-processing effects are all sized for it. Rendering at a higher
-  resolution means patching every place in the game's code that assumes 1080p; doing it partially
-  breaks effects (misplaced or half-resolution effects, black borders). It is the top item in the
-  future plans. Meanwhile, on screens above 1080p, turn on **FSR 1 upscaling** (Graphics) for a
-  sharper image than plain stretching.
+- **Above 60 FPS (experimental):** turn VSync off on a 60 Hz monitor, otherwise it stays at 60.
 - The shader cache can take several GB ("Clear cache" in the launcher).
 - Multiplayer: offline only (Botzone).
 
 ## Future plans
 
 **High priority**
-- Resolution scaling up to 4K.
-- Optimizations: GPU usage and shader loading.
+- Upscalers: DLSS, FSR 3.1 and FSR 4.
+- Performance: better use of the GPU and CPU, fewer stutters and faster shader loading.
 
 **Medium priority**
-- Unlocked frame rate above 60 FPS (120, 144, 240...).
-
-**Later**
-- Upscalers: DLSS, FSR 3.1 and FSR 4.
-- Any patches or cheats that turn out to be needed.
+- Debug menu, cheats and patches (for example unlocking every chapter).
+- Fixes for bugs reported on specific hardware.
 
 ## Reporting bugs
 
@@ -91,18 +85,21 @@ campaña completa, y se sigue puliendo con los reportes de los testers.
 2. Abrí **Killzone Shadow Fall.exe**, elegí la carpeta de tu dump (la que tiene `eboot.bin`) y
    dale a **JUGAR**.
 
-Requisitos: Windows 10 (1903+) u 11 de 64 bits, GPU con Vulkan 1.3, 16 GB de RAM. No
-recomendamos jugarlo con menos de 8 GB de VRAM.
+Requisitos: Windows 10 (1903+) u 11 de 64 bits, GPU con Vulkan 1.3, 16 GB de RAM. Se recomiendan
+**6 GB de VRAM** para 1080p-1440p (el juego usa unos 4 GB); 8 GB para 1800p y 4K (unos 5,5 GB).
 
-Probado en Ryzen 7 5700 + RTX 2060 Super: el juego debería poder jugarse completo, de principio a
-fin. Las primeras veces, y sobre todo en las primeras cargas, puede dar bastantes tirones mientras
-se compilan los shaders; una vez cargado corre bastante bien, 40-60 FPS en esa gráfica. Todavía no
-fue probado en gráficas AMD ni en procesadores Intel.
+Probado en Ryzen 7 5700 + RTX 2060 Super (8 GB): el juego debería poder jugarse completo, de
+principio a fin. Las primeras veces, y sobre todo en las primeras cargas, puede dar tirones
+mientras se compilan los shaders. Una vez cargado: 60 FPS estables a 1080p (hasta ~110 FPS sin
+límite en niveles más livianos), ~50 FPS a 1440p, ~28 FPS a 4K. Todavía no fue probado en gráficas
+AMD ni en procesadores Intel.
 
 ## Qué incluye
 
 - Launcher en inglés y español: verificación del dump, modo de pantalla, tamaño de ventana,
-  límite de 30/60 FPS, VSync, filtrado anisotrópico, FSR 1, controles de teclado, mouse y mando.
+  **resolución de render (720p, 1080p, 1440p, 1800p, 4K)**, límite de FPS (30, 60, y
+  experimentales 144, 240 y sin límite), VSync, filtrado anisotrópico, FSR 1, controles de
+  teclado, mouse y mando.
 - Mouse para apuntar (como stick derecho), teclado y mandos Xbox / PlayStation.
 - Touchpad sin touchpad (dron OWL): mantener **Suprimir** y arrastrar el mouse.
 - Menú dentro del juego con **Insert** (R3 + L2 en el mando); **F12** saca una captura.
@@ -115,27 +112,19 @@ fue probado en gráficas AMD ni en procesadores Intel.
 - **Tirones** la primera vez que aparece un efecto (el shader se compila y después queda en caché).
 - **Capítulo 2:** parpadeo leve de iluminación en ciertos momentos de carga de shaders; se
   soluciona con el tiempo.
-- **Todavía no se puede escalar la resolución:** el juego dibuja internamente a 1080p fijo, y sus
-  buffers de render, sombras y efectos de post-procesado están hechos para ese tamaño. Renderizar
-  a más resolución obliga a parchear todos los lugares del código del juego que asumen 1080p;
-  hacerlo a medias rompe efectos (efectos desplazados o a media resolución, bordes negros). Es lo
-  primero en los planes futuros. Mientras tanto, en pantallas de más de 1080p, activá **Escalado
-  FSR 1** (Gráficos) para una imagen más nítida que el estirado normal.
+- **Más de 60 FPS (experimental):** con un monitor de 60 Hz desactivá VSync, si no se queda en 60.
 - La caché de shaders puede ocupar varios GB ("Borrar caché" en el launcher).
 - Multijugador: solo sin conexión (Botzone).
 
 ## Planes futuros
 
 **Prioridad alta**
-- Escala de resolución hasta 4K.
-- Optimizaciones: uso de GPU y carga de shaders.
+- Reescalado: DLSS, FSR 3.1 y FSR 4.
+- Rendimiento: mejor aprovechamiento de GPU y CPU, menos tirones y carga de shaders más rápida.
 
 **Prioridad media**
-- Desbloqueo de FPS por encima de 60 (120, 144, 240...).
-
-**Más adelante**
-- Reescalado: DLSS, FSR 3.1 y FSR 4.
-- Parches o trucos que hagan falta.
+- Menú debug, trucos y parches (por ejemplo desbloquear todos los capítulos).
+- Arreglos de errores reportados en hardware específico.
 
 ## Reportar errores
 
@@ -153,7 +142,7 @@ Igual que la base gow3_pc ([instrucciones](packaging/windows/README.md)): MSYS2 
 ## Credits / Créditos
 
 - **Lesca**: Killzone Shadow Fall port (dynamic module loader, PS4 clock fix, tessellation and
-  texture fixes, fonts, launcher).
+  texture fixes, fonts, resolution patches, VRAM reduction, launcher).
 - **Felipe Prado**: [gow3_pc](https://github.com/FelipePrado0/gow3_pc), the base of this port
   (its README is in [docs/gow3_pc](docs/gow3_pc/README.md)).
 - **Supermedo** and **deadinside28**: [bloodborne_pc](https://github.com/deadinside28/bloodborne_pc),

@@ -38,6 +38,9 @@ enum ImageFlagBits : u32 {
 };
 DECLARE_ENUM_FLAG_OPERATORS(ImageFlagBits)
 
+/// gow3: prints the host images alive (count, bytes, largest formats) for the VRAM report.
+void ReportImageMemory();
+
 struct UniqueImage {
     explicit UniqueImage() = default;
     explicit UniqueImage(vk::Device device, VmaAllocator allocator)

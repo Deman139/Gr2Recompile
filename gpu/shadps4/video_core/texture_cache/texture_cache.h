@@ -136,6 +136,8 @@ public:
 
     /// Retrieves image whose address matches provided
     [[nodiscard]] ImageId FindImageFromRange(VAddr address, size_t size, bool ensure_valid = true);
+    /// gow3: whether an image overlapping the range holds GPU-written data.
+    [[nodiscard]] bool HasGpuModifiedImage(VAddr address, size_t size);
 
     /// gow3: a FindView result remembered by the caller for the same image and view info.
     struct ViewMemo {
@@ -447,6 +449,9 @@ private:
     tsl::robin_map<u64, Sampler> samplers;
     std::unordered_set<ImageId> download_images;
     u64 total_used_memory = 0;
+    u64 registered_image_bytes = 0; ///< gow3: guest size of registered images (VRAM report)
+    u32 registered_images = 0;
+    std::chrono::steady_clock::time_point vram_report_time{};
     u64 gc_evictions = 0, gc_downloads = 0; ///< gow3: pressure report
     std::chrono::steady_clock::time_point gc_report_time{};
     u64 trigger_gc_memory = 0;

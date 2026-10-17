@@ -1,6 +1,10 @@
 // SPDX-FileCopyrightText: Copyright 2024 shadPS4 Emulator Project
 // SPDX-License-Identifier: GPL-2.0-or-later
 
+#include <algorithm>
+#include <atomic>
+#include <cstdio>
+#include <cstring>
 #include "shader_recompiler/info.h"
 #include "video_core/renderer_vulkan/vk_rasterizer.h"
 #include "video_core/renderer_vulkan/vk_runtime.h"
@@ -240,11 +244,70 @@ static bool ExecuteCopyShaderHLE(const Shader::Info& info, const AmdGpu::Compute
     return true;
 }
 
+// gow3: Killzone Shadow Fall's streaming pool defragmenter, a plain copy: thread
+// (WorkgroupId.x * 64 + LocalInvocationId.x) loads 16 bytes of buffer 0 and stores them to buffer 1,
+// 87-200 MiB per dispatch. On the GPU every copy made both ranges resident in the buffer arena,
+// whose blocks are never released: 1.7 GiB of VRAM after a while, then out of device memory. When
+// neither range holds GPU-written data the copy is done in guest memory instead, like a DMA copy
+// (Rasterizer::CopyBuffer). GOW3_KZ_COPY_HLE=0 keeps the dispatch.
+static constexpr u64 KZ_STREAM_COPY_HASH = 0xd1c4ffa0877dbef0;
+
+static bool ExecuteStreamCopyHLE(const Shader::Info& info, const AmdGpu::ComputeProgram& cs_program,
+                                 Rasterizer& rasterizer) {
+    static const bool enabled = [] {
+        const char* env = std::getenv("GOW3_KZ_COPY_HLE");
+        return !(env && env[0] == '0');
+    }();
+    if (!enabled || info.buffers.size() != 2 || cs_program.dim_y != 1 || cs_program.dim_z != 1 ||
+        cs_program.num_thread_x.full != 64 || cs_program.num_thread_y.full != 1 ||
+        cs_program.num_thread_z.full != 1) {
+        return false;
+    }
+    const auto src = info.buffers[0].GetSharp(info);
+    const auto dst = info.buffers[1].GetSharp(info);
+    if (src.GetStride() != 16 || dst.GetStride() != 16 || src.base_address == 0 ||
+        dst.base_address == 0) {
+        return false;
+    }
+    const u64 size = std::min({u64(cs_program.dim_x) * 64 * 16, u64(src.GetSize()), u64(dst.GetSize())});
+    if (size == 0) {
+        return true;
+    }
+    auto& buffer_cache = rasterizer.GetBufferCache();
+    auto& texture_cache = rasterizer.GetTextureCache();
+    if (buffer_cache.IsRegionGpuModified(src.base_address, size) ||
+        buffer_cache.IsRegionGpuModified(dst.base_address, size) ||
+        texture_cache.HasGpuModifiedImage(src.base_address, size) ||
+        texture_cache.HasGpuModifiedImage(dst.base_address, size)) {
+        static std::atomic<int> logged{0};
+        if (logged.fetch_add(1) < 10) {
+            std::printf("GPU: stream copy %#llx -> %#llx (%llu KiB) runs on the GPU: GPU-written "
+                        "data in range\n",
+                        (unsigned long long)src.base_address, (unsigned long long)dst.base_address,
+                        (unsigned long long)(size >> 10));
+        }
+        return false;
+    }
+    // The caches learn about the write first (its pages are then unprotected: no write faults).
+    rasterizer.InvalidateMemory(dst.base_address, size);
+    std::memmove(reinterpret_cast<void*>(dst.base_address),
+                 reinterpret_cast<const void*>(src.base_address), size);
+    static std::atomic<u64> copied{0};
+    const u64 total = copied.fetch_add(size) + size;
+    if ((total >> 30) != ((total - size) >> 30)) {
+        std::printf("GPU: stream copies done in guest memory: %llu GiB so far\n",
+                    (unsigned long long)(total >> 30));
+    }
+    return true;
+}
+
 bool ExecuteShaderHLE(const Shader::Info& info, const AmdGpu::Regs& regs,
                       const AmdGpu::ComputeProgram& cs_program, Rasterizer& rasterizer) {
     switch (info.pgm_hash) {
     case COPY_SHADER_HASH:
         return ExecuteCopyShaderHLE(info, cs_program, rasterizer);
+    case KZ_STREAM_COPY_HASH:
+        return ExecuteStreamCopyHLE(info, cs_program, rasterizer);
     default:
         return false;
     }

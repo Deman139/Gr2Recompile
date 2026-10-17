@@ -2,6 +2,9 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "gow3_toggles.h"
+#include <algorithm>
+#include <map>
+#include <mutex>
 #include <ranges>
 #include "common/assert.h"
 #include "video_core/renderer_vulkan/liverpool_to_vk.h"
@@ -85,14 +88,60 @@ static vk::FormatFeatureFlags2 FormatFeatureFlags(const vk::ImageUsageFlags usag
     return feature_flags;
 }
 
+namespace {
+// gow3: host images alive by format (VRAM report).
+struct ImageMemory {
+    std::mutex mutex;
+    std::map<u32, std::pair<u64, u64>> by_format; ///< format -> (count, bytes)
+    u64 count = 0, bytes = 0;
+};
+ImageMemory& LiveImages() {
+    static ImageMemory memory;
+    return memory;
+}
+void NoteImage(VmaAllocator allocator, VmaAllocation allocation, vk::Format format, bool created) {
+    VmaAllocationInfo info{};
+    vmaGetAllocationInfo(allocator, allocation, &info);
+    auto& m = LiveImages();
+    std::scoped_lock lock{m.mutex};
+    auto& entry = m.by_format[u32(format)];
+    if (created) {
+        ++entry.first, entry.second += info.size, ++m.count, m.bytes += info.size;
+    } else {
+        --entry.first, entry.second -= info.size, --m.count, m.bytes -= info.size;
+    }
+}
+} // namespace
+
+void ReportImageMemory() {
+    auto& m = LiveImages();
+    std::vector<std::pair<u64, std::pair<u32, u64>>> formats;
+    {
+        std::scoped_lock lock{m.mutex};
+        std::printf("VRAM:   host images alive %llu, %llu MiB; largest formats:", m.count,
+                    (unsigned long long)(m.bytes >> 20));
+        for (const auto& [format, entry] : m.by_format) {
+            formats.push_back({entry.second, {format, u32(entry.first)}});
+        }
+    }
+    std::sort(formats.rbegin(), formats.rend());
+    for (size_t i = 0; i < formats.size() && i < 8; ++i) {
+        std::printf(" %s x%u %llu MiB", vk::to_string(vk::Format(formats[i].second.first)).c_str(),
+                    formats[i].second.second, (unsigned long long)(formats[i].first >> 20));
+    }
+    std::printf("\n");
+}
+
 UniqueImage::~UniqueImage() {
     if (image) {
+        NoteImage(allocator, allocation, image_ci.format, false);
         vmaDestroyImage(allocator, image, allocation);
     }
 }
 
 void UniqueImage::Destroy() {
     if (image) {
+        NoteImage(allocator, allocation, image_ci.format, false);
         vmaDestroyImage(allocator, image, allocation);
         image = vk::Image{};
         allocation = {};
@@ -120,6 +169,7 @@ void UniqueImage::Create(const vk::ImageCreateInfo& image_ci) {
                vk::to_string(vk::Result{result}));
     image = vk::Image{unsafe_image};
     size_bytes = alloc_info.size;
+    NoteImage(allocator, allocation, image_ci.format, true);
 }
 
 Image::Image(const Vulkan::Instance& instance, Vulkan::Runtime& runtime_,

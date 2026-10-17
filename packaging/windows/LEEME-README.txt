@@ -1,4 +1,4 @@
-KILLZONE SHADOW FALL - Native Windows port (Lesca) - Beta 0.1.1
+KILLZONE SHADOW FALL - Native Windows port (Lesca) - Beta 0.2.0
 =================================================================
 
 [ENGLISH]
@@ -11,13 +11,15 @@ What it is
 
 Requirements
   - Windows 10 (1903 or later) or 11, 64-bit.
-  - A Vulkan 1.3 GPU. We don't recommend playing with less than 8 GB of VRAM.
+  - A Vulkan 1.3 GPU. 6 GB of VRAM recommended for 1080p-1440p (the game uses about
+    4 GB); 8 GB for 1800p and 4K (about 5.5 GB).
   - 16 GB of RAM.
 
 Tested setup
-  Ryzen 7 5700 + RTX 2060 Super: the game should be playable from start to finish.
-  The first times, and the first loads above all, can stutter quite a bit while shaders
-  compile; once loaded the game runs well, 40-60 FPS on that GPU.
+  Ryzen 7 5700 + RTX 2060 Super (8 GB): the game should be playable from start to finish.
+  The first times, and the first loads above all, can stutter while shaders compile. Once
+  loaded: a steady 60 FPS at 1080p (up to ~110 FPS unlocked in lighter levels), ~50 FPS at
+  1440p, ~28 FPS at 4K.
   Not tested yet on AMD GPUs or Intel CPUs.
 
 How to play
@@ -48,18 +50,17 @@ Known issues
   - Stutters the first time an effect appears (the shader compiles, then stays cached).
   - Chapter 2: slight lighting flicker at some moments while shaders load; it goes away
     with time.
-  - No resolution scaling yet: the game draws internally at a fixed 1080p, and its render
-    targets, shadows and post-processing effects are all sized for it. Rendering higher means
-    patching every place in the game's code that assumes 1080p; doing it partially breaks
-    effects. Meanwhile, on screens above 1080p, turn on "FSR 1 upscaling" (Graphics).
+  - Above 60 FPS (Graphics, experimental): turn VSync off on a 60 Hz monitor, otherwise it
+    stays at 60.
   - The mouse is translated to the right stick: smooth, but not 1:1 like a PC shooter.
   - The shader cache can take several GB.
   - Multiplayer: offline only (Botzone).
 
 Future plans
-  High priority:   resolution scaling up to 4K; GPU usage and shader loading optimizations.
-  Medium priority: unlocked frame rate above 60 FPS (120, 144, 240...).
-  Later:           DLSS, FSR 3.1 and FSR 4 upscalers; any patches or cheats needed.
+  High priority:   DLSS, FSR 3.1 and FSR 4 upscalers; performance (better GPU and CPU use,
+                   fewer stutters, faster shader loading).
+  Medium priority: debug menu, cheats and patches (e.g. unlock every chapter); fixes for bugs
+                   reported on specific hardware.
 
 Reporting bugs
   https://github.com/lesca-191204/killzone-shadowfall-pc/issues
@@ -83,14 +84,15 @@ Qué es
 
 Requisitos
   - Windows 10 (1903 o superior) u 11, 64 bits.
-  - GPU con Vulkan 1.3. No recomendamos jugarlo con menos de 8 GB de VRAM.
+  - GPU con Vulkan 1.3. Se recomiendan 6 GB de VRAM para 1080p-1440p (el juego usa unos
+    4 GB); 8 GB para 1800p y 4K (unos 5,5 GB).
   - 16 GB de RAM.
 
 Equipo probado
-  Ryzen 7 5700 + RTX 2060 Super: el juego debería poder jugarse completo, de principio a fin.
-  Las primeras veces, y sobre todo en las primeras cargas, puede dar bastantes tirones
-  mientras se compilan los shaders; una vez cargado corre bastante bien, 40-60 FPS en esa
-  gráfica. Todavía no fue probado en gráficas AMD ni en procesadores Intel.
+  Ryzen 7 5700 + RTX 2060 Super (8 GB): el juego debería poder jugarse completo, de principio
+  a fin. Las primeras veces, y sobre todo en las primeras cargas, puede dar tirones mientras
+  se compilan los shaders. Una vez cargado: 60 FPS estables a 1080p (hasta ~110 FPS sin límite
+  en niveles más livianos), ~50 FPS a 1440p, ~28 FPS a 4K. Todavía no fue probado en gráficas AMD ni en procesadores Intel.
 
 Cómo jugar
   1. Descomprimí esta carpeta donde quieras (fuera de "Archivos de programa").
@@ -120,19 +122,17 @@ Problemas conocidos
   - Tirones la primera vez que aparece un efecto (el shader se compila y después queda en caché).
   - Capítulo 2: parpadeo leve de iluminación en ciertos momentos de carga de shaders; se
     soluciona con el tiempo.
-  - Todavía no se puede escalar la resolución: el juego dibuja internamente a 1080p fijo, y sus
-    buffers de render, sombras y post-procesado están hechos para ese tamaño. Renderizar a más
-    resolución obliga a parchear todos los lugares del código del juego que asumen 1080p;
-    hacerlo a medias rompe efectos. Mientras tanto, en pantallas de más de 1080p, activá
-    "Escalado FSR 1" (Gráficos).
+  - Más de 60 FPS (Gráficos, experimental): con un monitor de 60 Hz desactivá VSync, si no se
+    queda en 60.
   - El mouse se traduce a stick derecho: fluido, pero no 1 a 1 como un shooter de PC.
   - La caché de shaders puede ocupar varios GB.
   - Multijugador: solo sin conexión (Botzone).
 
 Planes futuros
-  Prioridad alta:  escala de resolución hasta 4K; optimizaciones de uso de GPU y carga de shaders.
-  Prioridad media: desbloqueo de FPS por encima de 60 (120, 144, 240...).
-  Más adelante:    reescalado DLSS, FSR 3.1 y FSR 4; parches o trucos que hagan falta.
+  Prioridad alta:  reescalado DLSS, FSR 3.1 y FSR 4; rendimiento (mejor uso de GPU y CPU,
+                   menos tirones, carga de shaders más rápida).
+  Prioridad media: menú debug, trucos y parches (p. ej. desbloquear todos los capítulos);
+                   arreglos de errores reportados en hardware específico.
 
 Reportar errores
   https://github.com/lesca-191204/killzone-shadowfall-pc/issues

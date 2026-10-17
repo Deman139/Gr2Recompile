@@ -309,6 +309,22 @@ static void rw_concurrency(void) {
     assert(atomic_load(&f.value)==1);
     fixture_destroy(&f);
 }
+static void *leaving_reader(void *context) {
+    RwFixture *f=context;
+    assert(rw_read(&f->lock)==0); return NULL;
+}
+/* FreeBSD lets another thread drop a read hold (Killzone relies on it); write holds stay owned. */
+static void rw_cross_thread(void) {
+    rw_setup();
+    RwFixture f={0}; fixture_init(&f);
+    pthread_t reader; assert(pthread_create(&reader,NULL,leaving_reader,&f)==0);
+    assert(pthread_join(reader,NULL)==0);
+    assert((uint32_t)rw_trywrite(&f.lock)==0x80020010);
+    assert(rw_unlock(&f.lock)==0);
+    assert((uint32_t)rw_unlock(&f.lock)==0x80020001);
+    assert(rw_write(&f.lock)==0 && rw_unlock(&f.lock)==0);
+    fixture_destroy(&f);
+}
 static void rw_timeouts(void) {
     rw_setup();
     TimedLock read_timed=GET(TimedLock,"iPtZRWICjrM#libkernel"), write_timed=GET(TimedLock,"adh--6nIqTk#libkernel");
@@ -354,6 +370,7 @@ int main(int argc,char **argv) {
     }
     if (argc>1 && !strcmp(argv[1],"--rwlock-lifecycle")) { rw_lifecycle(); return 0; }
     if (argc>1 && !strcmp(argv[1],"--rwlock-concurrency")) { rw_concurrency(); return 0; }
+    if (argc>1 && !strcmp(argv[1],"--rwlock-cross-thread")) { rw_cross_thread(); return 0; }
     if (argc>1 && !strcmp(argv[1],"--rwlock-timeouts")) { rw_timeouts(); return 0; }
     libc_support(); posix_mutexes(); wall_time(); exit_handlers(); guards(); mutexes(); direct_memory(); memory_primitives();
     rw_lifecycle(); rw_concurrency(); rw_timeouts();
