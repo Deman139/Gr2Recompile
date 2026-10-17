@@ -26,6 +26,10 @@ import subprocess
 import sys
 import threading
 import time
+import webbrowser
+import zipfile
+
+import kzsf_update
 
 WINDOWS = sys.platform == 'win32'
 if WINDOWS:
@@ -44,6 +48,7 @@ LAUNCHER_FILE = USER_DIR / 'launcher.json'
 SETTINGS_FILE = USER_DIR / 'settings.ini'
 PS4_DIR = USER_DIR / 'ps4'
 LOGS_DIR = USER_DIR / 'logs'
+UPDATE_DIR = USER_DIR / 'update'
 KEEP_LOGS = 10
 NO_WINDOW = getattr(subprocess, 'CREATE_NO_WINDOW', 0)
 
@@ -130,6 +135,19 @@ TEXTS = {
         'deferred_help': 'Menos esperas. Desactivalo si texturas o sombras se ven mal.',
         'frames_queued': 'Frames en cola', 'queued_1': '1 (menor latencia)', 'queued_2': '2', 'queued_0': 'Sin límite',
         'reset_all': 'Restaurar todas las opciones',
+        'update_available': 'Nueva versión {version} disponible', 'update_now': 'Actualizar ahora',
+        'update_notes': 'Ver novedades', 'update_later': 'Más tarde',
+        'update_confirm': 'Se va a descargar la versión {version} ({size}) y el launcher se va a reiniciar.\n'
+                          'Tus partidas, opciones y caché (carpeta user) no se tocan.\n\n¿Actualizar ahora?',
+        'update_downloading': 'Descargando actualización… {percent} %',
+        'update_unpacking': 'Preparando actualización…',
+        'update_failed': 'No se pudo actualizar: {error}\n\nPodés descargarla a mano desde GitHub.',
+        'update_none': 'Ya tenés la última versión ({version}).',
+        'update_check_failed': 'No se pudo buscar actualizaciones: {error}',
+        'update_close_game': 'Cerrá el juego antes de actualizar.',
+        'update_previous_failed': 'La última actualización no se pudo aplicar. Probá de nuevo o descargala desde GitHub.',
+        'check_updates': 'Buscar actualizaciones al iniciar', 'check_updates_now': 'Buscar actualizaciones',
+        'updates': 'Actualizaciones',
         'reset_all_confirm': '¿Volver todas las opciones gráficas, avanzadas y de controles a los valores por defecto?',
         'language': 'Idioma',
         'game_ended': 'El juego se cerró con un error (código {code}).\n\n¿Abrir la carpeta de logs para ver qué pasó?',
@@ -200,6 +218,19 @@ TEXTS = {
         'deferred_help': 'Fewer waits. Turn it off if textures or shadows look wrong.',
         'frames_queued': 'Frames queued', 'queued_1': '1 (lowest latency)', 'queued_2': '2', 'queued_0': 'Unlimited',
         'reset_all': 'Restore all options',
+        'update_available': 'New version {version} available', 'update_now': 'Update now',
+        'update_notes': "What's new", 'update_later': 'Later',
+        'update_confirm': 'Version {version} ({size}) will be downloaded and the launcher will restart.\n'
+                          'Your saves, settings and cache (user folder) are kept.\n\nUpdate now?',
+        'update_downloading': 'Downloading update… {percent} %',
+        'update_unpacking': 'Preparing update…',
+        'update_failed': 'The update failed: {error}\n\nYou can download it by hand from GitHub.',
+        'update_none': 'You have the latest version ({version}).',
+        'update_check_failed': 'Could not check for updates: {error}',
+        'update_close_game': 'Close the game before updating.',
+        'update_previous_failed': 'The last update could not be applied. Try again or download it from GitHub.',
+        'check_updates': 'Check for updates at startup', 'check_updates_now': 'Check for updates',
+        'updates': 'Updates',
         'reset_all_confirm': 'Set every graphics, advanced and control option back to its default?',
         'language': 'Language',
         'game_ended': 'The game closed with an error (code {code}).\n\nOpen the logs folder to see what happened?',
@@ -321,7 +352,7 @@ GRAPHICS_DEFAULTS = {
 }
 LAUNCHER_DEFAULTS = {'game_dir': '', 'update_dir': '', 'language': '', 'window_size': '1920x1080',
                      'key_map': {}, 'pad_map': {}, 'mouse_look': True, 'mouse_sens': 1.0,
-                     'mouse_invert': False}
+                     'mouse_invert': False, 'check_updates': True}
 WINDOW_SIZES = ('1280x720', '1600x900', '1920x1080', '2560x1440', '3840x2160')
 DISPLAY_MODES = ('windowed', 'borderless', 'fullscreen')
 FPS_LIMITS = ('30', '60', '144', '240', '0')
@@ -502,6 +533,12 @@ class Launcher:
         self.style()
         self.build()
         root.protocol('WM_DELETE_WINDOW', self.close)
+        self.update_info = None
+        if self.settings.get('check_updates', True):
+            self.check_updates(quiet=True)
+        if kzsf_update.failed_update(UPDATE_DIR):
+            root.after(500, lambda: self.messagebox.showwarning('Killzone Shadow Fall', tr('update_previous_failed'),
+                                                                 parent=root))
 
     def px(self, value):
         return int(value * self.scale)
@@ -575,6 +612,9 @@ class Launcher:
             label.pack(side='right')
             label.bind('<Button-1>', lambda e, c=code: self.set_language(c))
         tk.Label(lang, text=tr('language') + ':', bg=BG, fg=MUTED, font=self.font(9)).pack(side='right')
+        self.update_bar = None
+        if getattr(self, 'update_info', None):
+            self.show_update_bar()
         self.show_tab(getattr(self, 'current_tab', os.environ.get('KZSF_LAUNCHER_TAB', 'game')))
         self.refresh_game()
         self.update_play_state()
@@ -1008,6 +1048,19 @@ class Launcher:
         self.choice(parent, tr('frames_queued'), FRAMES_QUEUED, [tr('queued_1'), tr('queued_2'), tr('queued_0')],
                     self.graphics['frames_queued'], lambda v: self.set_graphic('frames_queued', v))
         self.tk.Frame(parent, bg=LINE, height=1).pack(fill='x', pady=self.px(14))
+        self.heading(parent, tr('updates'))
+        var = self.tk.BooleanVar(value=bool(self.settings.get('check_updates', True)))
+
+        def changed():
+            self.settings['check_updates'] = var.get()
+            save_launcher(self.settings)
+        row = self.tk.Frame(parent, bg=PANEL)
+        row.pack(fill='x', pady=self.px(4))
+        self.ttk.Checkbutton(row, text=tr('check_updates'), variable=var, command=changed).pack(side='left')
+        self.button(row, tr('check_updates_now'), lambda: self.check_updates(quiet=False)).pack(
+            side='left', padx=self.px(16))
+        self.images.setdefault('vars', []).append(var)
+        self.tk.Frame(parent, bg=LINE, height=1).pack(fill='x', pady=self.px(14))
         self.button(parent, tr('reset_all'), self.reset_all).pack(anchor='w')
 
     def reset_all(self):
@@ -1019,6 +1072,82 @@ class Launcher:
                              mouse_invert=False)
         save_launcher(self.settings)
         self.show_tab('advanced')
+
+    # -- updates ----------------------------------------------------------------------------
+
+    def check_updates(self, quiet):
+        """Asks GitHub for a newer release in the background; quiet: no message when none or offline."""
+        def work():
+            try:
+                # KZSF_UPDATE_AS_VERSION: test the update flow from an older version number.
+                release, error = kzsf_update.check(os.environ.get('KZSF_UPDATE_AS_VERSION') or VERSION), None
+            except (OSError, ValueError) as e:
+                release, error = None, e
+            self.root.after(0, lambda: self.update_checked(release, error, quiet))
+        threading.Thread(target=work, daemon=True).start()
+
+    def update_checked(self, release, error, quiet):
+        if release:
+            self.update_info = release
+            self.show_update_bar()
+        elif not quiet:
+            text = tr('update_check_failed', error=error) if error else tr('update_none', version=VERSION)
+            self.messagebox.showinfo('Killzone Shadow Fall', text, parent=self.root)
+
+    def show_update_bar(self):
+        tk, release = self.tk, self.update_info
+        if self.update_bar is not None and self.update_bar.winfo_exists():
+            self.update_bar.destroy()
+        bar = tk.Frame(self.root, bg=FIELD, highlightthickness=1, highlightbackground=ACCENT)
+        bar.pack(side='bottom', fill='x', padx=self.px(28), pady=(0, self.px(10)), before=self.body)
+        tk.Label(bar, text=tr('update_available', version=release['version']), bg=FIELD, fg=ACCENT,
+                 font=self.font(10, 'bold')).pack(side='left', padx=self.px(12), pady=self.px(8))
+        later = self.button(bar, tr('update_later'), lambda: bar.destroy())
+        later.pack(side='right', padx=(self.px(6), self.px(10)), pady=self.px(6))
+        self.button(bar, tr('update_notes'), lambda: webbrowser.open(release['page'])).pack(side='right', padx=self.px(6))
+        self.button(bar, tr('update_now'), self.install_update, primary=True).pack(side='right', padx=self.px(6))
+        self.update_bar = bar
+
+    def install_update(self):
+        release = self.update_info
+        if self.process is not None:
+            self.messagebox.showwarning('Killzone Shadow Fall', tr('update_close_game'), parent=self.root)
+            return
+        if not FROZEN:  # running from source: git pulls the code, the page has the zip
+            webbrowser.open(release['page'])
+            return
+        if not self.messagebox.askyesno('Killzone Shadow Fall', tr('update_confirm', version=release['version'],
+                                                                     size=human_size(release['size'])),
+                                        parent=self.root):
+            return
+        self.play_button.configure(cursor='arrow')
+        self.updating = True  # PLAY waits while the update downloads
+
+        def progress(done, total):
+            percent = int(done * 100 / total) if total else 0
+            self.root.after(0, lambda: self.status.configure(text=tr('update_downloading', percent=percent),
+                                                             fg=ACCENT))
+
+        def work():
+            try:
+                archive = kzsf_update.download(release, UPDATE_DIR, progress)
+                self.root.after(0, lambda: self.status.configure(text=tr('update_unpacking'), fg=ACCENT))
+                unpacked = UPDATE_DIR / 'new'
+                source = kzsf_update.extract(archive, unpacked, Path(sys.executable).name)
+                script = kzsf_update.install_script(source, PORT_DIR, os.getpid(), Path(sys.executable).name,
+                                                    UPDATE_DIR, cleanup=(unpacked, archive))
+                kzsf_update.run_script(script)
+            except (OSError, ValueError, zipfile.BadZipFile) as e:
+                self.root.after(0, lambda e=e: self.update_failed(e))
+                return
+            self.root.after(0, self.root.destroy)
+        threading.Thread(target=work, daemon=True).start()
+
+    def update_failed(self, error):
+        self.updating = False
+        self.status.configure(text='', fg=MUTED)
+        self.update_play_state()
+        self.messagebox.showerror('Killzone Shadow Fall', tr('update_failed', error=error), parent=self.root)
 
     # -- playing ----------------------------------------------------------------------------
 
@@ -1033,7 +1162,7 @@ class Launcher:
             self.play_button.configure(text=tr('play'), bg=ACCENT, fg=BG, cursor='hand2')
 
     def play(self):
-        if self.process is not None:
+        if self.process is not None or getattr(self, 'updating', False):
             return
         ok, message, needs_update = check_game(self.settings['game_dir'], self.settings['update_dir'])
         if not ok:
