@@ -30,6 +30,7 @@ loaded: a steady 60 FPS at 1080p (up to ~110 FPS unlocked in lighter levels), ~5
 - Launcher in English and Spanish: dump check, display mode, window size, **render resolution
   (720p, 1080p, 1440p, 1800p, 4K)**, frame rate limit (30, 60, and experimental 144, 240 and
   unlimited), VSync, anisotropic filtering, FSR 1, keyboard, mouse and controller mapping.
+- Automatic updates: the launcher announces new versions and installs them keeping your saves.
 - Mouse aim (as the right stick), keyboard, and Xbox / PlayStation controllers.
 - Touchpad without one (OWL drone): hold **Delete** and drag the mouse.
 - In-game menu with **Insert** (R3 + L2 on a controller); **F12** takes a screenshot.
@@ -100,6 +101,7 @@ AMD ni en procesadores Intel.
   **resolución de render (720p, 1080p, 1440p, 1800p, 4K)**, límite de FPS (30, 60, y
   experimentales 144, 240 y sin límite), VSync, filtrado anisotrópico, FSR 1, controles de
   teclado, mouse y mando.
+- Actualizaciones automáticas: el launcher avisa de versiones nuevas y las instala conservando tus partidas.
 - Mouse para apuntar (como stick derecho), teclado y mandos Xbox / PlayStation.
 - Touchpad sin touchpad (dron OWL): mantener **Suprimir** y arrastrar el mouse.
 - Menú dentro del juego con **Insert** (R3 + L2 en el mando); **F12** saca una captura.
