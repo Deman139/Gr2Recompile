@@ -22,8 +22,7 @@ recommended for 1080p-1440p (the game uses about 4 GB); 8 GB for 1800p and 4K (a
 
 Tested on a Ryzen 7 5700 + RTX 2060 Super (8 GB): the game should be playable from start to
 finish. The first times, and the first loads above all, can stutter while shaders compile. Once
-loaded: a steady 60 FPS at 1080p (up to ~110 FPS unlocked in lighter levels), ~50 FPS at 1440p,
-~28 FPS at 4K. Not tested yet on AMD GPUs or Intel CPUs.
+loaded
 
 ## What's included
 
@@ -91,9 +90,7 @@ Requisitos: Windows 10 (1903+) u 11 de 64 bits, GPU con Vulkan 1.3, 16 GB de RAM
 
 Probado en Ryzen 7 5700 + RTX 2060 Super (8 GB): el juego debería poder jugarse completo, de
 principio a fin. Las primeras veces, y sobre todo en las primeras cargas, puede dar tirones
-mientras se compilan los shaders. Una vez cargado: 60 FPS estables a 1080p (hasta ~110 FPS sin
-límite en niveles más livianos), ~50 FPS a 1440p, ~28 FPS a 4K. Todavía no fue probado en gráficas
-AMD ni en procesadores Intel.
+mientras se compilan los shaders. Todavía no fue probado en gráficas AMD ni en procesadores Intel.
 
 ## Qué incluye
 
