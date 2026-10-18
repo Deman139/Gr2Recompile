@@ -72,7 +72,7 @@ As in the gow3_pc base ([instructions](packaging/windows/README.md)): MSYS2 CLAN
 
 ## Español
 
-AVISO: Trabajare toda la semana en una actualizacion grande que traiga muchisimas mejoras, arreglos de reportes, y peticiones al port. Y espero poder traerla para el fin de semana.
+# AVISO: Trabajare toda la semana en una actualizacion grande que traiga muchisimas mejoras, arreglos de reportes, y peticiones al port. Y espero poder traerla para el fin de semana.
 
 
 Port nativo para Windows de **Killzone Shadow Fall** (PS4). El código del juego corre directamente
