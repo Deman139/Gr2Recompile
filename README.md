@@ -1,5 +1,7 @@
 # Killzone Shadow Fall for PC
 
+# NOTICE: I’ve spent the whole week working on a major update that includes numerous improvements, fixes for reported issues, and requests for the port. I hope to have it ready by the weekend.
+
 **English** | [Español](#español)
 
 Native Windows port of **Killzone Shadow Fall** (PS4). The game's code runs directly on the CPU;
@@ -69,6 +71,9 @@ As in the gow3_pc base ([instructions](packaging/windows/README.md)): MSYS2 CLAN
 ---
 
 ## Español
+
+AVISO: Trabajare toda la semana en una actualizacion grande que traiga muchisimas mejoras, arreglos de reportes, y peticiones al port. Y espero poder traerla para el fin de semana.
+
 
 Port nativo para Windows de **Killzone Shadow Fall** (PS4). El código del juego corre directamente
 en la CPU; los gráficos se traducen a Vulkan en tiempo real. Beta pública: se puede jugar la
