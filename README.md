@@ -37,7 +37,7 @@ fast. Not tested yet on AMD GPUs or Intel CPUs.
 ## Known issues
 
 - **Render resolution above 1080p (1440p, 1800p, 4K):** some lighting flicker and shadow glitches
-  (a dark band that can move with the camera) may appear. They don't make the game unplayable;
+  may appear. They don't make the game unplayable;
   at 1080p they don't happen. Videos (FMV cutscenes) look zoomed in and cropped.
 - **First play:** some effects can show up a few frames late while their shader compiles.
 - **Chapter 2:** slight lighting flicker at some moments while shaders load; it goes away with time.
@@ -106,7 +106,7 @@ partida, y los niveles cargan rápido. Todavía no fue probado en gráficas AMD 
 ## Problemas conocidos
 
 - **Resolución de render mayor a 1080p (1440p, 1800p, 4K):** pueden aparecer algunos parpadeos de
-  iluminación y bugs visuales en las sombras (una franja oscura que puede moverse con la cámara).
+  iluminación y bugs visuales en las sombras 
   No hacen la experiencia injugable; en 1080p no pasan. Los videos (cinemáticas FMV) se ven con
   zoom y recortados.
 - **Primera partida:** algunos efectos pueden aparecer unos cuadros tarde mientras se compila su shader.
