@@ -19,6 +19,7 @@
 #include "gow3_settings.h"
 #include "gow3_graphics.h"
 #include "video_core/renderer_vulkan/vk_frame_capture.h"
+#include "video_core/renderer_vulkan/vk_pending_draws.h"
 #include "common/debug.h"
 #include "common/thread.h"
 #include "core/debug_state.h"
@@ -306,6 +307,7 @@ void VideoOutDriver::Flip(const Request& req) {
         presenter->SetHDR(hdr);
         presenter->Present(frame);
     });
+    Vulkan::gow3_flip_count.fetch_add(1, std::memory_order_relaxed);
     Vulkan::FrameCapture::OnFlip(req.index >= 0 ? req.port->buffer_slots[req.index].address_left
                                                 : 0);
 

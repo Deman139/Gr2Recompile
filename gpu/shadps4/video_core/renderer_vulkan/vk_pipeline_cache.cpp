@@ -398,7 +398,13 @@ PipelineCache::PipelineCache(const Instance& instance_, Scheduler& scheduler_,
     // gow3: the compiler threads always exist; the in-game menu switches async compilation live
     // (Gow3Settings::async_shaders, GOW3_ASYNC_SHADERS at start).
     {
-        const auto count = std::clamp(Gow3Threads::Available() / 2, 1u, 6u);
+        // gow3 (Killzone): a first play compiles hundreds of pipelines (~200 ms each) while the
+        // game itself keeps a core or two busy: every hardware thread but 4 compiles (2..10).
+        // GOW3_COMPILE_THREADS sets the count.
+        const char* threads_env = std::getenv("GOW3_COMPILE_THREADS");
+        const auto count = threads_env && *threads_env
+                               ? std::clamp(unsigned(std::atoi(threads_env)), 1u, 32u)
+                               : std::clamp(Gow3Threads::Available() - std::min(Gow3Threads::Available(), 4u), 2u, 10u);
         const auto capture_count = std::min(2u, std::max(1u, Gow3Threads::Available() / 4));
         for (unsigned i = 0; i < count; ++i) {
             auto [result, worker_cache] = instance.GetDevice().createPipelineCacheUnique({});
@@ -621,6 +627,46 @@ void PipelineCache::PublishGraphics(bool wait) {
     }
 }
 
+bool PipelineCache::WaitForPending() {
+    if (pending_programs.empty() && pending_graphics.empty()) {
+        return false;
+    }
+    static const bool targeted = [] {
+        const char* env = std::getenv("GOW3_TARGETED_WAIT");
+        return !env || env[0] != '0';
+    }();
+    if (!targeted) {
+        PublishShaders(true);
+        PublishGraphics(true);
+        return true;
+    }
+    if (!lookup_pending) {
+        return false; // the draw failed for another reason: nothing to wait for
+    }
+    if (sel.compilation_pending) {
+        if (Program* program = sel.pending_program; program && program->pending) {
+            program->pending->job.Wait();
+            PublishShaders();
+            return true;
+        }
+    } else if (const auto it = pending_graphics.find(sel.graphics_key);
+               it != pending_graphics.end()) {
+        it.value()->job.Wait();
+        PublishGraphics();
+        return true;
+    }
+    // Its job is not queued (the compiler queue was full): let the oldest one finish, the
+    // next lookup queues it.
+    if (!pending_programs.empty()) {
+        pending_programs.front()->pending->job.Wait();
+        PublishShaders();
+    } else {
+        pending_graphics.begin().value()->job.Wait();
+        PublishGraphics();
+    }
+    return true;
+}
+
 void PipelineCache::FinishCompilations() {
     if (compiler) {
         capture_compiler->Stop();
@@ -711,6 +757,7 @@ const GraphicsPipeline* PipelineCache::GetGraphicsPipeline(const DrawIndirectPar
     PublishGraphics();
     PumpWarmUp();
     used_prepared = nullptr;
+    lookup_pending = false;
     if (prepared) {
         if (const auto* pipeline = TryPreparedPipeline(*prepared)) {
             used_prepared = prepared;
@@ -721,6 +768,7 @@ const GraphicsPipeline* PipelineCache::GetGraphicsPipeline(const DrawIndirectPar
     if (!RefreshGraphicsKey(sel)) {
         if (sel.compilation_pending) {
             ++g_gow3_pending_draws;
+            lookup_pending = true;
         }
         return nullptr;
     }
@@ -760,6 +808,7 @@ const GraphicsPipeline* PipelineCache::GetGraphicsPipeline(const DrawIndirectPar
             }
         }
         ++g_gow3_pending_draws;
+        lookup_pending = true;
         return nullptr;
     }
     const auto [it, is_new] = graphics_pipelines.try_emplace(sel.graphics_key);
@@ -999,6 +1048,7 @@ bool PipelineCache::RefreshGraphicsStages(PipelineSelection& sel) {
     auto& key = sel.graphics_key;
     sel.fetch_shader = std::nullopt;
     sel.compilation_pending = false;
+    sel.pending_program = nullptr;
 
     Shader::Backend::Bindings binding{};
     const auto bind_stage = [&](HwStage stage_in, SwStage stage_out) -> bool {
@@ -1262,10 +1312,12 @@ PipelineCache::Result PipelineCache::GetProgram(PipelineSelection& sel, HwStage 
 
     auto& program = it_pgm.value();
     if (program->compilation_failed || (program->modules.empty() && program->pending)) {
+        sel.pending_program = program->compilation_failed ? nullptr : program.get();
         return {};
     }
     if (program->modules.empty() && compile_async) {
         QueueShader(*program, hw_stage, sw_stage, params, runtime_info, binding, 0, true);
+        sel.pending_program = program.get();
         return {};
     }
     if (!program->info_template) {
@@ -1295,11 +1347,13 @@ PipelineCache::Result PipelineCache::GetProgram(PipelineSelection& sel, HwStage 
     if (it == program->modules.end()) {
         if (program->pending || std::ranges::find(program->failed_permutations, spec) !=
                                     program->failed_permutations.end()) {
+            sel.pending_program = program->pending ? program.get() : nullptr;
             return {};
         }
         if (compile_async) {
             QueueShader(*program, hw_stage, sw_stage, params, runtime_info, binding, perm_idx, false,
                         std::move(spec));
+            sel.pending_program = program.get();
             return {};
         }
         auto new_info = Shader::Info(hw_stage, sw_stage, params);

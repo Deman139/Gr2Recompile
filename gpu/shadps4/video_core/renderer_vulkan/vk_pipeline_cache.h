@@ -103,6 +103,9 @@ struct PipelineSelection {
     GraphicsPipelineKey graphics_key{};
     bool motion = false;
     bool compilation_pending = false;
+    /// gow3: with compilation_pending, the program whose compilation the lookup waits for
+    /// (null when its job could not be queued yet).
+    struct Program* pending_program = nullptr;
     DrawIndirectParams draw_indirect_params{};
     struct PrepWorker* worker{}; ///< set: read-only selection for a draw-preparation worker
 };
@@ -156,17 +159,18 @@ public:
     const GraphicsPipeline* TryPreparedPipeline(const PreparedDraw& prepared);
 
     /// gow3: the prepared draw the last GetGraphicsPipeline used, or null (regular path).
-    /// gow3 (Killzone): waits for the shader and pipeline compilations in flight and publishes
-    /// them; false when none was pending. A draw that found its pipeline still compiling is
-    /// retried after this instead of being dropped: Killzone draws each glyph of its text
-    /// cache once, so dropped draws left letters missing for the rest of the session.
-    bool WaitForPending() {
-        if (pending_programs.empty() && pending_graphics.empty()) {
-            return false;
-        }
-        PublishShaders(true);
-        PublishGraphics(true);
-        return true;
+    /// gow3 (Killzone): waits for the compilation the last GetGraphicsPipeline lacked (its
+    /// shader, or its pipeline) and publishes it; false when that lookup did not fail for a
+    /// compilation. A draw that found its pipeline still compiling is retried after this
+    /// instead of being dropped: Killzone draws each glyph of its text cache once, so dropped
+    /// draws left letters missing for the rest of the session. Only that job is awaited, not
+    /// the whole queue (a new area queues dozens: waiting for all stalled for seconds); when
+    /// its job is not queued yet (queue full), the oldest one. GOW3_TARGETED_WAIT=0 waits for
+    /// every compilation in flight as before.
+    bool WaitForPending();
+    /// gow3: the last GetGraphicsPipeline returned null because something it needs is compiling.
+    [[nodiscard]] bool LookupPending() const noexcept {
+        return lookup_pending;
     }
     /// gow3: the last pipeline lookup failed because a shader or pipeline is still compiling.
     [[nodiscard]] bool CompilationPending() const noexcept {
@@ -256,6 +260,7 @@ private:
     std::shared_mutex programs_mutex;
     u64 prepared_hits = 0, prepared_misses = 0;
     const PreparedDraw* used_prepared = nullptr;
+    bool lookup_pending = false; ///< gow3: see LookupPending
     tsl::robin_map<ComputePipelineKey, std::unique_ptr<ComputePipeline>> compute_pipelines;
     tsl::robin_map<GraphicsPipelineKey, std::unique_ptr<GraphicsPipeline>> graphics_pipelines;
     PipelineSelection sel{}; ///< GPU thread selection state

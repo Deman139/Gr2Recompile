@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: Copyright 2024-2026 shadPS4 Emulator Project
 // SPDX-License-Identifier: GPL-2.0-or-later
 
+#include <chrono>
 #include <xxhash.h>
 #include "video_core/renderer_vulkan/ui_composition.h"
 #include "gow3_toggles.h"
@@ -19,6 +20,7 @@
 #include "video_core/renderer_vulkan/liverpool_to_vk.h"
 #include "video_core/renderer_vulkan/vk_depth_stencil_state.h"
 #include "video_core/renderer_vulkan/vk_instance.h"
+#include "video_core/renderer_vulkan/vk_pending_draws.h"
 #include "video_core/renderer_vulkan/vk_pipeline_cache.h"
 #include "video_core/renderer_vulkan/vk_rasterizer.h"
 #include "video_core/renderer_vulkan/vk_gpu_profiler.h"
@@ -30,6 +32,63 @@
 #include "video_core/texture_cache/texture_cache.h"
 
 namespace Vulkan {
+
+namespace {
+// gow3 (Killzone): see PendingDrawPolicy. GPU command thread only.
+PendingDrawPolicy pending_policy;
+
+/// The draw's main target for PendingDrawPolicy: the first color buffer, else the depth
+/// buffer (shadow passes, color = false).
+struct PendingTargetInfo {
+    u64 address;
+    u32 width;
+    bool color;
+};
+PendingTargetInfo PendingTarget(const AmdGpu::Regs& regs) {
+    for (u32 cb = 0; cb < 8; ++cb) {
+        if (regs.color_buffers[cb]) {
+            return {regs.color_buffers[cb].Address(), regs.color_buffers[cb].Pitch(), true};
+        }
+    }
+    if (regs.depth_buffer.DepthValid()) {
+        return {regs.depth_buffer.DepthAddress(), regs.depth_buffer.Pitch(), false};
+    }
+    return {0, 0, false};
+}
+
+/// Pipeline lookup for a draw: `lookup()` again after each wait for pending compiles, unless
+/// the draw's target is live (PendingDrawPolicy::MayDrop): then a missing pipeline drops it.
+template <typename Lookup>
+const GraphicsPipeline* ResolvePending(PipelineCache& cache, const GraphicsPipeline* pipeline,
+                                       const AmdGpu::Regs& regs, Lookup&& lookup) {
+    static const bool skip_pending = [] {
+        const char* env = std::getenv("GOW3_SKIP_PENDING_DRAWS");
+        return env && env[0] == '1';
+    }();
+    const auto [target, width, color] = PendingTarget(regs);
+    pending_policy.Note(target, width, color, gow3_flip_count.load(std::memory_order_relaxed));
+    if (!pipeline && !skip_pending && cache.LookupPending()) {
+        if (pending_policy.MayDrop(target, width, color)) {
+            pending_policy.CountDropped(target, width);
+        } else {
+            const auto start = std::chrono::steady_clock::now();
+            bool waited = false;
+            for (int round = 0; !pipeline && round < 4 && cache.WaitForPending(); ++round) {
+                waited = true;
+                pipeline = lookup();
+            }
+            if (waited) {
+                const double ms = std::chrono::duration<double, std::milli>(
+                                      std::chrono::steady_clock::now() - start)
+                                      .count();
+                pending_policy.CountWait(ms, target, width);
+            }
+        }
+    }
+    pending_policy.Report();
+    return pipeline;
+}
+} // namespace
 
 static Shader::PushData MakeUserData(const AmdGpu::Regs& regs) {
     // TODO(roamic): Add support for multiple viewports and geometry shaders when ViewportIndex
@@ -934,18 +993,13 @@ void Rasterizer::Draw(bool is_indexed, u32 index_offset, const PreparedDraw* pre
             return;
         }
     }
-    const GraphicsPipeline* pipeline = pipeline_cache.GetGraphicsPipeline({}, prepared);
     // gow3 (Killzone): a draw whose shaders or pipeline are still compiling waits for them
-    // (a shader, then its pipeline: a few rounds) instead of being dropped; see
-    // PipelineCache::WaitForPending. GOW3_SKIP_PENDING_DRAWS=1 drops them as before.
-    static const bool skip_pending = [] {
-        const char* env = std::getenv("GOW3_SKIP_PENDING_DRAWS");
-        return env && env[0] == '1';
-    }();
-    for (int round = 0; !pipeline && !skip_pending && round < 4 && pipeline_cache.WaitForPending();
-         ++round) {
-        pipeline = pipeline_cache.GetGraphicsPipeline({}, nullptr);
-    }
+    // (a shader, then its pipeline: a few rounds) instead of being dropped, unless its target
+    // is redrawn every frame (ResolvePending, PendingDrawPolicy). GOW3_SKIP_PENDING_DRAWS=1
+    // always drops them.
+    const GraphicsPipeline* pipeline = ResolvePending(
+        pipeline_cache, pipeline_cache.GetGraphicsPipeline({}, prepared), Regs(),
+        [&] { return pipeline_cache.GetGraphicsPipeline({}, nullptr); });
     const PreparedDraw* used_prepared = pipeline_cache.UsedPrepared();
     if (prepared) {
         draw_prep->Count(pipeline != nullptr &&
@@ -1231,12 +1285,9 @@ void Rasterizer::DrawIndirect(bool is_indexed, VAddr arg_address, u32 offset, u3
         .vertex_sgpr_offset = vertex_sgpr_offset,
         .instance_sgpr_offset = instance_sgpr_offset,
     };
-    const GraphicsPipeline* pipeline = pipeline_cache.GetGraphicsPipeline(params);
-    for (int round = 0; !pipeline && round < 4 && !std::getenv("GOW3_SKIP_PENDING_DRAWS") &&
-                        pipeline_cache.WaitForPending();
-         ++round) {
-        pipeline = pipeline_cache.GetGraphicsPipeline(params); // as in Draw: wait, not drop
-    }
+    const GraphicsPipeline* pipeline =  // as in Draw
+        ResolvePending(pipeline_cache, pipeline_cache.GetGraphicsPipeline(params), Regs(),
+                       [&] { return pipeline_cache.GetGraphicsPipeline(params); });
     if (!pipeline) {
         return;
     }
