@@ -49,7 +49,7 @@ fast. Not tested yet on AMD GPUs or Intel CPUs.
 
 **High priority**
 - Upscalers: DLSS, FSR 3.1 and FSR 4.
-- Performance: better use of the GPU and CPU, fewer stutters and faster shader loading.
+- Performance: better use of the GPU and CPU
 
 **Medium priority**
 - Debug menu, cheats and patches (for example unlocking every chapter).
@@ -120,7 +120,7 @@ partida, y los niveles cargan rápido. Todavía no fue probado en gráficas AMD 
 
 **Prioridad alta**
 - Reescalado: DLSS, FSR 3.1 y FSR 4.
-- Rendimiento: mejor aprovechamiento de GPU y CPU, menos tirones y carga de shaders más rápida.
+- Rendimiento: mejor aprovechamiento de GPU y CPU, menos tirones
 
 **Prioridad media**
 - Menú debug, trucos y parches (por ejemplo desbloquear todos los capítulos).
