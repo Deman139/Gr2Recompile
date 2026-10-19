@@ -40,7 +40,7 @@ FROZEN = getattr(sys, 'frozen', False)
 PORT_DIR = Path(sys.executable).resolve().parent if FROZEN else Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PORT_DIR / 'scripts'))
 
-VERSION = '0.2.0'
+VERSION = '0.2.1'
 TITLE_ID = 'CUSA00190'
 GAME_VERSION = '01.81'
 USER_DIR = Path(os.environ.get('KZSF_USER_DIR', PORT_DIR / 'user'))
@@ -103,7 +103,9 @@ TEXTS = {
         'window_size_help': 'Solo en modo ventana. La imagen del juego se escala a la ventana.',
         'render_res': 'Resolución de render', 'res_native': '1080p (como en PS4)',
         'render_res_help': 'Resolución interna del juego. Más alta = más nítida pero más GPU y VRAM. '
-                           'Probado con 8 GB de VRAM hasta 4K (~5 GB). Se aplica al iniciar el juego.',
+                           'Probado con 8 GB de VRAM hasta 4K (~5 GB). Se aplica al iniciar el juego. '
+                           'Por encima de 1080p pueden aparecer algunos parpadeos o bugs visuales en '
+                           'las sombras que no hacen la experiencia injugable, y los videos se ven con zoom.',
         'fps_limit': 'Límite de FPS', 'vsync': 'VSync (sincronización vertical)',
         'fps_unlimited': 'Sin límite (experimental)', 'fps_experimental': 'experimental',
         'fps_limit_help': '144 / 240 / sin límite son experimentales. Con un monitor de 60 Hz desactivá '
@@ -187,7 +189,9 @@ TEXTS = {
         'render_res': 'Render resolution', 'res_native': '1080p (as on PS4)',
         'render_res_help': "The game's internal resolution. "
                            'Higher = sharper but more GPU and VRAM. '
-                           'Tested with 8 GB of VRAM up to 4K (~5 GB). Applied when the game starts.',
+                           'Tested with 8 GB of VRAM up to 4K (~5 GB). Applied when the game starts. '
+                           'Above 1080p some flicker or shadow glitches may appear (the game stays '
+                           'fully playable), and videos look zoomed in.',
         'fps_limit': 'Frame rate limit', 'vsync': 'VSync (vertical sync)',
         'fps_unlimited': 'Unlimited (experimental)', 'fps_experimental': 'experimental',
         'fps_limit_help': '144 / 240 / unlimited are experimental. On a 60 Hz monitor turn VSync off '

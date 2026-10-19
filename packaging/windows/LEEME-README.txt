@@ -1,4 +1,4 @@
-KILLZONE SHADOW FALL - Native Windows port (Lesca) - Beta 0.2.0
+KILLZONE SHADOW FALL - Native Windows port (Lesca) - Beta 0.2.1
 =================================================================
 
 [ENGLISH]
@@ -17,8 +17,8 @@ Requirements
 
 Tested setup
   Ryzen 7 5700 + RTX 2060 Super (8 GB): the game should be playable from start to finish.
-  The first times, and the first loads above all, can stutter while shaders compile. Once
-  loaded: a steady 60 FPS at 1080p (up to ~110 FPS unlocked in lighter levels), ~50 FPS at
+  Since v0.2.1 shader compilation barely stutters, even on a first play, and levels load
+  fast. In game: a steady 60 FPS at 1080p (up to ~110 FPS unlocked in lighter levels), ~50 FPS at
   1440p, ~28 FPS at 4K.
   Not tested yet on AMD GPUs or Intel CPUs.
 
@@ -44,10 +44,11 @@ Where your things are (user\ folder)
   "Clear cache" in the launcher deletes shaders and the prepared image; saves are kept.
 
 Known issues
-  - First campaign load: the very first time you start the campaign it can take a long time
-    while many shaders compile, and it may even crash. Start the game again and it should
-    load fine: the shaders stay cached.
-  - Stutters the first time an effect appears (the shader compiles, then stays cached).
+  - Render resolution above 1080p (1440p, 1800p, 4K): some lighting flicker and shadow
+    glitches (a dark band that can move with the camera) may appear. They don't make the
+    game unplayable; at 1080p they don't happen. Videos (FMV cutscenes) look zoomed in and
+    cropped.
+  - First play: some effects can show up a few frames late while their shader compiles.
   - Chapter 2: slight lighting flicker at some moments while shaders load; it goes away
     with time.
   - Above 60 FPS (Graphics, experimental): turn VSync off on a 60 Hz monitor, otherwise it
@@ -90,8 +91,8 @@ Requisitos
 
 Equipo probado
   Ryzen 7 5700 + RTX 2060 Super (8 GB): el juego debería poder jugarse completo, de principio
-  a fin. Las primeras veces, y sobre todo en las primeras cargas, puede dar tirones mientras
-  se compilan los shaders. Una vez cargado: 60 FPS estables a 1080p (hasta ~110 FPS sin límite
+  a fin. Desde la v0.2.1 la compilación de shaders casi no da tirones, aun en la primera
+  partida, y los niveles cargan rápido. En juego: 60 FPS estables a 1080p (hasta ~110 FPS sin límite
   en niveles más livianos), ~50 FPS a 1440p, ~28 FPS a 4K. Todavía no fue probado en gráficas AMD ni en procesadores Intel.
 
 Cómo jugar
@@ -116,10 +117,11 @@ Dónde quedan tus cosas (carpeta user\)
   "Borrar caché" en el launcher elimina shaders e imagen preparada; tus partidas no se tocan.
 
 Problemas conocidos
-  - Primera carga de la campaña: la primera vez que iniciás la campaña puede demorar bastante
-    mientras se compilan muchos shaders, e incluso puede crashear. Volvé a entrar y debería
-    cargar bien: los shaders quedan en caché.
-  - Tirones la primera vez que aparece un efecto (el shader se compila y después queda en caché).
+  - Resolución de render mayor a 1080p (1440p, 1800p, 4K): pueden aparecer algunos
+    parpadeos de iluminación y bugs visuales en las sombras (una franja oscura que puede
+    moverse con la cámara). No hacen la experiencia injugable; en 1080p no pasan. Los videos
+    (cinemáticas FMV) se ven con zoom y recortados.
+  - Primera partida: algunos efectos pueden aparecer unos cuadros tarde mientras se compila su shader.
   - Capítulo 2: parpadeo leve de iluminación en ciertos momentos de carga de shaders; se
     soluciona con el tiempo.
   - Más de 60 FPS (Gráficos, experimental): con un monitor de 60 Hz desactivá VSync, si no se

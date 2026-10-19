@@ -73,7 +73,7 @@ def main():
                      f'Author="lesca" PatchVer="0.1" AppVer="01.81" AppElf="eboot.bin" isEnabled="false">')
         parts += ['        <PatchList>', *lines(image, size), '        </PatchList>', '    </Metadata>']
     parts.append('</Patch>')
-    Path(sys.argv[2]).write_text('\n'.join(parts) + '\n', encoding='utf-8')
+    Path(sys.argv[2]).write_text('\n'.join(parts) + '\n', encoding='utf-8', newline='\n')
 
 
 if __name__ == '__main__':

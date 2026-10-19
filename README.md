@@ -23,8 +23,8 @@ Requirements: Windows 10 (1903+) or 11 64-bit, a Vulkan 1.3 GPU, 16 GB of RAM. *
 recommended for 1080p-1440p (the game uses about 4 GB); 8 GB for 1800p and 4K (about 5.5 GB).
 
 Tested on a Ryzen 7 5700 + RTX 2060 Super (8 GB): the game should be playable from start to
-finish. The first times, and the first loads above all, can stutter while shaders compile. Once
-loaded
+finish. Since v0.2.1 shader compilation barely stutters, even on a first play, and levels load
+fast. Not tested yet on AMD GPUs or Intel CPUs.
 
 ## What's included
 
@@ -38,10 +38,10 @@ loaded
 
 ## Known issues
 
-- **First campaign load:** the very first time you start the campaign it can take a long time
-  while many shaders compile, and it may even crash. Start the game again and it should load
-  fine: the shaders stay cached.
-- **Stutters** the first time an effect appears (the shader compiles, then stays cached).
+- **Render resolution above 1080p (1440p, 1800p, 4K):** some lighting flicker and shadow glitches
+  (a dark band that can move with the camera) may appear. They don't make the game unplayable;
+  at 1080p they don't happen. Videos (FMV cutscenes) look zoomed in and cropped.
+- **First play:** some effects can show up a few frames late while their shader compiles.
 - **Chapter 2:** slight lighting flicker at some moments while shaders load; it goes away with time.
 - **Above 60 FPS (experimental):** turn VSync off on a 60 Hz monitor, otherwise it stays at 60.
 - The shader cache can take several GB ("Clear cache" in the launcher).
@@ -94,8 +94,8 @@ Requisitos: Windows 10 (1903+) u 11 de 64 bits, GPU con Vulkan 1.3, 16 GB de RAM
 **6 GB de VRAM** para 1080p-1440p (el juego usa unos 4 GB); 8 GB para 1800p y 4K (unos 5,5 GB).
 
 Probado en Ryzen 7 5700 + RTX 2060 Super (8 GB): el juego debería poder jugarse completo, de
-principio a fin. Las primeras veces, y sobre todo en las primeras cargas, puede dar tirones
-mientras se compilan los shaders. Todavía no fue probado en gráficas AMD ni en procesadores Intel.
+principio a fin. Desde la v0.2.1 la compilación de shaders casi no da tirones, aun en la primera
+partida, y los niveles cargan rápido. Todavía no fue probado en gráficas AMD ni en procesadores Intel.
 
 ## Qué incluye
 
@@ -110,10 +110,11 @@ mientras se compilan los shaders. Todavía no fue probado en gráficas AMD ni en
 
 ## Problemas conocidos
 
-- **Primera carga de la campaña:** la primera vez que iniciás la campaña puede demorar bastante
-  mientras se compilan muchos shaders, e incluso puede crashear. Volvé a entrar y debería cargar
-  bien: los shaders quedan en caché.
-- **Tirones** la primera vez que aparece un efecto (el shader se compila y después queda en caché).
+- **Resolución de render mayor a 1080p (1440p, 1800p, 4K):** pueden aparecer algunos parpadeos de
+  iluminación y bugs visuales en las sombras (una franja oscura que puede moverse con la cámara).
+  No hacen la experiencia injugable; en 1080p no pasan. Los videos (cinemáticas FMV) se ven con
+  zoom y recortados.
+- **Primera partida:** algunos efectos pueden aparecer unos cuadros tarde mientras se compila su shader.
 - **Capítulo 2:** parpadeo leve de iluminación en ciertos momentos de carga de shaders; se
   soluciona con el tiempo.
 - **Más de 60 FPS (experimental):** con un monitor de 60 Hz desactivá VSync, si no se queda en 60.

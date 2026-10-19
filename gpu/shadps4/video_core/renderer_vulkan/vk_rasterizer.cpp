@@ -21,6 +21,7 @@
 #include "video_core/renderer_vulkan/vk_depth_stencil_state.h"
 #include "video_core/renderer_vulkan/vk_instance.h"
 #include "video_core/renderer_vulkan/vk_pending_draws.h"
+#include "video_core/renderer_vulkan/vk_res_census.h"
 #include "video_core/renderer_vulkan/vk_pipeline_cache.h"
 #include "video_core/renderer_vulkan/vk_rasterizer.h"
 #include "video_core/renderer_vulkan/vk_gpu_profiler.h"
@@ -36,6 +37,84 @@ namespace Vulkan {
 namespace {
 // gow3 (Killzone): see PendingDrawPolicy. GPU command thread only.
 PendingDrawPolicy pending_policy;
+// gow3 (Killzone): see ResCensus (GOW3_RES_CENSUS=1). GPU command thread only.
+ResCensus res_census;
+
+/// ResCensus: the constant buffers and user data of `stages`; each buffer of a shader is
+/// scanned on its first 8 uses only (the census must not slow the game down much).
+void CensusConstants(std::span<const Shader::Info* const> stages, Core::MemoryManager* memory) {
+    static std::unordered_map<u64, u32> scans;
+    static constexpr const char* names[] = {"ps", "hs", "ds", "vs", "gs", "cs"};
+    for (const Shader::Info* stage : stages) {
+        if (!stage) {
+            continue;
+        }
+        const char* name = names[std::min<u32>(u32(stage->sw_stage), 5)];
+        const auto ud = stage->FlatUserData();
+        if (scans[stage->pgm_hash * 31 + 99]++ < 8) {
+            res_census.Constants(name, stage->pgm_hash, "ud", ud.data(), ud.size());
+        }
+        for (u32 i = 0; i < stage->buffers.size(); ++i) {
+            const auto& desc = stage->buffers[i];
+            if (desc.IsSpecial() || scans[stage->pgm_hash * 31 + i]++ >= 8) {
+                continue;
+            }
+            const auto sharp = desc.GetSharp(*stage);
+            const u64 size = std::min<u64>(sharp.GetSize(), 16384);
+            if (!sharp.base_address || size < 4 || !memory->IsValidGpuMapping(sharp.base_address, size)) {
+                continue;
+            }
+            char where[8];
+            std::snprintf(where, sizeof(where), "cb%u", i);
+            res_census.Constants(name, stage->pgm_hash, where,
+                                 reinterpret_cast<const u32*>(sharp.base_address), size / 4);
+        }
+    }
+}
+
+/// ResCensus for a draw: its viewport and scissors against its target, and its constants.
+void CensusDraw(const GraphicsPipeline* pipeline, const AmdGpu::Regs& regs,
+                Core::MemoryManager* memory) {
+    u64 target = 0;
+    u32 tw = 0, th = 0;
+    for (u32 cb = 0; cb < 8 && !target; ++cb) {
+        if (regs.color_buffers[cb]) {
+            target = regs.color_buffers[cb].Address();
+            tw = regs.color_buffers[cb].Pitch();
+            th = regs.color_buffers[cb].Height();
+        }
+    }
+    if (!target && regs.depth_buffer.DepthValid()) {
+        target = regs.depth_buffer.DepthAddress();
+        tw = regs.depth_buffer.Pitch();
+        th = regs.depth_buffer.Height();
+    }
+    const auto stages = pipeline->GetStages();
+    const auto* vs = stages[u32(Shader::SwStage::Vertex)];
+    const auto* ps = stages[u32(Shader::SwStage::Fragment)];
+    const u64 vs_hash = vs ? vs->pgm_hash : 0, ps_hash = ps ? ps->pgm_hash : 0;
+    bool color = false;
+    for (u32 cb = 0; cb < 8; ++cb) {
+        color = color || bool(regs.color_buffers[cb]);
+    }
+    res_census.Target(target, tw, th, color, vs_hash, ps_hash);
+    // The UI viewport scale global of the eboot (mapped at 0x800000000).
+    static constexpr VAddr ui_scale = 0x800000000ull + 0x3CE0060;
+    if (memory->IsValidGpuMapping(ui_scale, 16)) {
+        res_census.UiScale(reinterpret_cast<const float*>(ui_scale));
+    }
+    const auto& vp = regs.viewports[0];
+    res_census.Extent("viewport", vs_hash, ps_hash, target, tw, th,
+                      u32(std::lround(std::fabs(vp.xscale) * 2)),
+                      u32(std::lround(std::fabs(vp.yscale) * 2)));
+    res_census.Extent("screen scissor", vs_hash, ps_hash, target, tw, th,
+                      regs.screen_scissor.GetWidth(), regs.screen_scissor.GetHeight());
+    const auto& gs = regs.generic_scissor;
+    res_census.Extent("generic scissor", vs_hash, ps_hash, target, tw, th,
+                      u32(gs.bottom_right_x) - u32(gs.top_left_x),
+                      u32(gs.bottom_right_y) - u32(gs.top_left_y));
+    CensusConstants(stages, memory);
+}
 
 /// The draw's main target for PendingDrawPolicy: the first color buffer, else the depth
 /// buffer (shadow passes, color = false).
@@ -1065,6 +1144,9 @@ void Rasterizer::DrawRecord(const GraphicsPipeline* pipeline, const PreparedDraw
     }
     DiagPassBoundary(false);
     const auto& regs = Regs();
+    if (res_census.On()) {
+        CensusDraw(pipeline, regs, memory);
+    }
     // gow3: the pass copying a finished frame to a display buffer; the previous draw's
     // target is that frame.
     if (camera_motion->Enabled() && regs.color_buffers[0] &&
@@ -1421,6 +1503,11 @@ void Rasterizer::DispatchRecord(const ComputePipeline* pipeline) {
     const auto& cs_program = CsRegs();
 
     const auto& cs = pipeline->GetStage(Shader::SwStage::Compute);
+    if (res_census.On()) {
+        res_census.Dispatch(cs.pgm_hash, cs_program.dim_x, cs_program.dim_y,
+                            cs_program.num_thread_x.full, cs_program.num_thread_y.full);
+        CensusConstants(pipeline->GetStages(), memory);
+    }
     // After the resource binding: its transfers (image uploads, downloads) mark themselves.
     const auto mark = [&] {
         if (auto* profiler = GpuProfiler::Get()) {
