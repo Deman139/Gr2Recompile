@@ -1,8 +1,6 @@
 # Killzone Shadow Fall for PC
 
-support the project and future ports 
-
-**English** | [Español](#español) Support Project  
+**English** | [Español](#español)
 
 [![Support the project and future ports](https://img.shields.io/badge/PayPal-Support%20the%20project%20%26%20future%20ports-00457C?logo=paypal&logoColor=white)](https://www.paypal.com/paypalme/SantiagoLescano577) *Optional: the ports are and will stay free.*
 
