@@ -1,6 +1,8 @@
 # Killzone Shadow Fall for PC
 
-**English** | [Español](#español)
+support the project and future ports 
+
+**English** | [Español](#español) Support Project  
 
 Native Windows port of **Killzone Shadow Fall** (PS4). The game's code runs directly on the CPU;
 graphics are translated to Vulkan in real time. Public beta: the whole campaign is playable, and
@@ -17,7 +19,7 @@ it keeps improving with testers' reports.
 2. Open **Killzone Shadow Fall.exe**, choose your dump's folder (the one holding `eboot.bin`) and
    press **PLAY**.
 
-Requirements: Windows 10 (1903+) or 11 64-bit, a Vulkan 1.3 GPU, 16 GB of RAM. **6 GB of VRAM**
+Requirements: Windows 10 (1903+) or 11 64-bit, a Vulkan 1.3 GPU, 16 GB of RAM. **4 to 6 GB of VRAM**
 recommended for 1080p-1440p; 8 GB for 1800p and 4K.
 
 Tested on a Ryzen 7 5700 + RTX 2060 Super (8 GB): the game should be playable from start to
@@ -42,8 +44,6 @@ tested yet on AMD GPUs or Intel CPUs.
 
 - **FSR / DLSS:** a minor visual glitch can remain in some places (far fewer than with the classic
   method). The image is clean but not as sharp as it will be once jitter is added.
-- **Classic method above 1080p:** some lighting flicker and a shadow band that can follow the
-  camera may appear, and the few video cutscenes look zoomed in.
 - **First play:** some effects can show up a few frames late while their shader compiles.
 - **Above 60 FPS (experimental):** turn VSync off on a 60 Hz monitor, otherwise it stays at 60.
 - The shader cache can take several GB ("Clear cache" in the launcher).
@@ -94,7 +94,7 @@ campaña completa, y se sigue puliendo con los reportes de los testers.
    dale a **JUGAR**.
 
 Requisitos: Windows 10 (1903+) u 11 de 64 bits, GPU con Vulkan 1.3, 16 GB de RAM. Se recomiendan
-**6 GB de VRAM** para 1080p-1440p; 8 GB para 1800p y 4K.
+**4 a 6 GB de VRAM** para 1080p-1440p; 8 GB para 1800p y 4K.
 
 Probado en Ryzen 7 5700 + RTX 2060 Super (8 GB): el juego debería poder jugarse completo, de
 principio a fin. La compilación de shaders casi no da tirones, aun en la primera partida, y los
@@ -121,8 +121,6 @@ niveles cargan rápido. Todavía no fue probado en gráficas AMD ni en procesado
 - **FSR / DLSS:** puede quedar algún error visual menor en ciertos lugares (muchos menos que con
   el método clásico). La imagen es limpia pero todavía no tan nítida como cuando se agregue el
   jitter.
-- **Método clásico por encima de 1080p:** pueden aparecer parpadeos de iluminación y una franja de
-  sombra que sigue a la cámara, y las pocas cinemáticas que son video se ven con zoom.
 - **Primera partida:** algunos efectos pueden aparecer unos cuadros tarde mientras se compila su shader.
 - **Más de 60 FPS (experimental):** con un monitor de 60 Hz desactivá VSync, si no se queda en 60.
 - La caché de shaders puede ocupar varios GB ("Borrar caché" en el launcher).
