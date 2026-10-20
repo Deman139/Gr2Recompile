@@ -169,6 +169,15 @@ def main():
     graphics, reverted = graphics_options.prepare(env['GOW3_CONFIG'], out / 'graphics_state.json')
     if reverted:
         print('Graphics: the last restart never reached the game; previous options restored', flush=True)
+    # Port-side output resolution (GOW3_OUTPUT_RES=WxH): host scene targets and the UI at the
+    # output size while the game itself stays at 1080p, so no resolution patch is applied.
+    # The saved output_res never decides it (the in-game menu could have stored another one).
+    env.setdefault('GOW3_OUTPUT_RES', '1920x1080')
+    # Killzone's UI vertex shader (HUD, menus, movies): where the output-size UI composition starts.
+    env.setdefault('GOW3_UI_TRIGGER_VS', '6a09714a')
+    if env['GOW3_OUTPUT_RES'] != '1920x1080':
+        graphics = dict(graphics, render_resolution='native')
+        print(f"Graphics: output {env['GOW3_OUTPUT_RES']} by the port (game at 1080p)", flush=True)
     env.update(graphics_options.environment(graphics))
     if not env.get('GOW3_FSR411_DIR') and not (PORT / 'fsr4_411').is_dir() and (data / 'fsr4_411').is_dir():
         env['GOW3_FSR411_DIR'] = str(data / 'fsr4_411')
@@ -248,7 +257,9 @@ def main():
         # off unless the launcher's experimental switch is on (then gow3.ini decides); linear
         # image readbacks fix its corrupted textures.
         if env.get('GOW3_EXPERIMENTAL_UPSCALER') != '1':
-            env.setdefault('GOW3_UPSCALER', 'none')
+            # Above 1080p the port's output path needs the upscaler's machinery (scene proxies, UI
+            # composition) enabled, with the temporal upscaler itself off.
+            env.setdefault('GOW3_UPSCALER', 'none' if env['GOW3_OUTPUT_RES'] == '1920x1080' else 'off')
         env.setdefault('GOW3_READBACK_LINEAR', '1')
         if profile:
             names = selected_patches(profile[1], profile[2], env.get('GOW3_PATCHES', ''), env.get('GOW3_PATCHES_ONLY') == '1')

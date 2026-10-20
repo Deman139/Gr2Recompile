@@ -316,7 +316,16 @@ bool TemporalUpscaler::OnFrameStart() {
     if (applied_upscaler != upscaler) fsr4_failed = false; // retry after a menu change
     // Dynamic scene resolution scaling (live preset switching) works on all GPUs.
     // On GPUs without D32S8 blit support, UI depth is cleared instead of copied from scene.
-    if (!scaled_session) {
+    // Killzone (GOW3_SCENE_NATIVE=1): the scene stays at the game's own 1920x1080, without host
+    // proxies (its shaders read many targets at exact pixels: each proxy round trip lost
+    // detail, foliage lighting broke); the temporal upscaler alone reaches the output size.
+    static const bool scene_native = [] {
+        const char* v = std::getenv("GOW3_SCENE_NATIVE");
+        return v && v[0] == '1';
+    }();
+    if (!scaled_session && scene_native) {
+        scene_targets.SetSize({});
+    } else if (!scaled_session) {
         scene_targets.SetSize(SceneResolution::ForPreset(active ? preset : 0,
                                                         {target_width, target_height}));
         render_width = scene_targets.Size().width;
@@ -1294,7 +1303,9 @@ void TemporalUpscaler::OnColorTarget(VideoCore::ImageId color) {
     }
     const auto& image = texture_cache.GetImage(color);
     const auto& depth = texture_cache.GetImage(camera_motion.Depth());
-    if (image.info.pixel_format == vk::Format::eR8G8B8A8Unorm &&
+    // Killzone: its finished scene (post-processed, before the HUD) is B10G11R11.
+    if ((image.info.pixel_format == vk::Format::eR8G8B8A8Unorm ||
+         image.info.pixel_format == vk::Format::eB10G11R11UfloatPack32) &&
         image.info.size.width == depth.info.size.width &&
         image.info.size.height == depth.info.size.height) {
         ldr_target = color;
@@ -1320,9 +1331,12 @@ void TemporalUpscaler::OnDraw(u64 vs_hash, VideoCore::ImageId color,
     const auto& image = texture_cache.GetImage(color);
     const bool movie = vs_hash == ui_trigger_vs || UiComposition::MovieShader(vs_hash) ||
                        (scaled_session && native_viewport);
+    // Killzone draws its HUD, menus and movies into the B10G11R11 scene color it then copies to
+    // the display buffer (at the start of the next frame, like God of War III's display pass).
     const bool ui_draw = movie &&
         (image.info.pixel_format == vk::Format::eR8G8B8A8Unorm ||
-         image.info.pixel_format == vk::Format::eR8G8B8A8Srgb) &&
+         image.info.pixel_format == vk::Format::eR8G8B8A8Srgb ||
+         image.info.pixel_format == vk::Format::eB10G11R11UfloatPack32) &&
         RenderTarget(image.info.size.width, image.info.size.height) &&
         !FrameCapture::IsDisplayBuffer(image.info.guest_address);
     switch (UiComposition::Choose(Scaled(), ui_draw,
@@ -1472,8 +1486,10 @@ void TemporalUpscaler::RunUiOnly(VideoCore::ImageId color_id, VideoCore::ImageId
     vk::Image source = color.GetImage();
     auto source_layout = vk::ImageLayout::eTransferSrcOptimal;
     u32 source_width = color.info.size.width, source_height = color.info.size.height;
-    if (!scaled_session && camera_motion.Depth() && scene_targets.Reduced() &&
-        scene_targets.EligibleScene(color)) {
+    // Killzone: no camera depth is identified yet; the scene proxy (raster size, also above
+    // 1080p) is the background whenever it holds the current content.
+    if (!scaled_session && scene_targets.Reduced() && scene_targets.EligibleScene(color) &&
+        (camera_motion.Depth() || scene_targets.ProxyCurrent(color))) {
         VideoCore::ImageViewInfo view;
         view.format = color.info.pixel_format;
         const auto proxy = scene_targets.Read(color_id, view,
@@ -1552,7 +1568,7 @@ void TemporalUpscaler::RunScaled() {
     vk::Image depth_image = depth.GetImage(), color_image = color.GetImage();
     vk::ImageView depth_view{}, color_view{};
     u32 source_width = iw, source_height = ih;
-    if (!scaled_session) {
+    if (!scaled_session && scene_targets.Reduced()) {
         VideoCore::ImageViewInfo ci, di;
         ci.format = color.info.pixel_format;
         di.format = depth_format;
@@ -1808,13 +1824,29 @@ bool TemporalUpscaler::RedirectColor(VideoCore::ImageId color,
         display.valid = false; // not upscaled: the presenter shows the guest buffer
         return false;
     }
-    if (!display.image || display.format != image.info.pixel_format ||
+    // Killzone: its display copy (the first pass of a frame) reads the scene color with integer
+    // coordinates of the 1920x1080 guest image, so on the output-size UI image it showed only the
+    // top-left part, stretched (1.33x zoom at 1440p). The port blits the UI image (format
+    // conversion included) and sends the game's draw to a sink. GOW3_DISPLAY_BLIT=0: old way.
+    static const bool display_blit = [] {
+        const char* v = std::getenv("GOW3_DISPLAY_BLIT");
+        return !v || v[0] != '0';
+    }();
+    // A BGRA scan-out read through the guest's RGBA buffer: the blit writes BGRA bytes.
+    extern std::atomic<bool> g_gow3_display_bgra;
+    auto host_format = image.info.pixel_format;
+    if (display_blit && g_gow3_display_bgra.load(std::memory_order_relaxed)) {
+        if (host_format == vk::Format::eR8G8B8A8Srgb) host_format = vk::Format::eB8G8R8A8Srgb;
+        else if (host_format == vk::Format::eR8G8B8A8Unorm) host_format = vk::Format::eB8G8R8A8Unorm;
+    }
+    if (!display.image || display.format != host_format ||
         display.width != ui_width || display.height != ui_height) {
         const auto device = instance.GetDevice();
         scheduler.Finish();
         display.views.clear();
-        std::printf("Display: host buffer %ux%u (live)\n", ui_width, ui_height);
-        display.format = image.info.pixel_format;
+        std::printf("Display: host buffer %ux%u %s (live)\n", ui_width, ui_height,
+                    vk::to_string(host_format).c_str());
+        display.format = host_format;
         display.width = ui_width;
         display.height = ui_height;
         display.image = VideoCore::UniqueImage(device, instance.GetAllocator());
@@ -1848,6 +1880,97 @@ bool TemporalUpscaler::RedirectColor(VideoCore::ImageId color,
         cmd.pipelineBarrier2({.imageMemoryBarrierCount = 1, .pImageMemoryBarriers = &b});
     });
     display.valid = true;
+    if (display_blit && ui_image) {
+        if (!display.sink || display.sink_width != ui_width || display.sink_height != ui_height ||
+            display.sink_format != display.format) {
+            scheduler.Finish();
+            display.sink_views.clear();
+            display.sink = VideoCore::UniqueImage(instance.GetDevice(), instance.GetAllocator());
+            display.sink.Create(vk::ImageCreateInfo{
+                .flags = vk::ImageCreateFlagBits::eMutableFormat,
+                .imageType = vk::ImageType::e2D,
+                .format = display.format,
+                .extent = {ui_width, ui_height, 1},
+                .mipLevels = 1,
+                .arrayLayers = 1,
+                .samples = vk::SampleCountFlagBits::e1,
+                .tiling = vk::ImageTiling::eOptimal,
+                .usage = vk::ImageUsageFlagBits::eColorAttachment,
+                .initialLayout = vk::ImageLayout::eUndefined,
+            });
+            display.sink_width = ui_width;
+            display.sink_height = ui_height;
+            display.sink_format = display.format;
+            const vk::ImageMemoryBarrier2 sb{
+                .srcStageMask = vk::PipelineStageFlagBits2::eAllCommands,
+                .dstStageMask = vk::PipelineStageFlagBits2::eColorAttachmentOutput,
+                .dstAccessMask = vk::AccessFlagBits2::eColorAttachmentWrite,
+                .oldLayout = vk::ImageLayout::eUndefined,
+                .newLayout = vk::ImageLayout::eGeneral,
+                .image = vk::Image(display.sink),
+                .subresourceRange = {vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1},
+            };
+            scheduler.Record([sb](vk::CommandBuffer cmd) {
+                cmd.pipelineBarrier2({.imageMemoryBarrierCount = 1, .pImageMemoryBarriers = &sb});
+            });
+        }
+        const vk::Image src = vk::Image(ui_image), dst = vk::Image(display.image);
+        const u32 w = ui_width, h = ui_height;
+        scheduler.Record([src, dst, w, h](vk::CommandBuffer cmd) {
+            const vk::ImageSubresourceRange range{vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1};
+            const std::array before{
+                vk::ImageMemoryBarrier2{
+                    .srcStageMask = vk::PipelineStageFlagBits2::eColorAttachmentOutput |
+                                    vk::PipelineStageFlagBits2::eTransfer,
+                    .srcAccessMask = vk::AccessFlagBits2::eColorAttachmentWrite |
+                                     vk::AccessFlagBits2::eTransferWrite,
+                    .dstStageMask = vk::PipelineStageFlagBits2::eTransfer,
+                    .dstAccessMask = vk::AccessFlagBits2::eTransferRead,
+                    .oldLayout = vk::ImageLayout::eGeneral,
+                    .newLayout = vk::ImageLayout::eGeneral,
+                    .image = src, .subresourceRange = range},
+                vk::ImageMemoryBarrier2{
+                    .srcStageMask = vk::PipelineStageFlagBits2::eColorAttachmentOutput,
+                    .srcAccessMask = vk::AccessFlagBits2::eColorAttachmentWrite,
+                    .dstStageMask = vk::PipelineStageFlagBits2::eTransfer,
+                    .dstAccessMask = vk::AccessFlagBits2::eTransferWrite,
+                    .oldLayout = vk::ImageLayout::eGeneral,
+                    .newLayout = vk::ImageLayout::eGeneral,
+                    .image = dst, .subresourceRange = range},
+            };
+            cmd.pipelineBarrier2({.imageMemoryBarrierCount = 2, .pImageMemoryBarriers = before.data()});
+            const vk::ImageBlit region{
+                .srcSubresource = {vk::ImageAspectFlagBits::eColor, 0, 0, 1},
+                .srcOffsets = std::array{vk::Offset3D{0, 0, 0}, vk::Offset3D{s32(w), s32(h), 1}},
+                .dstSubresource = {vk::ImageAspectFlagBits::eColor, 0, 0, 1},
+                .dstOffsets = std::array{vk::Offset3D{0, 0, 0}, vk::Offset3D{s32(w), s32(h), 1}},
+            };
+            cmd.blitImage(src, vk::ImageLayout::eGeneral, dst, vk::ImageLayout::eGeneral, region,
+                          vk::Filter::eNearest);
+            const std::array after{
+                vk::ImageMemoryBarrier2{
+                    .srcStageMask = vk::PipelineStageFlagBits2::eTransfer,
+                    .srcAccessMask = vk::AccessFlagBits2::eTransferRead,
+                    .dstStageMask = vk::PipelineStageFlagBits2::eAllCommands,
+                    .dstAccessMask = vk::AccessFlagBits2::eMemoryWrite | vk::AccessFlagBits2::eMemoryRead,
+                    .oldLayout = vk::ImageLayout::eGeneral,
+                    .newLayout = vk::ImageLayout::eGeneral,
+                    .image = src, .subresourceRange = range},
+                vk::ImageMemoryBarrier2{
+                    .srcStageMask = vk::PipelineStageFlagBits2::eTransfer,
+                    .srcAccessMask = vk::AccessFlagBits2::eTransferWrite,
+                    .dstStageMask = vk::PipelineStageFlagBits2::eAllCommands,
+                    .dstAccessMask = vk::AccessFlagBits2::eMemoryRead,
+                    .oldLayout = vk::ImageLayout::eGeneral,
+                    .newLayout = vk::ImageLayout::eGeneral,
+                    .image = dst, .subresourceRange = range},
+            };
+            cmd.pipelineBarrier2({.imageMemoryBarrierCount = 2, .pImageMemoryBarriers = after.data()});
+        });
+        target = {Mirror(vk::Image(display.sink), display.sink_views, view_info.format, {}),
+                  vk::ImageLayout::eGeneral, ui_width, ui_height};
+        return true;
+    }
     target = {Mirror(vk::Image(display.image), display.views, view_info.format, {}),
               vk::ImageLayout::eGeneral, ui_width, ui_height};
     return true;

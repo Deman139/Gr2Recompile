@@ -18,17 +18,21 @@ it keeps improving with testers' reports.
    press **PLAY**.
 
 Requirements: Windows 10 (1903+) or 11 64-bit, a Vulkan 1.3 GPU, 16 GB of RAM. **6 GB of VRAM**
-recommended for 1080p-1440p (the game uses about 4 GB); 8 GB for 1800p and 4K (about 5.5 GB).
+recommended for 1080p-1440p; 8 GB for 1800p and 4K.
 
 Tested on a Ryzen 7 5700 + RTX 2060 Super (8 GB): the game should be playable from start to
-finish. Since v0.2.1 shader compilation barely stutters, even on a first play, and levels load
-fast. Not tested yet on AMD GPUs or Intel CPUs.
+finish. Shader compilation barely stutters, even on a first play, and levels load fast. Not
+tested yet on AMD GPUs or Intel CPUs.
 
 ## What's included
 
-- Launcher in English and Spanish: dump check, display mode, window size, **render resolution
-  (720p, 1080p, 1440p, 1800p, 4K)**, frame rate limit (30, 60, and experimental 144, 240 and
-  unlimited), VSync, anisotropic filtering, FSR 1, keyboard, mouse and controller mapping.
+- **Resolutions above 1080p with AMD FSR 3.1 or NVIDIA DLSS** (1440p, 1800p, 4K): the game renders
+  at 1080p and the upscaler takes it to your resolution, while the HUD, menus and videos are drawn
+  sharp at full resolution. Far fewer visual glitches than rendering the game itself at that
+  resolution, and lighter. The classic method (a game patch) is still under *Advanced*.
+- Launcher in English and Spanish: dump check, display mode, window size, render resolution and
+  method, frame rate limit (30, 60, and experimental 144, 240 and unlimited), VSync, anisotropic
+  filtering, distant texture sharpness, FSR 1, keyboard, mouse and controller mapping.
 - Automatic updates: the launcher announces new versions and installs them keeping your saves.
 - Mouse aim (as the right stick), keyboard, and Xbox / PlayStation controllers.
 - Touchpad without one (OWL drone): hold **Delete** and drag the mouse.
@@ -36,11 +40,11 @@ fast. Not tested yet on AMD GPUs or Intel CPUs.
 
 ## Known issues
 
-- **Render resolution above 1080p (1440p, 1800p, 4K):** some lighting flicker and shadow glitches
-  may appear. They don't make the game unplayable;
-  at 1080p they don't happen. Videos (FMV cutscenes) look zoomed in and cropped.
+- **FSR / DLSS:** a minor visual glitch can remain in some places (far fewer than with the classic
+  method). The image is clean but not as sharp as it will be once jitter is added.
+- **Classic method above 1080p:** some lighting flicker and a shadow band that can follow the
+  camera may appear, and the few video cutscenes look zoomed in.
 - **First play:** some effects can show up a few frames late while their shader compiles.
-- **Chapter 2:** slight lighting flicker at some moments while shaders load; it goes away with time.
 - **Above 60 FPS (experimental):** turn VSync off on a 60 Hz monitor, otherwise it stays at 60.
 - The shader cache can take several GB ("Clear cache" in the launcher).
 - Multiplayer: offline only (Botzone).
@@ -48,10 +52,12 @@ fast. Not tested yet on AMD GPUs or Intel CPUs.
 ## Future plans
 
 **High priority**
-- Upscalers: DLSS, FSR 3.1 and FSR 4.
-- Performance: better use of the GPU and CPU
+- Sharper FSR and DLSS (sub-pixel jitter).
+- Frame generation (FSR 3 and DLSS).
+- Performance: better use of the GPU and CPU.
 
 **Medium priority**
+- FSR 4.
 - Debug menu, cheats and patches (for example unlocking every chapter).
 - Fixes for bugs reported on specific hardware.
 
@@ -64,7 +70,9 @@ attach that session's folder from `user\logs\` (launcher **Logs** button).
 
 As in the gow3_pc base ([instructions](packaging/windows/README.md)): MSYS2 CLANG64,
 `bash build.sh`, then `bash packaging/windows/package_kzsf.sh` for the zip (first,
-`packaging/windows/make_kzsf_icon.py <your dump>/sce_sys/icon0.png launcher/kzsf.ico`).
+`packaging/windows/make_kzsf_icon.py <your dump>/sce_sys/icon0.png launcher/kzsf.ico`). For DLSS,
+build the bridge first with Visual Studio 2022 and the [NVIDIA DLSS SDK](https://github.com/NVIDIA/DLSS):
+`DLSS_SDK_ROOT=<checkout> bash packaging/windows/build_dlss_kzsf.sh`.
 
 ---
 
@@ -86,18 +94,23 @@ campaña completa, y se sigue puliendo con los reportes de los testers.
    dale a **JUGAR**.
 
 Requisitos: Windows 10 (1903+) u 11 de 64 bits, GPU con Vulkan 1.3, 16 GB de RAM. Se recomiendan
-**6 GB de VRAM** para 1080p-1440p (el juego usa unos 4 GB); 8 GB para 1800p y 4K (unos 5,5 GB).
+**6 GB de VRAM** para 1080p-1440p; 8 GB para 1800p y 4K.
 
 Probado en Ryzen 7 5700 + RTX 2060 Super (8 GB): el juego debería poder jugarse completo, de
-principio a fin. Desde la v0.2.1 la compilación de shaders casi no da tirones, aun en la primera
-partida, y los niveles cargan rápido. Todavía no fue probado en gráficas AMD ni en procesadores Intel.
+principio a fin. La compilación de shaders casi no da tirones, aun en la primera partida, y los
+niveles cargan rápido. Todavía no fue probado en gráficas AMD ni en procesadores Intel.
 
 ## Qué incluye
 
+- **Resoluciones mayores a 1080p con AMD FSR 3.1 o NVIDIA DLSS** (1440p, 1800p, 4K): el juego
+  renderiza en 1080p y el reescalador lo lleva a tu resolución, mientras el HUD, los menús y los
+  videos se dibujan nítidos a resolución completa. Muchos menos errores visuales que haciendo que
+  el juego mismo renderice a esa resolución, y más liviano. El método clásico (parche del juego)
+  sigue disponible en *Avanzado*.
 - Launcher en inglés y español: verificación del dump, modo de pantalla, tamaño de ventana,
-  **resolución de render (720p, 1080p, 1440p, 1800p, 4K)**, límite de FPS (30, 60, y
-  experimentales 144, 240 y sin límite), VSync, filtrado anisotrópico, FSR 1, controles de
-  teclado, mouse y mando.
+  resolución y método de render, límite de FPS (30, 60, y experimentales 144, 240 y sin límite),
+  VSync, filtrado anisotrópico, nitidez de texturas lejanas, FSR 1, controles de teclado, mouse y
+  mando.
 - Actualizaciones automáticas: el launcher avisa de versiones nuevas y las instala conservando tus partidas.
 - Mouse para apuntar (como stick derecho), teclado y mandos Xbox / PlayStation.
 - Touchpad sin touchpad (dron OWL): mantener **Suprimir** y arrastrar el mouse.
@@ -105,13 +118,12 @@ partida, y los niveles cargan rápido. Todavía no fue probado en gráficas AMD 
 
 ## Problemas conocidos
 
-- **Resolución de render mayor a 1080p (1440p, 1800p, 4K):** pueden aparecer algunos parpadeos de
-  iluminación y bugs visuales en las sombras 
-  No hacen la experiencia injugable; en 1080p no pasan. Los videos (cinemáticas FMV) se ven con
-  zoom y recortados.
+- **FSR / DLSS:** puede quedar algún error visual menor en ciertos lugares (muchos menos que con
+  el método clásico). La imagen es limpia pero todavía no tan nítida como cuando se agregue el
+  jitter.
+- **Método clásico por encima de 1080p:** pueden aparecer parpadeos de iluminación y una franja de
+  sombra que sigue a la cámara, y las pocas cinemáticas que son video se ven con zoom.
 - **Primera partida:** algunos efectos pueden aparecer unos cuadros tarde mientras se compila su shader.
-- **Capítulo 2:** parpadeo leve de iluminación en ciertos momentos de carga de shaders; se
-  soluciona con el tiempo.
 - **Más de 60 FPS (experimental):** con un monitor de 60 Hz desactivá VSync, si no se queda en 60.
 - La caché de shaders puede ocupar varios GB ("Borrar caché" en el launcher).
 - Multijugador: solo sin conexión (Botzone).
@@ -119,10 +131,12 @@ partida, y los niveles cargan rápido. Todavía no fue probado en gráficas AMD 
 ## Planes futuros
 
 **Prioridad alta**
-- Reescalado: DLSS, FSR 3.1 y FSR 4.
-- Rendimiento: mejor aprovechamiento de GPU y CPU, menos tirones
+- FSR y DLSS más nítidos (jitter de subpíxel).
+- Generación de cuadros (FSR 3 y DLSS).
+- Rendimiento: mejor aprovechamiento de GPU y CPU.
 
 **Prioridad media**
+- FSR 4.
 - Menú debug, trucos y parches (por ejemplo desbloquear todos los capítulos).
 - Arreglos de errores reportados en hardware específico.
 
@@ -135,21 +149,28 @@ carpeta de esa partida en `user\logs\` (botón **Logs** del launcher).
 
 Igual que la base gow3_pc ([instrucciones](packaging/windows/README.md)): MSYS2 CLANG64,
 `bash build.sh`, y después `bash packaging/windows/package_kzsf.sh` para el zip (antes,
-`packaging/windows/make_kzsf_icon.py <tu dump>/sce_sys/icon0.png launcher/kzsf.ico`).
+`packaging/windows/make_kzsf_icon.py <tu dump>/sce_sys/icon0.png launcher/kzsf.ico`). Para DLSS,
+compilá antes el puente con Visual Studio 2022 y el [SDK de NVIDIA DLSS](https://github.com/NVIDIA/DLSS):
+`DLSS_SDK_ROOT=<checkout> bash packaging/windows/build_dlss_kzsf.sh`.
 
 ---
 
 ## Credits / Créditos
 
 - **Lesca**: Killzone Shadow Fall port (dynamic module loader, PS4 clock fix, tessellation and
-  texture fixes, fonts, resolution patches, VRAM reduction, launcher).
-- **Felipe Prado**: [gow3_pc](https://github.com/FelipePrado0/gow3_pc), the base of this port
-  (its README is in [docs/gow3_pc](docs/gow3_pc/README.md)).
+  texture fixes, fonts, resolution patches, VRAM reduction, shader stutter fix, FSR/DLSS
+  calibration, launcher).
+- **Felipe Prado**: [gow3_pc / SpartanPort](https://github.com/FelipePrado0/SpartanPort), the base
+  of this port (its README is in [docs/gow3_pc](docs/gow3_pc/README.md)).
 - **Supermedo** and **deadinside28**: [bloodborne_pc](https://github.com/deadinside28/bloodborne_pc),
-  the original native port technique.
-- **uncharted_pc**: the mouse input layer.
+  the original native port technique, and [uncharted_pc](https://github.com/Supermedo/uncharted_pc)
+  (mouse input layer, file read, FPU state and texture cache fixes).
+- **HayatoG**: [iss_pc](https://github.com/HayatoG/iss_pc) (shader permutation and cache fixes,
+  driver pipeline cache, texture LOD bias).
 - **shadPS4 team**: the [shadPS4](https://github.com/shadps4-emu/shadPS4) video core (GPU and
   shader translation to Vulkan).
+- **AMD FidelityFX FSR 3.1** ([FSR-Vulkan](https://github.com/FireBurn/FSR-Vulkan)) and **NVIDIA
+  DLSS** ([DLSS SDK](https://github.com/NVIDIA/DLSS); NVIDIA's license is in `licenses\`).
 
 ## License
 

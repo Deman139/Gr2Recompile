@@ -240,6 +240,55 @@ void CameraMotion::OnConstants(const float* data) {
     frame_has_camera = true;
 }
 
+void CameraMotion::OnKillzoneConstants(const float* data) {
+    static int dumps = [] {
+        const char* v = std::getenv("GOW3_CAMERA_DEBUG");
+        return v ? 3 : 0;
+    }();
+    if (dumps > 0) {
+        --dumps;
+        std::printf("Camera debug: 640-byte constants:");
+        for (int i = 0; i < 160; ++i) {
+            std::printf("%s%g", i % 8 ? " " : "\n  ", data[i]);
+        }
+        std::printf("\n");
+    }
+    // Signature: affine view matrices, a perspective projection (w = -z), the render size at 114,
+    // its NDC scale (2/w, -2/h: the viewport flips) at 120 and its reciprocal at 124.
+    const auto near = [](float value, float expected) { return std::abs(value - expected) < 1e-4f; };
+    if (!near(data[15], 1.0f) || !near(data[47], 1.0f) || !near(data[27], -1.0f) ||
+        !near(data[31], 0.0f) || data[114] < 64.0f || data[115] < 64.0f ||
+        std::abs(data[124] * data[114] - 1.0f) > 1e-3f ||
+        std::abs(data[125] * data[115] - 1.0f) > 1e-3f ||
+        std::abs(data[121] * data[115] + 2.0f) > 1e-3f || data[16] <= 0.0f || data[21] <= 0.0f) {
+        return;
+    }
+    if (frame_has_camera) {
+        return; // the first one of a frame is the main camera
+    }
+    previous = current;
+    // Column-major: element (row r, column c) at c * 4 + r. The motion shader's view space is
+    // left-handed (z forward): z is negated, on the rows of world to view and on the third
+    // column of view to world.
+    for (int r = 0; r < 3; ++r) {
+        for (int c = 0; c < 4; ++c) {
+            current.view[r * 4 + c] = data[c * 4 + r] * (r == 2 ? -1.0f : 1.0f);
+            current.inv_view[r * 4 + c] = data[32 + c * 4 + r] * (c == 2 ? -1.0f : 1.0f);
+        }
+    }
+    // clip z = m22 * vz + m23, w = -vz; with z = -vz: depth = -m22 + m23 / z.
+    current.proj = {data[16], data[21], -data[26], data[30]};
+    current.valid = true;
+    const std::array<u32, 2> size{u32(data[114]), u32(data[115])};
+    if (size != render_size) {
+        std::printf("Camera motion: Killzone camera, render size %ux%u, projection %.4f %.4f, "
+                    "depth %.4f %+.4f / z\n", size[0], size[1], current.proj[0], current.proj[1],
+                    current.proj[2], current.proj[3]);
+        render_size = size;
+    }
+    frame_has_camera = true;
+}
+
 void CameraMotion::OnGBufferPass(VideoCore::ImageId depth) {
     depth_id = depth;
 }

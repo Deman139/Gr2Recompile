@@ -1,9 +1,11 @@
 // SPDX-FileCopyrightText: Copyright 2024-2026 shadPS4 Emulator Project
 // SPDX-License-Identifier: GPL-2.0-or-later
 
+#include <unordered_set>
 #include <chrono>
 #include <xxhash.h>
 #include "video_core/renderer_vulkan/ui_composition.h"
+#include "gow3_settings.h"
 #include "gow3_toggles.h"
 #include "video_core/renderer_vulkan/vk_frame_capture.h"
 #include "video_core/renderer_vulkan/vk_lighting_test.h"
@@ -1163,6 +1165,14 @@ void Rasterizer::DrawRecord(const GraphicsPipeline* pipeline, const PreparedDraw
         static const char* scene_debug = std::getenv("GOW3_SCENE_DEBUG");
         scene_debug_frame = scene_debug && std::remove(scene_debug) == 0;
         scene_targets->debug = scene_debug_frame;
+    } else if (regs.color_buffers[0] &&
+               FrameCapture::IsDisplayBuffer(regs.color_buffers[0].Address()) &&
+               regs.color_buffers[0].Address() != last_display_buffer) {
+        // Without an upscaler: still count the frame (GOW3_GPU_PROFILE, GOW3_BUFFER_STATS),
+        // once per display buffer since the HUD draws into it as well.
+        // ponytail: assumes flips rotate display buffers; a single-buffer game counts one frame.
+        last_display_buffer = regs.color_buffers[0].Address();
+        NoteFrameStart();
     }
     bind_prepared = used_prepared;
     motion_draw = pipeline->GetGraphicsKey().motion_vectors;
@@ -1779,11 +1789,15 @@ bool Rasterizer::BindResources(const Pipeline* pipeline) {
     // gow3: G-buffer passes sample material textures for a scene rendered below the output
     // size; the temporal upscaler restores the detail of the output's mip level (FSR guide:
     // log2(render / output)). Shadows, post-processing and UI keep the guest's bias.
-    sampler_lod_bias = 0.0f;
+    // The launcher's texture LOD bias (mip_lod_bias, iss_pc) adds to every draw: textures without
+    // mips (UI, full-screen passes) are unaffected. Steps of 1/8 keep the sampler count low.
+    sampler_lod_bias = pipeline->IsCompute()
+                           ? 0.0f
+                           : std::round(Gow3Settings::Get().mip_lod_bias.load() * 8.0f) / 8.0f;
     if (!pipeline->IsCompute() && !Gow3Toggle::Disabled(Gow3Toggle::SceneMipBias) &&
         std::popcount(static_cast<const GraphicsPipeline*>(pipeline)->GetGraphicsKey().mrt_mask &
                       0xff) >= 5) {
-        sampler_lod_bias = upscaler->SceneMipBias();
+        sampler_lod_bias += upscaler->SceneMipBias();
         static float reported = 0.0f;
         if (sampler_lod_bias != reported) {
             reported = sampler_lod_bias;
@@ -2269,6 +2283,22 @@ bool Rasterizer::IsComputeImageClear(const Pipeline* pipeline) {
     return true;
 }
 
+// GOW3_CAMERA_DEBUG=N: the first N buffer bindings of G-buffer draws (camera constants search).
+static void CameraDebug(bool gbuffer_draw, const Shader::Info& stage, u32 index, const char* kind,
+                        u32 size) {
+    static int left = [] {
+        const char* v = std::getenv("GOW3_CAMERA_DEBUG");
+        return v ? std::atoi(v) : 0;
+    }();
+    static std::unordered_set<u64> seen;
+    if (gbuffer_draw && left > 0 &&
+        seen.insert(stage.pgm_hash ^ (u64(size) << 40) ^ (u64(index) << 32)).second) {
+        --left;
+        std::printf("Camera debug: stage %u hash %08llx buffer %u %s size %u\n",
+                    u32(stage.sw_stage), static_cast<unsigned long long>(stage.pgm_hash), index, kind, size);
+    }
+}
+
 void Rasterizer::BindBuffers(const Shader::Info& stage, const PreparedStage* prepared,
                              Shader::Backend::Bindings& binding,
                              Shader::PushData& push_data, u32& write_index) {
@@ -2290,7 +2320,12 @@ void Rasterizer::BindBuffers(const Shader::Info& stage, const PreparedStage* pre
                 if (ring->size == 864 && gbuffer_draw &&
                     memory->IsValidGpuMapping(ring->address, 0)) {
                     camera_motion->OnConstants(reinterpret_cast<const float*>(ring->address));
+                } else if (ring->size == 640 && gbuffer_draw) {
+                    // The ring's own copy: its guest address can be a label only.
+                    camera_motion->OnKillzoneConstants(
+                        reinterpret_cast<const float*>(constant_ring->Data(ring->offset)));
                 }
+                CameraDebug(gbuffer_draw, stage, buffer_index, "ring", ring->size);
                 push_data.AddOffset(binding.buffer, 0);
             }
             buffer_infos.emplace_back(constant_ring->Handle(), ring->offset, ring->size);
@@ -2351,7 +2386,12 @@ void Rasterizer::BindBuffers(const Shader::Info& stage, const PreparedStage* pre
             if (vsharp.GetSize() == 864 && gbuffer_draw &&
                 memory->IsValidGpuMapping(vsharp.base_address, 0)) {
                 camera_motion->OnConstants(reinterpret_cast<const float*>(vsharp.base_address));
+            } else if (vsharp.GetSize() == 640 && gbuffer_draw &&
+                       memory->IsValidGpuMapping(vsharp.base_address, 0)) {
+                camera_motion->OnKillzoneConstants(
+                    reinterpret_cast<const float*>(vsharp.base_address));
             }
+            CameraDebug(gbuffer_draw, stage, buffer_index, "sharp", u32(vsharp.GetSize()));
             // Object motion research: the vertex shader buffers of G-buffer draws.
             if (FrameCapture::Active() && gbuffer_draw && stage.sw_stage == Shader::SwStage::Vertex &&
                 vsharp.base_address != 0 && memory->IsValidGpuMapping(vsharp.base_address, 0)) {
@@ -2429,7 +2469,9 @@ Rasterizer::ImageDescCacheEntry& Rasterizer::CachedImageDescEntry(const AmdGpu::
                                                                    u64 hash) {
     std::array<u64, 4> key;
     std::memcpy(key.data(), &sharp, sizeof(key));
-    const u32 flags = u32(res.is_written) | u32(res.is_depth) << 1 | u32(res.is_array) << 2;
+    // gow3: needs_native too, since FindImage resolves partial height views only for it.
+    const u32 flags = u32(res.is_written) | u32(res.is_depth) << 1 | u32(res.is_array) << 2 |
+                      u32(res.needs_native) << 3;
     // Two-way set associative: a frame binds a few thousand distinct T#s.
     auto* set = &image_desc_cache[(hash % (image_desc_cache.size() / 2)) * 2];
     const auto matches = [&](const ImageDescCacheEntry& e) {
@@ -3300,6 +3342,21 @@ RenderState Rasterizer::BeginRenderingFull(const GraphicsPipeline* pipeline) {
             target_scale = UiComposition::Scale(guest_extent.first, guest_extent.second,
                                                 redirect.width, redirect.height,
                                                 native_coordinates);
+            // GOW3_UI_DEBUG=N: the first N redirected passes (UI composition diagnosis).
+            static int ui_debug = [] {
+                const char* v = std::getenv("GOW3_UI_DEBUG");
+                return v ? std::atoi(v) : 0;
+            }();
+            if (ui_debug > 0) {
+                --ui_debug;
+                std::printf("UI pass: guest %ux%u -> %ux%u, viewport scale %.1f,%.1f offset %.1f,%.1f, "
+                            "clip disabled %d, vte x/y %d/%d, native_ui %d, native coords %d, scale %.3f,%.3f\n",
+                            guest_extent.first, guest_extent.second, redirect.width, redirect.height,
+                            viewport.xscale, viewport.yscale, viewport.xoffset, viewport.yoffset,
+                            int(regs.IsClipDisabled()), int(regs.viewport_control.xscale_enable),
+                            int(regs.viewport_control.yscale_enable), int(redirect.native_ui),
+                            int(native_coordinates), target_scale[0], target_scale[1]);
+            }
         }
     }
 
@@ -3425,7 +3482,11 @@ void Rasterizer::CopyBuffer(VAddr dst, VAddr src, u32 num_bytes, bool dst_gds, b
             return;
         }
     }
-    texture_cache.InvalidateMemoryFromGPU(dst, num_bytes);
+    if (!dst_gds) {
+        // uncharted_pc: the copy writes exactly this range; textures the game moves this way can
+        // sit anywhere in it (blue/white textures until re-uploaded).
+        texture_cache.InvalidateMemoryFromGPU(dst, num_bytes, true);
+    }
     const auto* gds_buffer = buffer_cache.GetGdsBuffer();
     const auto [src_buffer, src_offset] = [&] -> std::pair<const VideoCore::Buffer*, u64> {
         if (src_gds) {

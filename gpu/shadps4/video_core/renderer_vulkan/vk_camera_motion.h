@@ -71,6 +71,10 @@ public:
 
     /// A bound constant buffer of 864 bytes: checks the scene constant signature.
     void OnConstants(const float* data);
+    /// Killzone: the G-buffer pixel shaders' 640-byte view constants (column-major, right-handed
+    /// view looking down -z): world to view at 0, projection at 16, view to world at 32, the
+    /// render size at 114 and its reciprocal at 120.
+    void OnKillzoneConstants(const float* data);
 
     /// The G-buffer pass (5+ color targets): its depth is the scene depth.
     void OnGBufferPass(VideoCore::ImageId depth);

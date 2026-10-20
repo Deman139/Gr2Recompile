@@ -71,7 +71,13 @@ static ABI int32_t user_event(int32_t *event) {
 }
 
 /* ---- SystemService ---- */
-static int language(void) { const char *v=getenv("GOW3_LANGUAGE"); return v ? atoi(v) : 1; }
+static int language(void) {
+    const char *v=getenv("GOW3_LANGUAGE");
+    int id=v ? atoi(v) : 1;
+    static int logged;
+    if (!logged) { logged=1; printf("Runtime: game asked for the system language: %d\n",id); }
+    return id;
+}
 static ABI int32_t system_param(int32_t id,int32_t *value) {
     if (!value) return SYSTEM_PARAMETER;
     switch (id) {
@@ -229,6 +235,8 @@ static ABI int32_t np_account_country(const void *online_id,void *country) {
     return online_id && country ? NP_SIGNED_OUT : NP_INVALID_ARGUMENT;
 }
 static ABI int32_t np_account_language(int32_t request,const void *online_id,void *language) {
+    static int logged;
+    if (!logged) { logged=1; printf("Runtime: game asked for the NP account language (signed out)\n"); }
     (void)request; return online_id && language ? NP_SIGNED_OUT : NP_INVALID_ARGUMENT;
 }
 /* Word filter (offline): comments pass unchanged and requests finish at once. */

@@ -74,11 +74,15 @@ public:
         ImageInfo info;
         ImageViewInfo view_info;
         BindingType type{BindingType::Texture};
+        /// gow3: the shader reads with integer coordinates (ImageResource::needs_native), not
+        /// normalized sampling. Gates ResolveOverlap's partial height views.
+        bool needs_native{true};
 
         ImageDesc() = default;
         ImageDesc(const AmdGpu::Image& image, const Shader::ImageResource& desc)
             : info{image, desc}, view_info{image, desc},
-              type{desc.is_written ? BindingType::Storage : BindingType::Texture} {}
+              type{desc.is_written ? BindingType::Storage : BindingType::Texture},
+              needs_native{desc.needs_native} {}
         ImageDesc(const AmdGpu::ColorBuffer& buffer, AmdGpu::CbDbExtent hint)
             : info{buffer, hint}, view_info{buffer}, type{BindingType::RenderTarget} {}
         ImageDesc(const AmdGpu::DepthBuffer& buffer, AmdGpu::DepthView view,
@@ -120,7 +124,9 @@ public:
     void NoteBackingWrite(VAddr address, u64 size);
 
     /// Marks an image as dirty if it exists at the provided address.
-    void InvalidateMemoryFromGPU(VAddr address, size_t max_size);
+    /// whole_range (uncharted_pc): the GPU wrote exactly [address, address + max_size), so every
+    /// image overlapping it is dirty, not only one starting at the address (copies moving textures).
+    void InvalidateMemoryFromGPU(VAddr address, size_t max_size, bool whole_range = false);
 
     /// Evicts any images that overlap the unmapped range.
     void UnmapMemory(VAddr cpu_addr, size_t size);
@@ -211,7 +217,8 @@ public:
     [[nodiscard]] std::tuple<ImageId, int, int> ResolveOverlap(const ImageInfo& info,
                                                                BindingType binding,
                                                                ImageId cache_img_id,
-                                                               ImageId merged_image_id);
+                                                               ImageId merged_image_id,
+                                                               bool native_reads);
 
     /// Resolves depth overlap and either re-creates the image or returns existing one
     [[nodiscard]] ImageId ResolveDepthOverlap(const ImageInfo& requested_info, BindingType binding,
@@ -485,6 +492,34 @@ private:
         u64 Bytes() const { return u64{width} * height * bits / 8; }
     };
     std::array<ReadbackImageStat, 16> readback_images{};
+    /// gow3 (GOW3_PERF_DIAG): images FindImage had to create, by request, and the image that was
+    /// cached at that memory before (none: nothing overlapped). Printed with the readback report.
+    struct CreateStat {
+        VAddr address;
+        u32 width, height, count;
+        vk::Format format;
+        BindingType binding;
+        const char* reason;
+        VAddr prev_address;
+        u32 prev_width, prev_height, overlaps;
+        vk::Format prev_format;
+        u32 pitch, tile, prev_pitch, prev_tile;
+        bool needs_native;
+    };
+    std::array<CreateStat, 16> create_stats{};
+    u64 images_created = 0;
+    std::chrono::steady_clock::time_point create_report = std::chrono::steady_clock::now();
+    void ReportImageCreates();
+    /// gow3 (GOW3_PERF_DIAG): requests answered by Gow3Toggle::PartialHeightViews.
+    struct PartialViewStat {
+        VAddr address;
+        vk::Format format, used_format;
+        u32 used_width, used_height, min_height, max_height, count;
+        BindingType binding;
+    };
+    std::array<PartialViewStat, 16> partial_view_stats{};
+    u64 partial_views = 0;
+    void NotePartialView(const ImageInfo& request, const ImageInfo& used, BindingType binding);
     u64 readbacks_released = 0;
     ReadbackQueue<Vulkan::StagingBufferRef> pending_readbacks;
     std::mutex readback_mutex;
@@ -536,6 +571,7 @@ private:
         AmdGpu::ImageType type{};
         bool exact_fmt = false;
         BindingType binding{};
+        bool needs_native = true;
         u32 levels = 0;
         u32 layers = 0;
         u64 generation = ~0ULL;

@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: Copyright 2024 shadPS4 Emulator Project
 // SPDX-License-Identifier: GPL-2.0-or-later
 
+#include <atomic>
 #include <boost/container/small_vector.hpp>
 
 #include "shader_recompiler/info.h"
@@ -111,6 +112,8 @@ ComputePipeline::ComputePipeline(const Instance& instance, Scheduler& scheduler,
     ASSERT_MSG(pipeline_result == vk::Result::eSuccess, "Failed to create compute pipeline: {}",
                vk::to_string(pipeline_result));
     pipeline = std::move(pipe);
+    extern std::atomic<u64> g_gow3_driver_pipelines_created;
+    g_gow3_driver_pipelines_created.fetch_add(1, std::memory_order_relaxed);
     SetObjectName(device, *pipeline, "Compute Pipeline {}", debug_str);
     RecordWaveSizes();
 }

@@ -480,9 +480,23 @@ void PerformanceTab() {
             return env && env[0] == '1';
         }();
         if (game_patches) {
+        // Killzone: above 1080p the launcher's new method has the port draw at GOW3_OUTPUT_RES while
+        // the game stays at 1080p; the patch's row would wrongly read "Native" and mix both methods.
+        static const char* const port_output = [] {
+            const char* env = std::getenv("GOW3_OUTPUT_RES");
+            return env && *env && std::strcmp(env, "1920x1080") != 0 ? env : nullptr;
+        }();
+        if (port_output) {
+            char text[96];
+            int w = 0, h = 0;
+            std::sscanf(port_output, "%dx%d", &w, &h);
+            std::snprintf(text, sizeof(text), "%d x %d (port; change it in the launcher)", w, h);
+            InfoRow("Render resolution", text);
+        } else {
         static const char* const resolution_labels[] = {"Native (1080p)", "480p", "720p", "1440p", "1800p", "4K"};
         ChoiceRow("Render resolution", s.render_resolution, resolution_labels, nullptr, int(G::Resolutions.size()),
                   "The resolution the game draws at. Higher is sharper and slower.");
+        }
         static const bool fps_patches = [] {
             const char* env = std::getenv("GOW3_FPS_PATCHES");
             return !(env && env[0] == '0');

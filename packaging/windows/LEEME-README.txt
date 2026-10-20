@@ -1,4 +1,4 @@
-KILLZONE SHADOW FALL - Native Windows port (Lesca) - Beta 0.2.1
+KILLZONE SHADOW FALL - Native Windows port (Lesca) - Beta 0.2.2
 =================================================================
 
 [ENGLISH]
@@ -17,10 +17,14 @@ Requirements
 
 Tested setup
   Ryzen 7 5700 + RTX 2060 Super (8 GB): the game should be playable from start to finish.
-  Since v0.2.1 shader compilation barely stutters, even on a first play, and levels load
-  fast. In game: a steady 60 FPS at 1080p (up to ~110 FPS unlocked in lighter levels), ~50 FPS at
-  1440p, ~28 FPS at 4K.
+  Shader compilation barely stutters, even on a first play, and levels load fast.
   Not tested yet on AMD GPUs or Intel CPUs.
+
+Resolution above 1080p (Graphics > Render resolution, method under Advanced)
+  - AMD FSR 3.1 (recommended, any GPU) or NVIDIA DLSS (GeForce RTX): the game renders at 1080p
+    and the upscaler takes it to 1440p, 1800p or 4K; HUD, menus and videos are drawn sharp at
+    that resolution. Far fewer visual glitches than the classic method, and lighter.
+  - Classic: a game patch makes the game render at that resolution (heavier, more glitches).
 
 How to play
   1. Unzip this folder anywhere (outside "Program Files").
@@ -44,13 +48,11 @@ Where your things are (user\ folder)
   "Clear cache" in the launcher deletes shaders and the prepared image; saves are kept.
 
 Known issues
-  - Render resolution above 1080p (1440p, 1800p, 4K): some lighting flicker and shadow
-    glitches (a dark band that can move with the camera) may appear. They don't make the
-    game unplayable; at 1080p they don't happen. Videos (FMV cutscenes) look zoomed in and
-    cropped.
+  - FSR / DLSS: a minor visual glitch can remain in some places; the image will get
+    sharper in a coming update (jitter).
+  - Classic method above 1080p: lighting flicker and a shadow band following the camera may
+    appear, and the few video cutscenes look zoomed in.
   - First play: some effects can show up a few frames late while their shader compiles.
-  - Chapter 2: slight lighting flicker at some moments while shaders load; it goes away
-    with time.
   - Above 60 FPS (Graphics, experimental): turn VSync off on a 60 Hz monitor, otherwise it
     stays at 60.
   - The mouse is translated to the right stick: smooth, but not 1:1 like a PC shooter.
@@ -58,10 +60,9 @@ Known issues
   - Multiplayer: offline only (Botzone).
 
 Future plans
-  High priority:   DLSS, FSR 3.1 and FSR 4 upscalers; performance (better GPU and CPU use,
-                   fewer stutters, faster shader loading).
-  Medium priority: debug menu, cheats and patches (e.g. unlock every chapter); fixes for bugs
-                   reported on specific hardware.
+  High priority:   sharper FSR and DLSS (jitter); frame generation; performance.
+  Medium priority: FSR 4; debug menu, cheats and patches (e.g. unlock every chapter); fixes
+                   for bugs reported on specific hardware.
 
 Reporting bugs
   https://github.com/lesca-191204/killzone-shadowfall-pc/issues
@@ -69,8 +70,9 @@ Reporting bugs
   the logs folder of that session (Logs button in the launcher).
 
 Credits
-  Based on gow3_pc (Felipe Prado) and the bloodborne_pc lineage (deadinside28, Supermedo),
-  the uncharted_pc mouse layer and the shadPS4 graphics core (GPL-2.0 license).
+  Based on gow3_pc / SpartanPort (Felipe Prado) and the bloodborne_pc lineage (deadinside28,
+  Supermedo), with fixes from uncharted_pc (Supermedo) and iss_pc (HayatoG), and the shadPS4
+  graphics core (GPL-2.0 license). AMD FSR 3.1 and NVIDIA DLSS (licenses in licenses\).
   Killzone is a trademark of Sony Interactive Entertainment; this project is not affiliated
   with or endorsed by Sony or Guerrilla Games.
 
@@ -91,9 +93,15 @@ Requisitos
 
 Equipo probado
   Ryzen 7 5700 + RTX 2060 Super (8 GB): el juego debería poder jugarse completo, de principio
-  a fin. Desde la v0.2.1 la compilación de shaders casi no da tirones, aun en la primera
-  partida, y los niveles cargan rápido. En juego: 60 FPS estables a 1080p (hasta ~110 FPS sin límite
-  en niveles más livianos), ~50 FPS a 1440p, ~28 FPS a 4K. Todavía no fue probado en gráficas AMD ni en procesadores Intel.
+  a fin. La compilación de shaders casi no da tirones, aun en la primera partida, y los niveles
+  cargan rápido. Todavía no fue probado en gráficas AMD ni en procesadores Intel.
+
+Resolución mayor a 1080p (Gráficos > Resolución de render, el método en Avanzado)
+  - AMD FSR 3.1 (recomendado, cualquier GPU) o NVIDIA DLSS (GeForce RTX): el juego renderiza en
+    1080p y el reescalador lo lleva a 1440p, 1800p o 4K; el HUD, los menús y los videos se
+    dibujan nítidos a esa resolución. Muchos menos errores visuales que el método clásico, y
+    más liviano.
+  - Clásico: un parche hace que el juego renderice a esa resolución (más exigente, más errores).
 
 Cómo jugar
   1. Descomprimí esta carpeta donde quieras (fuera de "Archivos de programa").
@@ -117,13 +125,11 @@ Dónde quedan tus cosas (carpeta user\)
   "Borrar caché" en el launcher elimina shaders e imagen preparada; tus partidas no se tocan.
 
 Problemas conocidos
-  - Resolución de render mayor a 1080p (1440p, 1800p, 4K): pueden aparecer algunos
-    parpadeos de iluminación y bugs visuales en las sombras (una franja oscura que puede
-    moverse con la cámara). No hacen la experiencia injugable; en 1080p no pasan. Los videos
-    (cinemáticas FMV) se ven con zoom y recortados.
+  - FSR / DLSS: puede quedar algún error visual menor en ciertos lugares; la imagen va a ser
+    más nítida en una próxima actualización (jitter).
+  - Método clásico por encima de 1080p: pueden aparecer parpadeos de iluminación y una franja
+    de sombra que sigue a la cámara, y las pocas cinemáticas que son video se ven con zoom.
   - Primera partida: algunos efectos pueden aparecer unos cuadros tarde mientras se compila su shader.
-  - Capítulo 2: parpadeo leve de iluminación en ciertos momentos de carga de shaders; se
-    soluciona con el tiempo.
   - Más de 60 FPS (Gráficos, experimental): con un monitor de 60 Hz desactivá VSync, si no se
     queda en 60.
   - El mouse se traduce a stick derecho: fluido, pero no 1 a 1 como un shooter de PC.
@@ -131,10 +137,9 @@ Problemas conocidos
   - Multijugador: solo sin conexión (Botzone).
 
 Planes futuros
-  Prioridad alta:  reescalado DLSS, FSR 3.1 y FSR 4; rendimiento (mejor uso de GPU y CPU,
-                   menos tirones, carga de shaders más rápida).
-  Prioridad media: menú debug, trucos y parches (p. ej. desbloquear todos los capítulos);
-                   arreglos de errores reportados en hardware específico.
+  Prioridad alta:  FSR y DLSS más nítidos (jitter); generación de cuadros; rendimiento.
+  Prioridad media: FSR 4; menú debug, trucos y parches (p. ej. desbloquear todos los
+                   capítulos); arreglos de errores reportados en hardware específico.
 
 Reportar errores
   https://github.com/lesca-191204/killzone-shadowfall-pc/issues
@@ -142,7 +147,8 @@ Reportar errores
   carpeta de logs de esa partida (botón Logs en el launcher).
 
 Créditos
-  Basado en gow3_pc (Felipe Prado) y la línea bloodborne_pc (deadinside28, Supermedo), la capa
-  de mouse de uncharted_pc y el núcleo gráfico de shadPS4 (licencia GPL-2.0).
+  Basado en gow3_pc / SpartanPort (Felipe Prado) y la línea bloodborne_pc (deadinside28,
+  Supermedo), con arreglos de uncharted_pc (Supermedo) e iss_pc (HayatoG), y el núcleo gráfico
+  de shadPS4 (licencia GPL-2.0). AMD FSR 3.1 y NVIDIA DLSS (licencias en licenses\).
   Killzone es una marca de Sony Interactive Entertainment; este proyecto no está afiliado ni
   respaldado por Sony ni por Guerrilla Games.

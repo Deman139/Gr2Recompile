@@ -22,9 +22,9 @@ enum Preset : int { NativeAA = 0, Quality, Balanced, Performance, UltraPerforman
 enum DebugView : int { DebugNone = 0, DebugReactive = 1, DebugMotion = 2, DebugViewCount };
 
 /// Live output resolutions: the upscaler's output and the UI host targets.
-inline constexpr int OutputWidths[] = {1280, 1920, 2560, 3840};
-inline constexpr int OutputHeights[] = {720, 1080, 1440, 2160};
-inline constexpr int OutputCount = 4;
+inline constexpr int OutputWidths[] = {1280, 1920, 2560, 3840, 3200};
+inline constexpr int OutputHeights[] = {720, 1080, 1440, 2160, 1800};
+inline constexpr int OutputCount = 5;
 inline constexpr int OutputDefault = 1; ///< 1920x1080, the game's own size
 
 struct Values {
@@ -74,6 +74,9 @@ struct Values {
     std::atomic<int> frames_queued{1};
     /// Controller vibration strength in percent; 0 turns it off (runtime_pad.c). Live.
     std::atomic<int> vibration{100};
+    /// gow3 (iss_pc mip_lod_bias): extra texture LOD bias of every draw, -3..3 in steps of 1/8:
+    /// negative is sharper at a distance (more shimmer), positive blurrier (a little less GPU).
+    std::atomic<float> mip_lod_bias{0.0f};
     // Startup: run.py turns them into patches and environment variables; "Apply and restart".
     std::atomic<int> render_resolution{0};
     std::atomic<int> engine_fps{120};

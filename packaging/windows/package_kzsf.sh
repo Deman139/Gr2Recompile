@@ -47,6 +47,15 @@ llvm-strip --strip-debug -o "$dest/bin/KillzoneShadowFall.exe" out/gow3-probe.ex
 ldd "$dest/bin/KillzoneShadowFall.exe" | awk '/\/clang64\/bin\// {print $3}' | sort -u | while read -r dll; do
     cp -u "$dll" "$dest/bin/"
 done
+# NVIDIA DLSS (packaging/windows/build_dlss_kzsf.sh): the MSVC bridge and NVIDIA's runtime, when built.
+if [[ -f out/gow3_dlss.dll && -f out/nvngx_dlss.dll ]]; then
+    cp out/gow3_dlss.dll out/nvngx_dlss.dll "$dest/bin/"
+    mkdir -p "$dest/licenses"
+    cp out/NVIDIA-DLSS-LICENSE.txt "$dest/licenses/"
+    cp gpu/dlss_bridge/LICENSE.txt "$dest/licenses/gow3_dlss-LICENSE.txt"
+else
+    echo 'Note: DLSS not packaged (run packaging/windows/build_dlss_kzsf.sh first)' >&2
+fi
 cp -r scripts "$dest/"
 cp run.py LICENSE "$dest/"
 # The render resolution patches (tools/make_kzsf_res_patches.py): our own file, no game data.

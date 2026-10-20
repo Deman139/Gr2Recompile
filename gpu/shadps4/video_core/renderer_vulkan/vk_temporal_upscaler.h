@@ -243,6 +243,11 @@ private:
         vk::Format format{};
         u32 width = 0, height = 0;
         bool valid = false;
+        /// Killzone: where the game's own display copy draws when the port blits the UI image.
+        VideoCore::UniqueImage sink;
+        std::vector<MirrorView> sink_views;
+        vk::Format sink_format{};
+        u32 sink_width = 0, sink_height = 0;
     };
     std::mutex display_mutex;
     std::unordered_map<VAddr, DisplayImage> displays;

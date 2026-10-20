@@ -279,6 +279,8 @@ vk::ResultValue<vk::UniquePipeline> CreateCachedGraphicsPipeline(
                                 .count());
         extern std::atomic<u64> g_gow3_pipeline_driver_ns;
         g_gow3_pipeline_driver_ns += ns;
+        extern std::atomic<u64> g_gow3_driver_pipelines_created;
+        g_gow3_driver_pipelines_created.fetch_add(1, std::memory_order_relaxed);
         if (enabled) {
             (restored ? binary_restore_ns : binary_compile_ns) += ns;
             ++(restored ? binary_restore_calls : binary_compile_calls);
@@ -874,6 +876,7 @@ bool PipelineCache::LoadPipelineStage(Serialization::Archive& ar, size_t stage) 
 }
 
 bool PipelineCache::CheckCacheProfile() {
+    next_permutation.clear();
     if (!EmulatorSettings.IsPipelineCacheEnabled()) {
         return false;
     }
@@ -913,7 +916,37 @@ bool PipelineCache::CheckCacheProfile() {
                                            std::move(profile_data));
         return false;
     }
+    // gow3: the indices the cache already holds, so permutations compiled in game never take one.
+    Storage::DataBase::Instance().ForEachBlobName(
+        Storage::BlobType::ShaderBinary, [this](std::string_view name) {
+            // "{:#018x}_{}": program hash, permutation index
+            const auto split = name.find('_');
+            if (split == std::string_view::npos) {
+                return;
+            }
+            const std::string hash_text{name.substr(0, split)};
+            const std::string index_text{name.substr(split + 1)};
+            char* end = nullptr;
+            const u64 hash = std::strtoull(hash_text.c_str(), &end, 16);
+            if (end == hash_text.c_str() || *end) {
+                return;
+            }
+            const u64 index = std::strtoull(index_text.c_str(), &end, 10);
+            if (end == index_text.c_str() || *end) {
+                return;
+            }
+            auto& next = next_permutation[hash];
+            next = std::max<size_t>(next, index + 1);
+        });
+    std::printf("Pipeline cache: %zu programs on disk\n", next_permutation.size());
     return true;
+}
+
+size_t PipelineCache::NewPermutationIndex(const Program& program, u64 hash) const {
+    // A program has at most one permutation in flight, and the one inserted at this index makes
+    // modules.size() the next one, so nothing needs reserving (a refused queue retries the same).
+    const auto it = next_permutation.find(hash);
+    return std::max(program.modules.size(), it == next_permutation.end() ? 0 : it->second);
 }
 
 void PipelineCache::WarmUp(const std::function<void(u32, u32)>& progress) {
@@ -1187,9 +1220,11 @@ bool PipelineCache::MergeWarmStage(WarmStage& stage) {
     }
     // The game already uses this shader: its permutations are the ones that count.
     Program& program = *it_pgm->second;
-    if (program.pending) {
-        return false; // the game is compiling a permutation that takes the next index
+    if (program.PendingInitial()) {
+        return false; // its Info is not translated yet
     }
+    // A permutation the game compiles takes an index past every cached one
+    // (NewPermutationIndex), so a cached permutation keeps its own even while one is pending.
     const auto it = std::ranges::find(program.modules, stage.spec, &Program::Module::spec);
     if (it != program.modules.end()) {
         if (size_t(std::distance(program.modules.begin(), it)) != stage.perm_idx) {

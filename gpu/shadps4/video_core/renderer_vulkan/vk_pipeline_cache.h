@@ -70,6 +70,9 @@ struct Program {
         modules.emplace_back(module, std::move(spec));
     }
 
+    /// gow3: the pending compilation is the program's first: `info` is not translated yet.
+    [[nodiscard]] bool PendingInitial() const;
+
     void InsertPermut(vk::ShaderModule module, Shader::StageSpecialization&& spec,
                       size_t perm_idx) {
         modules.resize(std::max(modules.size(), perm_idx + 1)); // <-- beware of realloc
@@ -206,7 +209,16 @@ private:
     void PublishGraphics(bool wait = false);
     void FinishCompilations();
     void SeedWorkerCaches();
+    /// gow3: the driver's VkPipelineCache blob kept between sessions (vk_pipeline_cache.cpp).
+    struct DriverCacheSaver;
+    void StartDriverCacheSaver();
+    void StopDriverCacheSaver();
+    bool SaveDriverCache();
+    bool SaveDriverCacheUnchecked();
+    DriverCacheSaver* driver_saver = nullptr;
     bool CheckCacheProfile();
+    /// gow3: index for a new permutation of `program`: past every index the cache on disk holds.
+    size_t NewPermutationIndex(const Program& program, u64 hash) const;
     struct BackgroundWarmup;
     struct WarmStage;
     void ReadWarmEntry(BackgroundWarmup& warm, std::vector<u8>&& data);
@@ -255,6 +267,13 @@ private:
     BackgroundWarmup* background = nullptr;
     tsl::robin_map<GraphicsPipelineKey, std::shared_ptr<AsyncGraphicsCompilation>> pending_graphics;
     tsl::robin_map<size_t, std::unique_ptr<Program>> program_cache;
+    /// gow3 (iss_pc a88bbc1): per program hash, one past the highest permutation index of the
+    /// .spv files on disk. A permutation compiled in game takes an index from here, never one
+    /// that a cached permutation not yet loaded (background warm-up) already names: its .meta
+    /// would be overwritten with another specialization, and the .key files that name it would
+    /// build their pipelines with the wrong shader in the next session. Filled by
+    /// CheckCacheProfile.
+    std::unordered_map<u64, size_t> next_permutation;
     std::vector<Program*> pending_programs;
     /// gow3: exclusive for program/permutation insertions, shared for worker lookups.
     std::shared_mutex programs_mutex;

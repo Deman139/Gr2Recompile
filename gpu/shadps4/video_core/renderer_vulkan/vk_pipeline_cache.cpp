@@ -10,8 +10,13 @@
 #include <ranges>
 #include <string>
 #include <unordered_set>
+#include <condition_variable>
+#include <filesystem>
+#include <thread>
+#include <xxhash.h>
 #include "gow3_threads.h"
 
+#include "common/elf_info.h"
 #include "common/hash.h"
 #include "common/thread.h"
 #include "common/io_file.h"
@@ -321,6 +326,227 @@ const Shader::RuntimeInfo& PipelineCache::BuildRuntimeInfo(PipelineSelection& se
     return info;
 }
 
+// gow3 (iss_pc BP08, from Mrsuss b972798 and 0xCydral bdb9769): the driver's own pipeline cache
+// (the compiled ISA behind every vkCreate*Pipelines) is kept between sessions in
+// <cache>/driver-<serial>/vk_pipeline_cache_<vendor>_<device>_<pipelineCacheUUID>.vkc. The key
+// is in the file name, so a GPU or driver change finds no file and leaves the others alone:
+// nothing is ever deleted (the next save of the same key replaces the file). The file is a
+// header (magic, version, size, XXH3 of the blob) and the blob; it is written to a temporary
+// name and renamed, so a crash leaves the old file or none. Independent of the shader cache
+// folder, which is pruned when the recompiler changes; the driver checks the blob again.
+// GOW3_DRIVER_CACHE=0 turns it off. It covers what pipeline binaries do not: compute pipelines
+// and drivers without VK_KHR_pipeline_binary.
+namespace {
+constexpr u32 DriverCacheMagic = 0x4B435649; // "IVCK"
+constexpr u32 DriverCacheVersion = 1;
+struct DriverCacheHeader {
+    u32 magic;
+    u32 version;
+    u64 payload_size;
+    u64 payload_hash;
+};
+static_assert(sizeof(DriverCacheHeader) == 24);
+
+bool DriverCacheEnabled() {
+    static const bool on = [] {
+        const char* v = std::getenv("GOW3_DRIVER_CACHE");
+        return !v || *v != '0';
+    }();
+    return on;
+}
+
+std::filesystem::path DriverCacheFile(const Instance& instance) {
+    const std::string serial{Common::ElfInfo::Instance().GameSerial()};
+    std::string uuid;
+    for (const u8 byte : instance.GetPipelineCacheUUID()) {
+        uuid += fmt::format("{:02x}", byte);
+    }
+    return Common::FS::GetUserPath(Common::FS::PathType::CacheDir) /
+           ("driver-" + (serial.empty() ? std::string{"unknown"} : serial)) /
+           fmt::format("vk_pipeline_cache_{:04x}_{:04x}_{}.vkc", instance.GetVendorID(),
+                       instance.GetDeviceID(), uuid);
+}
+
+/// The saved blob for this GPU and driver, empty when there is none or the file is damaged.
+std::vector<u8> LoadDriverCacheBlob(const Instance& instance) {
+    const auto path = DriverCacheFile(instance);
+    std::error_code ec;
+    if (!std::filesystem::is_regular_file(path, ec)) {
+        std::printf("GPU: driver pipeline cache: none saved for this GPU/driver\n");
+        return {};
+    }
+    std::vector<u8> file(std::filesystem::file_size(path, ec));
+    if (ec || file.size() < sizeof(DriverCacheHeader) + sizeof(VkPipelineCacheHeaderVersionOne)) {
+        return {};
+    }
+    {
+        const Common::FS::IOFile io{path, Common::FS::FileAccessMode::Read};
+        if (!io.IsOpen() || io.Read(file) != file.size()) {
+            return {};
+        }
+    }
+    DriverCacheHeader header;
+    std::memcpy(&header, file.data(), sizeof(header));
+    const u8* payload = file.data() + sizeof(header);
+    if (header.magic != DriverCacheMagic || header.version != DriverCacheVersion ||
+        header.payload_size != file.size() - sizeof(header) ||
+        XXH3_64bits(payload, header.payload_size) != header.payload_hash) {
+        std::printf("GPU: driver pipeline cache ignored (damaged file, kept)\n");
+        return {};
+    }
+    VkPipelineCacheHeaderVersionOne driver;
+    std::memcpy(&driver, payload, sizeof(driver));
+    const auto uuid = instance.GetPipelineCacheUUID();
+    if (driver.headerVersion != VK_PIPELINE_CACHE_HEADER_VERSION_ONE ||
+        driver.vendorID != instance.GetVendorID() || driver.deviceID != instance.GetDeviceID() ||
+        std::memcmp(driver.pipelineCacheUUID, uuid.data(), VK_UUID_SIZE) != 0) {
+        std::printf("GPU: driver pipeline cache ignored (other GPU or driver, kept)\n");
+        return {};
+    }
+    std::printf("GPU: driver pipeline cache loaded (%zu bytes)\n", size_t(header.payload_size));
+    return {payload, payload + header.payload_size};
+}
+} // namespace
+
+/// gow3: pipelines the driver created (graphics and compute): the saver only works when it moved.
+std::atomic<u64> g_gow3_driver_pipelines_created{0};
+
+struct PipelineCache::DriverCacheSaver {
+    std::thread thread;
+    std::mutex mutex;
+    std::condition_variable cv;
+    bool stop = false;
+    u64 saved_hash = 0; ///< XXH3 of the last blob written (or loaded): unchanged data is not rewritten
+    /// g_gow3_driver_pipelines_created at the last save: nothing new means nothing to merge, copy
+    /// or hash.
+    u64 saved_created = ~0ull;
+    bool over_limit_logged = false;
+};
+
+bool PipelineCache::SaveDriverCache() {
+    // The save is optional: an allocation failure on the saver thread must not end the game; it
+    // is skipped and tried again later.
+    try {
+        return SaveDriverCacheUnchecked();
+    } catch (const std::exception& e) {
+        LOG_WARNING(Render_Vulkan, "gow3: driver pipeline cache save skipped: {}", e.what());
+        return false;
+    }
+}
+
+bool PipelineCache::SaveDriverCacheUnchecked() {
+    // Pipelines the compiler workers built are only merged into pipeline_cache when they finish
+    // (FinishCompilations): merge copies of all of them into a scratch cache for the blob.
+    const u64 created = g_gow3_driver_pipelines_created.load(std::memory_order_relaxed);
+    if (driver_saver && created == driver_saver->saved_created) {
+        return true;
+    }
+    const auto device = instance.GetDevice();
+    auto [scratch_result, scratch] = device.createPipelineCacheUnique({});
+    if (scratch_result != vk::Result::eSuccess) {
+        return false;
+    }
+    std::vector<vk::PipelineCache> sources{*pipeline_cache};
+    for (const auto& cache : worker_pipeline_caches) {
+        sources.push_back(*cache);
+    }
+    if (device.mergePipelineCaches(*scratch, sources) != vk::Result::eSuccess) {
+        return false;
+    }
+    auto [result, blob] = device.getPipelineCacheData(*scratch);
+    if (result != vk::Result::eSuccess || blob.size() < sizeof(VkPipelineCacheHeaderVersionOne)) {
+        return false;
+    }
+    // GOW3_DRIVER_CACHE_MAX_MB (default 1024, 0 = no limit): a bigger blob is not written, so the
+    // file never grows past it (the saved one keeps loading). Vulkan has no way to evict entries
+    // from a pipeline cache; clearing the cache in the launcher starts it again.
+    static const u64 max_bytes = [] {
+        const char* v = std::getenv("GOW3_DRIVER_CACHE_MAX_MB");
+        return u64(v && *v ? std::max(0, std::atoi(v)) : 1024) << 20;
+    }();
+    if (max_bytes && blob.size() > max_bytes) {
+        if (driver_saver && !driver_saver->over_limit_logged) {
+            driver_saver->over_limit_logged = true;
+            std::printf("GPU: driver pipeline cache not saved: %zu MB is over the %llu MB limit "
+                        "(GOW3_DRIVER_CACHE_MAX_MB)\n",
+                        blob.size() >> 20, static_cast<unsigned long long>(max_bytes >> 20));
+        }
+        if (driver_saver) {
+            driver_saver->saved_created = created;
+        }
+        return false;
+    }
+    const u64 hash = XXH3_64bits(blob.data(), blob.size());
+    if (driver_saver && hash == driver_saver->saved_hash) {
+        driver_saver->saved_created = created;
+        return true;
+    }
+    const auto path = DriverCacheFile(instance);
+    std::error_code ec;
+    std::filesystem::create_directories(path.parent_path(), ec);
+    auto temp = path;
+    temp += ".tmp";
+    const DriverCacheHeader header{DriverCacheMagic, DriverCacheVersion, blob.size(), hash};
+    bool written = false;
+    {
+        const Common::FS::IOFile io{temp, Common::FS::FileAccessMode::Create};
+        written = io.IsOpen() && io.WriteRaw<u8>(&header, sizeof(header)) == sizeof(header) &&
+                  io.Write(blob) == blob.size();
+    }
+    if (written) {
+        std::filesystem::rename(temp, path, ec);
+    }
+    if (!written || ec) {
+        std::filesystem::remove(temp, ec);
+        LOG_ERROR(Render_Vulkan, "gow3: driver pipeline cache not written to {}", path.string());
+        return false;
+    }
+    if (driver_saver) {
+        driver_saver->saved_hash = hash;
+        driver_saver->saved_created = created;
+    }
+    LOG_INFO(Render_Vulkan, "gow3: driver pipeline cache saved ({} bytes)", blob.size());
+    return true;
+}
+
+void PipelineCache::StartDriverCacheSaver() {
+    // The process may end without destructors: the cache is also saved while the game runs,
+    // every GOW3_DRIVER_CACHE_SAVE_S seconds (default 60) when the driver built new pipelines.
+    driver_saver = new DriverCacheSaver;
+    driver_saver->thread = std::thread([this] {
+        Common::SetCurrentThreadName("gow3:DriverCacheSave");
+        auto* saver = driver_saver;
+        std::unique_lock lock{saver->mutex};
+        static const int save_seconds = [] {
+            const char* v = std::getenv("GOW3_DRIVER_CACHE_SAVE_S");
+            return v && *v ? std::clamp(std::atoi(v), 10, 3600) : 60;
+        }();
+        while (!saver->stop) {
+            if (saver->cv.wait_for(lock, std::chrono::seconds(save_seconds),
+                                   [&] { return saver->stop; })) {
+                break;
+            }
+            lock.unlock();
+            SaveDriverCache();
+            lock.lock();
+        }
+    });
+}
+
+void PipelineCache::StopDriverCacheSaver() {
+    if (!driver_saver) {
+        return;
+    }
+    {
+        std::scoped_lock lock{driver_saver->mutex};
+        driver_saver->stop = true;
+    }
+    driver_saver->cv.notify_all();
+    if (driver_saver->thread.joinable()) {
+        driver_saver->thread.join();
+    }
+}
+
 PipelineCache::PipelineCache(const Instance& instance_, Scheduler& scheduler_,
                              AmdGpu::Liverpool* liverpool_, u32 sparse_page_shift)
     : instance{instance_}, scheduler{scheduler_}, liverpool{liverpool_},
@@ -391,7 +617,22 @@ PipelineCache::PipelineCache(const Instance& instance_, Scheduler& scheduler_,
         .dref_broadcast = LightingTest::Current().dref,
     };
 
-    auto [cache_result, cache] = instance.GetDevice().createPipelineCacheUnique({});
+    // gow3: start from the driver blob saved by an earlier session (same GPU and driver).
+    std::vector<u8> driver_blob;
+    if (DriverCacheEnabled()) {
+        driver_blob = LoadDriverCacheBlob(instance);
+    }
+    auto [cache_result, cache] = instance.GetDevice().createPipelineCacheUnique(
+        {.initialDataSize = driver_blob.size(),
+         .pInitialData = driver_blob.empty() ? nullptr : driver_blob.data()});
+    if (cache_result != vk::Result::eSuccess && !driver_blob.empty()) {
+        std::printf("GPU: driver rejected the saved pipeline cache (%s), starting empty (file kept)\n",
+                    vk::to_string(cache_result).c_str());
+        driver_blob.clear();
+        auto retry = instance.GetDevice().createPipelineCacheUnique({});
+        cache_result = retry.result;
+        cache = std::move(retry.value);
+    }
     ASSERT_MSG(cache_result == vk::Result::eSuccess, "Failed to create pipeline cache: {}",
                vk::to_string(cache_result));
     pipeline_cache = std::move(cache);
@@ -422,11 +663,24 @@ PipelineCache::PipelineCache(const Instance& instance_, Scheduler& scheduler_,
         LOG_INFO(Render_Vulkan, "gow3: async graphics compilation ready ({} capture, {} compile workers)",
                  capture_count, count);
     }
+    // gow3: the saver thread reads worker_pipeline_caches: start it only once the list is complete.
+    if (DriverCacheEnabled()) {
+        StartDriverCacheSaver();
+        if (!driver_blob.empty()) {
+            driver_saver->saved_hash = XXH3_64bits(driver_blob.data(), driver_blob.size());
+        }
+    }
 }
 
 PipelineCache::~PipelineCache() {
     StopWarmUp();
+    StopDriverCacheSaver();
     FinishCompilations();
+    if (driver_saver) {
+        SaveDriverCache();
+        delete driver_saver;
+        driver_saver = nullptr;
+    }
 }
 
 // gow3: shader/pipeline compile time on the GPU thread, reported by GOW3_FRAME_STATS.
@@ -503,9 +757,13 @@ bool PipelineCache::QueueShader(Program& program, HwStage stage, SwStage l_stage
             ++g_gow3_pool_reuses;
         }
         // gow3: the GPU thread waits until all guest reads and specialization are captured.
+        // The key keeps the runtime info as the lookup builds it: translation adjusts it
+        // (InjectClipDistanceAttributes adds a fragment input on NVIDIA), and a key made after
+        // that never matches again, so every draw queued a new permutation (iss_pc 33378a2).
+        const Shader::RuntimeInfo lookup_runtime = build->runtime;
         build->ir.emplace(Shader::TranslateProgram(build->code, *build->pools, build->info,
                                                    build->runtime, profile));
-        build->spec = Shader::StageSpecialization(build->info, build->runtime, profile, binding);
+        build->spec = Shader::StageSpecialization(build->info, lookup_runtime, profile, binding);
         build->fetch.Capture(build->info);
         return true;
     })) {
@@ -594,7 +852,7 @@ void PipelineCache::PublishShaders(bool wait) {
             build->spec.info = &program->info;
             RegisterShaderMeta(program->info, build->spec.fetch_shader_data, build->spec,
                                perm_hash, build->permutation);
-            program->AddPermut(build->module, std::move(build->spec));
+            program->InsertPermut(build->module, std::move(build->spec), build->permutation);
             build->module = nullptr;
             program->pending.reset();
         }
@@ -1222,6 +1480,10 @@ vk::ShaderModule PipelineCache::CompileModule(Shader::Info& info, Shader::Runtim
     return module;
 }
 
+bool Program::PendingInitial() const {
+    return pending && pending->initial;
+}
+
 PipelineCache::Result PipelineCache::GetProgram(PipelineSelection& sel, HwStage hw_stage,
                                                 SwStage sw_stage,
                                                 const Shader::ShaderParams& params,
@@ -1286,28 +1548,31 @@ PipelineCache::Result PipelineCache::GetProgram(PipelineSelection& sel, HwStage 
     }
     if (it_pgm == program_cache.end()) {
         auto new_program = std::make_unique<Program>(hw_stage, sw_stage, params);
+        const size_t first_idx = NewPermutationIndex(*new_program, params.hash);
         if (compile_async) {
-            QueueShader(*new_program, hw_stage, sw_stage, params, runtime_info, binding, 0, true);
+            QueueShader(*new_program, hw_stage, sw_stage, params, runtime_info, binding, first_idx,
+                        true);
             std::unique_lock lock{programs_mutex};
             program_cache.emplace(params.hash, std::move(new_program));
             return {};
         }
         auto start = binding;
+        auto compile_runtime = runtime_info; // translation adjusts it; the key keeps the original
         const auto module =
-            CompileModule(new_program->info, runtime_info, params.code, 0, binding);
+            CompileModule(new_program->info, compile_runtime, params.code, first_idx, binding);
         auto spec = Shader::StageSpecialization(new_program->info, runtime_info, profile, start);
-        const auto perm_hash = HashCombine(params.hash, 0);
+        const auto perm_hash = HashCombine(params.hash, first_idx);
 
-        RegisterShaderMeta(new_program->info, spec.fetch_shader_data, spec, perm_hash, 0);
-        new_program->AddPermut(module, std::move(spec));
+        RegisterShaderMeta(new_program->info, spec.fetch_shader_data, spec, perm_hash, first_idx);
+        new_program->InsertPermut(module, std::move(spec), first_idx);
         new_program->info_template = std::make_unique<Shader::Info>(new_program->info);
         Program* program = new_program.get();
         {
             std::unique_lock lk{programs_mutex};
             program_cache.emplace(params.hash, std::move(new_program));
         }
-        return std::make_tuple(&program->info, module, program->modules[0].spec.fetch_shader_data,
-                               perm_hash);
+        return std::make_tuple(&program->info, module,
+                               program->modules[first_idx].spec.fetch_shader_data, perm_hash);
     }
 
     auto& program = it_pgm.value();
@@ -1316,7 +1581,8 @@ PipelineCache::Result PipelineCache::GetProgram(PipelineSelection& sel, HwStage 
         return {};
     }
     if (program->modules.empty() && compile_async) {
-        QueueShader(*program, hw_stage, sw_stage, params, runtime_info, binding, 0, true);
+        QueueShader(*program, hw_stage, sw_stage, params, runtime_info, binding,
+                    NewPermutationIndex(*program, params.hash), true);
         sel.pending_program = program.get();
         return {};
     }
@@ -1350,6 +1616,8 @@ PipelineCache::Result PipelineCache::GetProgram(PipelineSelection& sel, HwStage 
             sel.pending_program = program->pending ? program.get() : nullptr;
             return {};
         }
+        perm_idx = NewPermutationIndex(*program, params.hash);
+        perm_hash = HashCombine(params.hash, perm_idx);
         if (compile_async) {
             QueueShader(*program, hw_stage, sw_stage, params, runtime_info, binding, perm_idx, false,
                         std::move(spec));
@@ -1361,7 +1629,7 @@ PipelineCache::Result PipelineCache::GetProgram(PipelineSelection& sel, HwStage 
 
         RegisterShaderMeta(info, spec.fetch_shader_data, spec, perm_hash, perm_idx);
         std::unique_lock lk{programs_mutex};
-        program->AddPermut(module, std::move(spec));
+        program->InsertPermut(module, std::move(spec), perm_idx);
     } else {
         info.AddBindings(binding);
         module = it->module;
