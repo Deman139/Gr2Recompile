@@ -34,7 +34,7 @@ tested yet on AMD GPUs or Intel CPUs.
 - **Sharp, stable FSR and DLSS:** sub-pixel jitter (with the game's own temporal anti-aliasing
   replaced by the upscaler) and the game's own per-pixel motion vectors, so the weapon, moving
   objects and the camera are tracked correctly.
-- **Frame generation** (experimental): **AMD FSR 3.1** on any GPU, **NVIDIA DLSS** on GeForce RTX
+- **Frame generation**: **AMD FSR 3.1** on any GPU, **NVIDIA DLSS** on GeForce RTX
   40/50 (up to 4x on RTX 50). Almost twice the frames on screen; the HUD and text stay sharp. At
   1080p it uses FSR / DLSS as anti-aliasing at native resolution.
 - Launcher in English and Spanish: dump check, display mode, window size, render resolution and
@@ -48,9 +48,6 @@ tested yet on AMD GPUs or Intel CPUs.
 
 ## Known issues
 
-- **Frame generation:** adds a little latency; best when the game already runs at 40 FPS or more.
-  On a 60 Hz monitor turn VSync off. DLSS Frame Generation has not been tested yet on RTX 40/50
-  (reports welcome).
 - **First play:** some effects can show up a few frames late while their shader compiles.
 - **Above 60 FPS (experimental):** turn VSync off on a 60 Hz monitor, otherwise it stays at 60.
 - The shader cache can take several GB ("Clear cache" in the launcher).
@@ -119,7 +116,7 @@ niveles cargan rápido. Todavía no fue probado en gráficas AMD ni en procesado
 - **FSR y DLSS nítidos y estables:** jitter de subpíxel (el reescalador reemplaza al antialiasing
   temporal propio del juego) y los vectores de movimiento por píxel del propio juego, así el arma,
   los objetos que se mueven y la cámara se siguen bien.
-- **Generación de frames** (experimental): **AMD FSR 3.1** en cualquier GPU, **NVIDIA DLSS** en
+- **Generación de frames**: **AMD FSR 3.1** en cualquier GPU, **NVIDIA DLSS** en
   GeForce RTX 40/50 (hasta 4x en RTX 50). Casi el doble de cuadros en pantalla; el HUD y los textos
   quedan nítidos. A 1080p usa FSR / DLSS como antialiasing a resolución nativa.
 - Launcher en inglés y español: verificación del dump, modo de pantalla, tamaño de ventana,
@@ -133,9 +130,6 @@ niveles cargan rápido. Todavía no fue probado en gráficas AMD ni en procesado
 
 ## Problemas conocidos
 
-- **Generación de frames:** suma un poco de latencia; va mejor si el juego ya corre a 40 FPS o más.
-  Con un monitor de 60 Hz desactivá VSync. La generación de frames de DLSS todavía no fue probada
-  en RTX 40/50 (se agradecen reportes).
 - **Primera partida:** algunos efectos pueden aparecer unos cuadros tarde mientras se compila su shader.
 - **Más de 60 FPS (experimental):** con un monitor de 60 Hz desactivá VSync, si no se queda en 60.
 - La caché de shaders puede ocupar varios GB ("Borrar caché" en el launcher).
