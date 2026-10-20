@@ -30,11 +30,17 @@ tested yet on AMD GPUs or Intel CPUs.
 
 - **Resolutions above 1080p with AMD FSR 3.1 or NVIDIA DLSS** (1440p, 1800p, 4K): the game renders
   at 1080p and the upscaler takes it to your resolution, while the HUD, menus and videos are drawn
-  sharp at full resolution. Far fewer visual glitches than rendering the game itself at that
-  resolution, and lighter. The classic method (a game patch) is still under *Advanced*.
+  sharp at full resolution. The classic method (a game patch) is still under *Advanced*.
+- **Sharp, stable FSR and DLSS:** sub-pixel jitter (with the game's own temporal anti-aliasing
+  replaced by the upscaler) and the game's own per-pixel motion vectors, so the weapon, moving
+  objects and the camera are tracked correctly.
+- **Frame generation** (experimental): **AMD FSR 3.1** on any GPU, **NVIDIA DLSS** on GeForce RTX
+  40/50 (up to 4x on RTX 50). Almost twice the frames on screen; the HUD and text stay sharp. At
+  1080p it uses FSR / DLSS as anti-aliasing at native resolution.
 - Launcher in English and Spanish: dump check, display mode, window size, render resolution and
-  method, frame rate limit (30, 60, and experimental 144, 240 and unlimited), VSync, anisotropic
-  filtering, distant texture sharpness, FSR 1, keyboard, mouse and controller mapping.
+  method, frame rate limit (30, 60, and experimental 144, 240 and unlimited), frame generation,
+  VSync, anisotropic filtering, distant texture sharpness, FSR 1, keyboard, mouse and controller
+  mapping.
 - Automatic updates: the launcher announces new versions and installs them keeping your saves.
 - Mouse aim (as the right stick), keyboard, and Xbox / PlayStation controllers.
 - Touchpad without one (OWL drone): hold **Delete** and drag the mouse.
@@ -42,8 +48,9 @@ tested yet on AMD GPUs or Intel CPUs.
 
 ## Known issues
 
-- **FSR / DLSS:** a minor visual glitch can remain in some places (far fewer than with the classic
-  method). The image is clean but not as sharp as it will be once jitter is added.
+- **Frame generation:** adds a little latency; best when the game already runs at 40 FPS or more.
+  On a 60 Hz monitor turn VSync off. DLSS Frame Generation has not been tested yet on RTX 40/50
+  (reports welcome).
 - **First play:** some effects can show up a few frames late while their shader compiles.
 - **Above 60 FPS (experimental):** turn VSync off on a 60 Hz monitor, otherwise it stays at 60.
 - The shader cache can take several GB ("Clear cache" in the launcher).
@@ -52,12 +59,13 @@ tested yet on AMD GPUs or Intel CPUs.
 ## Future plans
 
 **High priority**
-- Sharper FSR and DLSS (sub-pixel jitter).
-- Frame generation (FSR 3 and DLSS).
 - Performance: better use of the GPU and CPU.
+- Mouse input: direct camera control instead of the emulated right stick.
+- Launcher options in the in-game menu (Insert), changeable while playing.
 
 **Medium priority**
 - FSR 4.
+- Ultrawide (21:9) support.
 - Debug menu, cheats and patches (for example unlocking every chapter).
 - Fixes for bugs reported on specific hardware.
 
@@ -106,13 +114,18 @@ niveles cargan rápido. Todavía no fue probado en gráficas AMD ni en procesado
 
 - **Resoluciones mayores a 1080p con AMD FSR 3.1 o NVIDIA DLSS** (1440p, 1800p, 4K): el juego
   renderiza en 1080p y el reescalador lo lleva a tu resolución, mientras el HUD, los menús y los
-  videos se dibujan nítidos a resolución completa. Muchos menos errores visuales que haciendo que
-  el juego mismo renderice a esa resolución, y más liviano. El método clásico (parche del juego)
-  sigue disponible en *Avanzado*.
+  videos se dibujan nítidos a resolución completa. El método clásico (parche del juego) sigue
+  disponible en *Avanzado*.
+- **FSR y DLSS nítidos y estables:** jitter de subpíxel (el reescalador reemplaza al antialiasing
+  temporal propio del juego) y los vectores de movimiento por píxel del propio juego, así el arma,
+  los objetos que se mueven y la cámara se siguen bien.
+- **Generación de frames** (experimental): **AMD FSR 3.1** en cualquier GPU, **NVIDIA DLSS** en
+  GeForce RTX 40/50 (hasta 4x en RTX 50). Casi el doble de cuadros en pantalla; el HUD y los textos
+  quedan nítidos. A 1080p usa FSR / DLSS como antialiasing a resolución nativa.
 - Launcher en inglés y español: verificación del dump, modo de pantalla, tamaño de ventana,
   resolución y método de render, límite de FPS (30, 60, y experimentales 144, 240 y sin límite),
-  VSync, filtrado anisotrópico, nitidez de texturas lejanas, FSR 1, controles de teclado, mouse y
-  mando.
+  generación de frames, VSync, filtrado anisotrópico, nitidez de texturas lejanas, FSR 1, controles
+  de teclado, mouse y mando.
 - Actualizaciones automáticas: el launcher avisa de versiones nuevas y las instala conservando tus partidas.
 - Mouse para apuntar (como stick derecho), teclado y mandos Xbox / PlayStation.
 - Touchpad sin touchpad (dron OWL): mantener **Suprimir** y arrastrar el mouse.
@@ -120,9 +133,9 @@ niveles cargan rápido. Todavía no fue probado en gráficas AMD ni en procesado
 
 ## Problemas conocidos
 
-- **FSR / DLSS:** puede quedar algún error visual menor en ciertos lugares (muchos menos que con
-  el método clásico). La imagen es limpia pero todavía no tan nítida como cuando se agregue el
-  jitter.
+- **Generación de frames:** suma un poco de latencia; va mejor si el juego ya corre a 40 FPS o más.
+  Con un monitor de 60 Hz desactivá VSync. La generación de frames de DLSS todavía no fue probada
+  en RTX 40/50 (se agradecen reportes).
 - **Primera partida:** algunos efectos pueden aparecer unos cuadros tarde mientras se compila su shader.
 - **Más de 60 FPS (experimental):** con un monitor de 60 Hz desactivá VSync, si no se queda en 60.
 - La caché de shaders puede ocupar varios GB ("Borrar caché" en el launcher).
@@ -131,12 +144,13 @@ niveles cargan rápido. Todavía no fue probado en gráficas AMD ni en procesado
 ## Planes futuros
 
 **Prioridad alta**
-- FSR y DLSS más nítidos (jitter de subpíxel).
-- Generación de cuadros (FSR 3 y DLSS).
 - Rendimiento: mejor aprovechamiento de GPU y CPU.
+- Input del mouse: control directo de la cámara en lugar del stick derecho emulado.
+- Opciones del launcher en el menú dentro del juego (Insert), cambiables mientras jugás.
 
 **Prioridad media**
 - FSR 4.
+- Soporte ultrawide (21:9).
 - Menú debug, trucos y parches (por ejemplo desbloquear todos los capítulos).
 - Arreglos de errores reportados en hardware específico.
 
@@ -159,12 +173,12 @@ compilá antes el puente con Visual Studio 2022 y el [SDK de NVIDIA DLSS](https:
 
 - **Lesca**: Killzone Shadow Fall port (dynamic module loader, PS4 clock fix, tessellation and
   texture fixes, fonts, resolution patches, VRAM reduction, shader stutter fix, FSR/DLSS
-  calibration, launcher).
+  calibration, jitter and motion vectors, frame generation, launcher).
 - **Felipe Prado**: [gow3_pc / SpartanPort](https://github.com/FelipePrado0/SpartanPort), the base
   of this port (its README is in [docs/gow3_pc](docs/gow3_pc/README.md)).
 - **Supermedo** and **deadinside28**: [bloodborne_pc](https://github.com/deadinside28/bloodborne_pc),
   the original native port technique, and [uncharted_pc](https://github.com/Supermedo/uncharted_pc)
-  (mouse input layer, file read, FPU state and texture cache fixes).
+  (mouse input layer, file read, FPU state and texture cache fixes, frame generation).
 - **HayatoG**: [iss_pc](https://github.com/HayatoG/iss_pc) (shader permutation and cache fixes,
   driver pipeline cache, texture LOD bias).
 - **shadPS4 team**: the [shadPS4](https://github.com/shadps4-emu/shadPS4) video core (GPU and

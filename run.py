@@ -175,6 +175,8 @@ def main():
     env.setdefault('GOW3_OUTPUT_RES', '1920x1080')
     # Killzone's UI vertex shader (HUD, menus, movies): where the output-size UI composition starts.
     env.setdefault('GOW3_UI_TRIGGER_VS', '6a09714a')
+    # Killzone's TMAA copy back into the scene: skipped while FSR / DLSS jitter the scene.
+    env.setdefault('GOW3_GAME_TAA_PS', '9dfb876c')
     if env['GOW3_OUTPUT_RES'] != '1920x1080':
         graphics = dict(graphics, render_resolution='native')
         print(f"Graphics: output {env['GOW3_OUTPUT_RES']} by the port (game at 1080p)", flush=True)

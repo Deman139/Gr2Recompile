@@ -409,6 +409,8 @@ void Rasterizer::PrepareRenderState(const GraphicsPipeline* pipeline) {
     gbuffer_draw = camera_motion->Enabled() && std::popcount(key.mrt_mask) >= 5 && db_desc.first;
     if (gbuffer_draw) {
         camera_motion->OnGBufferPass(db_desc.first);
+        // Killzone: color3 is its per-pixel velocity (CameraMotion::Velocity).
+        camera_motion->OnGBufferVelocity(cb_descs[3].first);
     }
     if (upscaler->Enabled() && cb_descs[0].first) {
         upscaler->OnColorTarget(cb_descs[0].first);
@@ -1149,6 +1151,14 @@ void Rasterizer::DrawRecord(const GraphicsPipeline* pipeline, const PreparedDraw
     if (res_census.On()) {
         CensusDraw(pipeline, regs, memory);
     }
+    // Killzone: its TMAA would blend the jittered frames; FSR / DLSS do the temporal work.
+    if (upscaler->SkipGameTaa(pipeline->GetStage(Shader::SwStage::Fragment).pgm_hash)) {
+        static bool logged = false;
+        if (!std::exchange(logged, true)) {
+            std::printf("Upscaler: game temporal AA skipped (the port jitters the scene)\n");
+        }
+        return;
+    }
     // gow3: the pass copying a finished frame to a display buffer; the previous draw's
     // target is that frame.
     if (camera_motion->Enabled() && regs.color_buffers[0] &&
@@ -1302,10 +1312,11 @@ void Rasterizer::DrawRecord(const GraphicsPipeline* pipeline, const PreparedDraw
     }
     pipeline->BindResources(set_writes, push_data);
     // gow3: jitter geometry drawn with the scene depth, not full-screen passes (a shifted
-    // full-screen quad leaves an edge column unwritten).
+    // full-screen quad leaves an edge column unwritten). Every G-buffer draw is jittered (Killzone
+    // draws small 6-index quads there), and so is Killzone's depth pre-pass (SceneDepth).
     draw_jitter = {};
-    if (upscaler->Enabled() && db_desc.first && db_desc.first == camera_motion->Depth() &&
-        (regs.num_indices > 6 || regs.num_instances.NumInstances() > 1)) {
+    if (upscaler->Enabled() && camera_motion->SceneDepth(db_desc.first) &&
+        (gbuffer_draw || regs.num_indices > 6 || regs.num_instances.NumInstances() > 1)) {
         draw_jitter = upscaler->Jitter();
     }
     UpdateDynamicState(pipeline, is_indexed);
@@ -1443,7 +1454,7 @@ void Rasterizer::DrawIndirectRecord(const GraphicsPipeline* pipeline, bool is_in
     push_data.yoffset *= target_scale[1];
     pipeline->BindResources(set_writes, push_data);
     draw_jitter = {};
-    if (upscaler->Enabled() && db_desc.first && db_desc.first == camera_motion->Depth()) {
+    if (upscaler->Enabled() && camera_motion->SceneDepth(db_desc.first)) {
         draw_jitter = upscaler->Jitter();
     }
     UpdateDynamicState(pipeline, is_indexed);

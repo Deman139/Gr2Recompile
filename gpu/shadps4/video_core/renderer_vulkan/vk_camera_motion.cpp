@@ -177,9 +177,11 @@ vk::Image CameraMotion::ObjectMotionImage(u32 width, u32 height) const noexcept 
 }
 
 void CameraMotion::RecordMotion(vk::CommandBuffer cmdbuf, vk::ImageView depth_view,
-                                vk::ImageView motion_view, u32 width, u32 height) {
+                                vk::ImageView motion_view, u32 width, u32 height,
+                                vk::ImageView velocity_view) {
     bool object_valid = false;
-    const vk::ImageView object_view = object_motion && object_motion->Enabled()
+    const vk::ImageView object_view = velocity_view ? velocity_view
+        : object_motion && object_motion->Enabled()
         ? object_motion->PrepareRead(cmdbuf, width, height, object_valid) : depth_view;
     const PushConstants push{
         .reproject = Multiply(previous.view, current.inv_view),
@@ -188,7 +190,7 @@ void CameraMotion::RecordMotion(vk::CommandBuffer cmdbuf, vk::ImageView depth_vi
         .size = {float(width), float(height)},
         .jitter = jitter,
         .previous_jitter = previous_jitter,
-        .mode = object_valid ? 1u : 0u,
+        .mode = velocity_view ? 2u : object_valid ? 1u : 0u,
     };
     const vk::DescriptorImageInfo depth_info{.imageView = depth_view,
                                              .imageLayout = vk::ImageLayout::eGeneral};
@@ -263,34 +265,88 @@ void CameraMotion::OnKillzoneConstants(const float* data) {
         std::abs(data[121] * data[115] + 2.0f) > 1e-3f || data[16] <= 0.0f || data[21] <= 0.0f) {
         return;
     }
-    if (frame_has_camera) {
-        return; // the first one of a frame is the main camera
-    }
-    previous = current;
     // Column-major: element (row r, column c) at c * 4 + r. The motion shader's view space is
     // left-handed (z forward): z is negated, on the rows of world to view and on the third
     // column of view to world.
+    Camera camera;
     for (int r = 0; r < 3; ++r) {
         for (int c = 0; c < 4; ++c) {
-            current.view[r * 4 + c] = data[c * 4 + r] * (r == 2 ? -1.0f : 1.0f);
-            current.inv_view[r * 4 + c] = data[32 + c * 4 + r] * (c == 2 ? -1.0f : 1.0f);
+            camera.view[r * 4 + c] = data[c * 4 + r] * (r == 2 ? -1.0f : 1.0f);
+            camera.inv_view[r * 4 + c] = data[32 + c * 4 + r] * (c == 2 ? -1.0f : 1.0f);
         }
     }
     // clip z = m22 * vz + m23, w = -vz; with z = -vz: depth = -m22 + m23 / z.
-    current.proj = {data[16], data[21], -data[26], data[30]};
-    current.valid = true;
+    camera.proj = {data[16], data[21], -data[26], data[30]};
+    camera.valid = true;
     const std::array<u32, 2> size{u32(data[114]), u32(data[115])};
-    if (size != render_size) {
-        std::printf("Camera motion: Killzone camera, render size %ux%u, projection %.4f %.4f, "
-                    "depth %.4f %+.4f / z\n", size[0], size[1], current.proj[0], current.proj[1],
-                    current.proj[2], current.proj[3]);
-        render_size = size;
+    if (!frame_has_camera) {
+        previous = current; // the last frame's world camera
+        candidate_count = 0;
+        // The frame's first G-buffer draws are the scene's: its render size. Later passes with
+        // the same layout at other sizes (a 960x540 one) are not the scene.
+        if (size != render_size) {
+            std::printf("Camera motion: Killzone camera, render size %ux%u, projection %.4f "
+                        "%.4f, depth %.4f %+.4f / z\n", size[0], size[1], camera.proj[0],
+                        camera.proj[1], camera.proj[2], camera.proj[3]);
+            render_size = size;
+        }
+    } else if (size != render_size) {
+        return;
     }
+    // The camera most G-buffer draws of the frame use is the world's: the first-person weapon
+    // (a few draws, its own projection) must not decide the scene's motion.
+    u32 found = candidate_count;
+    for (u32 i = 0; i < candidate_count; ++i) {
+        if (candidates[i].camera.proj == camera.proj && candidates[i].camera.view == camera.view) {
+            found = i;
+            break;
+        }
+    }
+    if (found == candidate_count) {
+        if (candidate_count == candidates.size()) {
+            frame_has_camera = true;
+            return;
+        }
+        candidates[candidate_count++] = {camera, 0};
+    }
+    ++candidates[found].draws;
+    u32 best = 0;
+    for (u32 i = 1; i < candidate_count; ++i) {
+        if (candidates[i].draws > candidates[best].draws) {
+            best = i;
+        }
+    }
+    if (candidates[best].camera.proj != current.proj) {
+        static int reports = 0;
+        if (reports < 4) {
+            ++reports;
+            std::printf("Camera motion: world camera projection %.4f %.4f, near %.4f (%u of the "
+                        "frame's G-buffer draws so far)\n", candidates[best].camera.proj[0],
+                        candidates[best].camera.proj[1], -candidates[best].camera.proj[3],
+                        candidates[best].draws);
+        }
+    }
+    current = candidates[best].camera;
     frame_has_camera = true;
 }
 
 void CameraMotion::OnGBufferPass(VideoCore::ImageId depth) {
-    depth_id = depth;
+    // Killzone has later G-buffer-like passes with other depths (a 256x256 probe): the frame's
+    // first one is the scene's, and later forward draws on it must still be jittered.
+    if (!depth_id) depth_id = depth;
+}
+
+void CameraMotion::OnGBufferVelocity(VideoCore::ImageId color) {
+    if (velocity_id || !color || !depth_id) {
+        return;
+    }
+    const auto& image = texture_cache.GetImage(color);
+    const auto& depth = texture_cache.GetImage(depth_id);
+    if (image.info.pixel_format == vk::Format::eR16G16B16A16Sfloat &&
+        image.info.size.width == depth.info.size.width &&
+        image.info.size.height == depth.info.size.height) {
+        velocity_id = color;
+    }
 }
 
 void CameraMotion::OnDisplayPass(VideoCore::ImageId frame) {
@@ -299,7 +355,9 @@ void CameraMotion::OnDisplayPass(VideoCore::ImageId frame) {
     }
     if (!frame_has_camera) InvalidateHistory();
     frame_has_camera = false;
+    if (depth_id) last_depth_id = depth_id;
     depth_id = {};
+    velocity_id = {};
 }
 
 void CameraMotion::Overlay(VideoCore::ImageId frame) {

@@ -40,7 +40,7 @@ FROZEN = getattr(sys, 'frozen', False)
 PORT_DIR = Path(sys.executable).resolve().parent if FROZEN else Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PORT_DIR / 'scripts'))
 
-VERSION = '0.2.2'
+VERSION = '0.2.3'
 TITLE_ID = 'CUSA00190'
 GAME_VERSION = '01.81'
 USER_DIR = Path(os.environ.get('KZSF_USER_DIR', PORT_DIR / 'user'))
@@ -65,6 +65,9 @@ OK = '#5ad48a'
 WARN = '#e8b13a'
 ERROR = '#e46060'
 MARK = '#2f8bff'  # "Lesca": marks this build as ours
+DONATE_BG = '#0070ba'     # PayPal blue
+DONATE_HOVER = '#1a8ad6'
+DONATE_URL = 'https://www.paypal.com/paypalme/SantiagoLescano577'
 UI_FONT = 'Segoe UI'
 
 
@@ -102,19 +105,21 @@ TEXTS = {
         'window_size': 'Tamaño de ventana',
         'window_size_help': 'Solo en modo ventana. La imagen del juego se escala a la ventana.',
         'render_res': 'Resolución de render', 'res_native': '1080p (como en PS4)',
-        'render_res_help': 'Resolución de la imagen. Más alta = más nítida pero más GPU y VRAM. '
-                           'Probado con 8 GB de VRAM hasta 4K (~5 GB). Se aplica al iniciar el juego. '
-                           'El método se elige en Avanzado.',
+        'render_res_help': 'Más alta = más nítida, más GPU y VRAM. Método en Avanzado. Se aplica al iniciar.',
         'fps_limit': 'Límite de FPS', 'vsync': 'VSync (sincronización vertical)',
         'fps_unlimited': 'Sin límite (experimental)', 'fps_experimental': 'experimental',
-        'fps_limit_help': '144 / 240 / sin límite son experimentales. Con un monitor de 60 Hz desactivá '
-                          'VSync o quedará en 60. Se aplica al iniciar el juego.',
+        'fps_limit_help': '144 / 240 / sin límite: experimental. Con monitor de 60 Hz, sin VSync.',
+        'frame_gen': 'Generación de frames', 'frame_gen_off': 'Desactivada',
+        'frame_gen_fsr3': 'AMD FSR 3.1', 'frame_gen_dlss': 'NVIDIA DLSS (RTX 40/50)',
+        'frame_gen_help': 'Experimental. Crea un frame entre cada par de frames del juego: casi el doble de '
+                          'FPS en pantalla, con un poco más de latencia. Ideal si el juego ya va a 40 FPS o más. '
+                          'FSR 3.1 funciona en cualquier placa; DLSS solo en RTX 40/50 (en otras usa FSR 3.1). '
+                          'No funciona con el método clásico ni a 720p. Con un monitor de 60 Hz desactivá VSync.',
         'vsync_help': 'Evita el tearing. Desactivado: un poco menos de latencia.',
         'anisotropy': 'Filtrado anisotrópico', 'aniso_game': 'El del juego',
         'mip_bias': 'Nitidez de texturas lejanas', 'mip_game': 'La del juego',
         'mip_sharper': 'más nítida', 'mip_softer': 'más suave',
-        'mip_bias_help': 'Más nítida: texturas más definidas a distancia, con algo más de parpadeo y un poco '
-                         'más de GPU. Más suave: lo contrario.',
+        'mip_bias_help': 'Más nítida: más detalle lejano, algo de parpadeo. Más suave: lo contrario.',
         'sharpen': 'Nitidez (RCAS)', 'show_fps': 'Mostrar FPS en pantalla',
         'fsr1': 'Escalado FSR 1',
         'fsr1_help': 'Para pantallas de más de 1080p (1440p, 4K): imagen más nítida que el estirado normal. '
@@ -138,18 +143,15 @@ TEXTS = {
         'stale_help': 'Más FPS. Desactivalo si la iluminación u objetos se ven mal.',
         'deferred_readback': 'Lecturas de GPU diferidas',
         'deferred_help': 'Menos esperas. Desactivalo si texturas o sombras se ven mal.',
-        'res_method': 'Método de resolución (más de 1080p)',
-        'res_method_upscale': 'Escalado AMD FSR 3.1 (recomendado)',
-        'res_method_dlss': 'Escalado NVIDIA DLSS (solo RTX)',
-        'res_method_patch': 'Clásico: parche del juego (más exigente, más errores visuales)',
-        'res_method_help': 'Escalado FSR 3.1 (recomendado): el juego renderiza en 1080p y AMD FSR 3.1 lleva la '
-                           'imagen a la resolución elegida; el HUD, los menús y los videos se dibujan nítidos a '
-                           'esa resolución. Muchos menos errores visuales que el clásico y más liviano (puede '
-                           'quedar alguno menor). DLSS: lo mismo con NVIDIA DLSS, '
-                           'para GeForce RTX (en otras placas usa FSR 3.1). Clásico: un parche hace que el '
-                           'juego mismo renderice a esa resolución; más detalle real pero pide más a la GPU, y '
-                           'pueden aparecer parpadeos de luz, una sombra que sigue a la cámara y las pocas '
-                           'cinemáticas que son video se ven con zoom. Solo cambia algo por encima de 1080p.',
+        'res_method': 'Método de resolución',
+        'res_method_upscale': 'AMD FSR 3.1 (recomendado)',
+        'res_method_dlss': 'NVIDIA DLSS (solo RTX)',
+        'res_method_patch': 'Clásico: parche del juego',
+        'res_method_help': 'Solo cambia algo por encima de 1080p. FSR 3.1 (recomendado): el juego renderiza en '
+                           '1080p y FSR lleva la imagen a la resolución elegida, con HUD, menús y videos nítidos. '
+                           'DLSS: lo mismo con NVIDIA DLSS (GeForce RTX; en otras placas usa FSR 3.1). Clásico: '
+                           'el juego mismo renderiza a esa resolución; más exigente, y pueden aparecer parpadeos '
+                           'de luz, una sombra que sigue a la cámara y videos con zoom.',
         'smart_pending': 'Saltar dibujos mientras su shader compila',
         'smart_pending_help': 'Casi sin tirones la primera vez que jugás un nivel. Desactivalo si ves objetos, '
                               'luces o sombras que faltan o parpadean al entrar en zonas nuevas: el juego '
@@ -175,6 +177,7 @@ TEXTS = {
         'cant_start': 'No se pudo iniciar el juego:\n{error}',
         'fix_folder': 'Primero elegí una carpeta del juego válida (pestaña Juego).',
         'footer_hint': 'Port nativo para Windows · usa tu propio dump',
+        'donate': 'Apoyar con PayPal',
     },
     'en': {
         'tab_game': 'Game', 'tab_graphics': 'Graphics', 'tab_controls': 'Controls', 'tab_advanced': 'Advanced',
@@ -206,19 +209,21 @@ TEXTS = {
         'window_size': 'Window size',
         'window_size_help': 'Windowed mode only. The game image is scaled to the window.',
         'render_res': 'Render resolution', 'res_native': '1080p (as on PS4)',
-        'render_res_help': 'The image resolution. Higher = sharper but more GPU and VRAM. '
-                           'Tested with 8 GB of VRAM up to 4K (~5 GB). Applied when the game starts. '
-                           'The method is chosen under Advanced.',
+        'render_res_help': 'Higher = sharper, more GPU and VRAM. Method under Advanced. Applied at start.',
         'fps_limit': 'Frame rate limit', 'vsync': 'VSync (vertical sync)',
         'fps_unlimited': 'Unlimited (experimental)', 'fps_experimental': 'experimental',
-        'fps_limit_help': '144 / 240 / unlimited are experimental. On a 60 Hz monitor turn VSync off '
-                          'or it stays at 60. Applied when the game starts.',
+        'fps_limit_help': '144 / 240 / unlimited: experimental. On a 60 Hz monitor, no VSync.',
+        'frame_gen': 'Frame generation', 'frame_gen_off': 'Off',
+        'frame_gen_fsr3': 'AMD FSR 3.1', 'frame_gen_dlss': 'NVIDIA DLSS (RTX 40/50)',
+        'frame_gen_help': 'Experimental. Makes up a frame between each pair of the game\'s frames: almost twice '
+                          'the FPS on screen, with a little more latency. Best when the game already runs at 40 '
+                          'FPS or more. FSR 3.1 works on any card; DLSS on RTX 40/50 only (others get FSR 3.1). '
+                          'Not with the classic method or at 720p. On a 60 Hz monitor turn VSync off.',
         'vsync_help': 'Prevents tearing. Off: slightly lower latency.',
         'anisotropy': 'Anisotropic filtering', 'aniso_game': 'Game default',
         'mip_bias': 'Distant texture sharpness', 'mip_game': 'Game default',
         'mip_sharper': 'sharper', 'mip_softer': 'softer',
-        'mip_bias_help': 'Sharper: more detailed textures at a distance, with a bit more shimmer and a little '
-                         'more GPU. Softer: the opposite.',
+        'mip_bias_help': 'Sharper: more distant detail, a bit of shimmer. Softer: the opposite.',
         'sharpen': 'Sharpening (RCAS)', 'show_fps': 'Show FPS on screen',
         'fsr1': 'FSR 1 upscaling',
         'fsr1_help': 'For screens above 1080p (1440p, 4K): sharper than plain stretching. No change at 1080p.',
@@ -241,18 +246,15 @@ TEXTS = {
         'stale_help': 'More FPS. Turn it off if lighting or objects look wrong.',
         'deferred_readback': 'Deferred GPU readbacks',
         'deferred_help': 'Fewer waits. Turn it off if textures or shadows look wrong.',
-        'res_method': 'Resolution method (above 1080p)',
-        'res_method_upscale': 'AMD FSR 3.1 upscaling (recommended)',
-        'res_method_dlss': 'NVIDIA DLSS upscaling (RTX only)',
-        'res_method_patch': 'Classic: game patch (heavier, more visual glitches)',
-        'res_method_help': 'FSR 3.1 upscaling (recommended): the game renders at 1080p and AMD FSR 3.1 takes the '
-                           'image to the chosen resolution; HUD, menus and videos are drawn sharp at that '
-                           'resolution. Far fewer visual glitches than the classic one and lighter (a minor one '
-                           'may remain). DLSS: the same with NVIDIA DLSS, for '
-                           'GeForce RTX cards (others get FSR 3.1). Classic: a patch makes the game itself '
-                           'render at that resolution; more real detail but heavier on the GPU, and lighting '
-                           'flicker, a shadow following the camera may appear and the few cutscenes that are '
-                           'videos look zoomed in. Only matters above 1080p.',
+        'res_method': 'Resolution method',
+        'res_method_upscale': 'AMD FSR 3.1 (recommended)',
+        'res_method_dlss': 'NVIDIA DLSS (RTX only)',
+        'res_method_patch': 'Classic: game patch',
+        'res_method_help': 'Only matters above 1080p. FSR 3.1 (recommended): the game renders at 1080p and FSR '
+                           'takes the image to the chosen resolution, with sharp HUD, menus and videos. DLSS: the '
+                           'same with NVIDIA DLSS (GeForce RTX; other cards get FSR 3.1). Classic: the game itself '
+                           'renders at that resolution; heavier, and lighting flicker, a shadow following the '
+                           'camera and zoomed-in videos may appear.',
         'smart_pending': 'Skip draws while their shader compiles',
         'smart_pending_help': 'Almost no stutter the first time you play a level. Turn it off if objects, lights '
                               'or shadows go missing or flicker when you reach new areas: the game then waits '
@@ -278,6 +280,7 @@ TEXTS = {
         'cant_start': 'The game could not start:\n{error}',
         'fix_folder': 'Choose a valid game folder first (Game tab).',
         'footer_hint': 'Native Windows port · uses your own dump',
+        'donate': 'Support with PayPal',
     },
 }
 LANG = 'es'
@@ -396,6 +399,9 @@ LAUNCHER_DEFAULTS = {'game_dir': '', 'update_dir': '', 'language': '', 'window_s
                      'mouse_invert': False, 'check_updates': True, 'smart_pending': True,
                      'res_method': 'upscale'}
 RES_METHODS = ('upscale', 'dlss', 'patch')
+# Frame generation (GOW3_FRAME_GEN): FSR 3.1 on any GPU; DLSS Frame Generation for RTX 40/50
+# (the port falls back to FSR 3.1 until it is supported).
+FRAME_GENS = ('off', 'fsr3', 'dlss')
 # Render resolutions the port draws itself (GOW3_OUTPUT_RES) with the new method; 720p keeps the patch.
 PORT_OUTPUTS = {'1440p': '2560x1440', '1800p': '3200x1800', '4K': '3840x2160'}
 WINDOW_SIZES = ('1280x720', '1600x900', '1920x1080', '2560x1440', '3840x2160')
@@ -579,8 +585,8 @@ class Launcher:
         self.scale = max(1.0, root.winfo_fpixels('1i') / 96.0)
         root.title('Killzone Shadow Fall')
         root.configure(bg=BG)
-        root.minsize(self.px(900), self.px(740))
-        root.geometry(f'{self.px(980)}x{self.px(780)}')
+        root.minsize(self.px(900), self.px(780))
+        root.geometry(f'{self.px(980)}x{self.px(840)}')
         self.style()
         self.build()
         root.protocol('WM_DELETE_WINDOW', self.close)
@@ -636,6 +642,14 @@ class Launcher:
         tk.Label(footer, text='Lesca', fg=MARK, bg=BG, font=self.font(9, 'bold')).pack(side='left')
         tk.Label(footer, text=f'  v{VERSION}  ·  {tr("footer_hint")}', fg=MUTED, bg=BG,
                  font=self.font(9)).pack(side='left')
+        # Optional support link (voluntary; the port is free): a small PayPal badge next to the version,
+        # like the README's.
+        donate = tk.Label(footer, text=f'♥  {tr("donate")}', fg='white', bg=DONATE_BG,
+                          font=self.font(9, 'bold'), padx=self.px(10), pady=self.px(3), cursor='hand2')
+        donate.pack(side='left', padx=(self.px(14), 0))
+        donate.bind('<Button-1>', lambda e: webbrowser.open(DONATE_URL))
+        donate.bind('<Enter>', lambda e: donate.configure(bg=DONATE_HOVER))
+        donate.bind('<Leave>', lambda e: donate.configure(bg=DONATE_BG))
         self.play_button = tk.Label(footer, text=tr('play'), fg=BG, bg=ACCENT, font=self.font(13, 'bold'),
                                     padx=self.px(46), pady=self.px(10), cursor='hand2')
         self.play_button.pack(side='right')
@@ -782,7 +796,11 @@ class Launcher:
         combo.current(values.index(current) if current in values else 0)
         combo.pack(side='left')
         combo.bind('<<ComboboxSelected>>', lambda e: on_change(values[combo.current()]))
-        if help_text:
+        if help_text and len(help_text) > 110:
+            # A long description goes under the row, the full width: beside the selector it was cut
+            # off in the default (smallest) window.
+            self.note(parent, '      ' + help_text)
+        elif help_text:
             self.tk.Label(frame, text=help_text, bg=PANEL, fg=MUTED, font=self.font(9), justify='left',
                           wraplength=self.px(360)).pack(side='left', padx=self.px(12))
         return combo
@@ -917,6 +935,14 @@ class Launcher:
                     ['30 FPS', '60 FPS', f"144 FPS ({tr('fps_experimental')})",
                      f"240 FPS ({tr('fps_experimental')})", tr('fps_unlimited')],
                     self.graphics['fps_limit'], lambda v: self.set_graphic('fps_limit', v), tr('fps_limit_help'))
+        frame_gen = self.settings.get('frame_gen') if self.settings.get('frame_gen') in FRAME_GENS else 'off'
+
+        def set_frame_gen(value):
+            self.settings['frame_gen'] = value
+            save_launcher(self.settings)
+        self.choice(parent, tr('frame_gen'), FRAME_GENS,
+                    [tr('frame_gen_off'), tr('frame_gen_fsr3'), tr('frame_gen_dlss')],
+                    frame_gen, set_frame_gen, tr('frame_gen_help'))
         self.choice(parent, tr('anisotropy'), ANISOTROPY, [tr('aniso_game'), '2x', '4x', '8x', '16x'],
                     self.graphics['anisotropy'], lambda v: self.set_graphic('anisotropy', v))
         self.choice(parent, tr('mip_bias'), MIP_BIASES,
@@ -1145,7 +1171,7 @@ class Launcher:
         self.graphics = dict(GRAPHICS_DEFAULTS)
         save_graphics(self.graphics)
         self.settings.update(window_size='1920x1080', key_map={}, pad_map={}, mouse_look=True, mouse_sens=1.0,
-                             mouse_invert=False, smart_pending=True, res_method='upscale')
+                             mouse_invert=False, smart_pending=True, res_method='upscale', frame_gen='off')
         save_launcher(self.settings)
         self.show_tab('advanced')
 
@@ -1267,17 +1293,32 @@ class Launcher:
         })
         # Upscaling method (any saved value but 'patch'): above 1080p the game stays at 1080p (run.py
         # drops the patch) and FSR 3.1 reaches the output, with the UI and videos drawn at that size.
-        # No host scene proxies (their round trips broke foliage lighting) and no port jitter (it
-        # fights the game's own temporal anti-aliasing: noisy foliage).
+        # No host scene proxies (their round trips broke foliage lighting). The port jitters the scene
+        # (its depth pre-pass included) for FSR / DLSS and skips the game's own temporal anti-aliasing
+        # (run.py GOW3_GAME_TAA_PS); GOW3_JITTER=0 in the environment turns the jitter off.
         output = PORT_OUTPUTS.get(self.graphics['render_resolution'])
         method = self.settings.get('res_method', 'upscale')
-        if output and method != 'patch':
+        frame_gen = self.settings.get('frame_gen') if self.settings.get('frame_gen') in FRAME_GENS else 'off'
+        # Frame generation at 1080p: FSR / DLSS as anti-aliasing at the game's own size (GOW3_NATIVE_AA),
+        # the path frame generation takes its depth, motion and picture without UI from.
+        native_aa = frame_gen != 'off' and self.graphics['render_resolution'] == 'native'
+        if native_aa:
+            output = '1920x1080'
+        if output and (method != 'patch' or native_aa):
             # DLSS falls back to FSR 3.1 by itself when the card or the DLLs cannot run it.
             env.update({'GOW3_OUTPUT_RES': output, 'GOW3_UPSCALER': 'dlss' if method == 'dlss' else 'fsr3',
-                        'GOW3_SCENE_NATIVE': '1', 'GOW3_JITTER': '0'})
+                        'GOW3_SCENE_NATIVE': '1',
+                        'GOW3_JITTER': os.environ.get('GOW3_JITTER', '1'),
+                        'GOW3_FRAME_GEN': frame_gen})
+            if native_aa:
+                env['GOW3_NATIVE_AA'] = '1'
+            else:
+                env.pop('GOW3_NATIVE_AA', None)
         else:
+            # The classic resolution patch and 720p have no port-side frame path: no frame generation.
             env['GOW3_OUTPUT_RES'] = '1920x1080'
-            for key in ('GOW3_UPSCALER', 'GOW3_SCENE_NATIVE', 'GOW3_JITTER'):
+            env['GOW3_FRAME_GEN'] = 'off'
+            for key in ('GOW3_UPSCALER', 'GOW3_SCENE_NATIVE', 'GOW3_JITTER', 'GOW3_NATIVE_AA'):
                 env.pop(key, None)
         if self.graphics['fps_limit'] in EXPERIMENTAL_FPS:
             env['GOW3_VBLANK_HZ'] = '0'

@@ -1,4 +1,4 @@
-KILLZONE SHADOW FALL - Native Windows port (Lesca) - Beta 0.2.2
+KILLZONE SHADOW FALL - Native Windows port (Lesca) - Beta 0.2.3
 =================================================================
 
 [ENGLISH]
@@ -23,8 +23,14 @@ Tested setup
 Resolution above 1080p (Graphics > Render resolution, method under Advanced)
   - AMD FSR 3.1 (recommended, any GPU) or NVIDIA DLSS (GeForce RTX): the game renders at 1080p
     and the upscaler takes it to 1440p, 1800p or 4K; HUD, menus and videos are drawn sharp at
-    that resolution. Far fewer visual glitches than the classic method, and lighter.
+    that resolution. Sharp (sub-pixel jitter) and stable (the game's own motion vectors).
   - Classic: a game patch makes the game render at that resolution (heavier, more glitches).
+
+Frame generation (Graphics > Frame generation, experimental)
+  - AMD FSR 3.1 (any GPU) or NVIDIA DLSS (GeForce RTX 40/50; other cards get FSR 3.1): a frame
+    is generated between each pair of the game's frames, almost twice the FPS on screen, with
+    a little more latency. HUD and text stay sharp. At 1080p it uses FSR / DLSS as
+    anti-aliasing. Best above 40 FPS; on a 60 Hz monitor turn VSync off.
 
 How to play
   1. Unzip this folder anywhere (outside "Program Files").
@@ -48,10 +54,10 @@ Where your things are (user\ folder)
   "Clear cache" in the launcher deletes shaders and the prepared image; saves are kept.
 
 Known issues
-  - FSR / DLSS: a minor visual glitch can remain in some places; the image will get
-    sharper in a coming update (jitter).
+  - Frame generation adds a little latency; DLSS Frame Generation is not tested yet on
+    RTX 40/50 (reports welcome).
   - Classic method above 1080p: lighting flicker and a shadow band following the camera may
-    appear, and the few video cutscenes look zoomed in.
+    appear, and the few video cutscenes look zoomed in (not with FSR / DLSS).
   - First play: some effects can show up a few frames late while their shader compiles.
   - Above 60 FPS (Graphics, experimental): turn VSync off on a 60 Hz monitor, otherwise it
     stays at 60.
@@ -60,9 +66,14 @@ Known issues
   - Multiplayer: offline only (Botzone).
 
 Future plans
-  High priority:   sharper FSR and DLSS (jitter); frame generation; performance.
-  Medium priority: FSR 4; debug menu, cheats and patches (e.g. unlock every chapter); fixes
-                   for bugs reported on specific hardware.
+  High priority:   performance (better use of the GPU and CPU); mouse input (direct camera
+                   control); launcher options in the in-game menu (Insert).
+  Medium priority: FSR 4; ultrawide (21:9); debug menu, cheats and patches (e.g. unlock
+                   every chapter); fixes for bugs reported on specific hardware.
+
+Support
+  The port is and will stay free. If you want to support it (optional): the "Support with
+  PayPal" button in the launcher, or https://www.paypal.com/paypalme/SantiagoLescano577
 
 Reporting bugs
   https://github.com/lesca-191204/killzone-shadowfall-pc/issues
@@ -99,9 +110,15 @@ Equipo probado
 Resolución mayor a 1080p (Gráficos > Resolución de render, el método en Avanzado)
   - AMD FSR 3.1 (recomendado, cualquier GPU) o NVIDIA DLSS (GeForce RTX): el juego renderiza en
     1080p y el reescalador lo lleva a 1440p, 1800p o 4K; el HUD, los menús y los videos se
-    dibujan nítidos a esa resolución. Muchos menos errores visuales que el método clásico, y
-    más liviano.
+    dibujan nítidos a esa resolución. Nítido (jitter de subpíxel) y estable (los vectores de
+    movimiento del propio juego).
   - Clásico: un parche hace que el juego renderice a esa resolución (más exigente, más errores).
+
+Generación de frames (Gráficos > Generación de frames, experimental)
+  - AMD FSR 3.1 (cualquier GPU) o NVIDIA DLSS (GeForce RTX 40/50; en otras placas usa FSR 3.1):
+    se genera un cuadro entre cada par de cuadros del juego, casi el doble de FPS en pantalla,
+    con un poco más de latencia. El HUD y los textos quedan nítidos. A 1080p usa FSR / DLSS
+    como antialiasing. Va mejor arriba de 40 FPS; con un monitor de 60 Hz desactivá VSync.
 
 Cómo jugar
   1. Descomprimí esta carpeta donde quieras (fuera de "Archivos de programa").
@@ -125,10 +142,11 @@ Dónde quedan tus cosas (carpeta user\)
   "Borrar caché" en el launcher elimina shaders e imagen preparada; tus partidas no se tocan.
 
 Problemas conocidos
-  - FSR / DLSS: puede quedar algún error visual menor en ciertos lugares; la imagen va a ser
-    más nítida en una próxima actualización (jitter).
+  - La generación de frames suma un poco de latencia; la de DLSS todavía no fue probada en
+    RTX 40/50 (se agradecen reportes).
   - Método clásico por encima de 1080p: pueden aparecer parpadeos de iluminación y una franja
-    de sombra que sigue a la cámara, y las pocas cinemáticas que son video se ven con zoom.
+    de sombra que sigue a la cámara, y las pocas cinemáticas que son video se ven con zoom
+    (no pasa con FSR / DLSS).
   - Primera partida: algunos efectos pueden aparecer unos cuadros tarde mientras se compila su shader.
   - Más de 60 FPS (Gráficos, experimental): con un monitor de 60 Hz desactivá VSync, si no se
     queda en 60.
@@ -137,9 +155,14 @@ Problemas conocidos
   - Multijugador: solo sin conexión (Botzone).
 
 Planes futuros
-  Prioridad alta:  FSR y DLSS más nítidos (jitter); generación de cuadros; rendimiento.
-  Prioridad media: FSR 4; menú debug, trucos y parches (p. ej. desbloquear todos los
-                   capítulos); arreglos de errores reportados en hardware específico.
+  Prioridad alta:  rendimiento (mejor uso de GPU y CPU); input del mouse (control directo de
+                   la cámara); opciones del launcher en el menú del juego (Insert).
+  Prioridad media: FSR 4; ultrawide (21:9); menú debug, trucos y parches (p. ej. desbloquear
+                   todos los capítulos); arreglos de errores reportados en hardware específico.
+
+Apoyar el proyecto
+  El port es y seguirá siendo gratuito. Si querés apoyarlo (opcional): el botón "Apoyar con
+  PayPal" del launcher, o https://www.paypal.com/paypalme/SantiagoLescano577
 
 Reportar errores
   https://github.com/lesca-191204/killzone-shadowfall-pc/issues

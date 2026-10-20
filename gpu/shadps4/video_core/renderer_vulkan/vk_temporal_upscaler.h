@@ -38,6 +38,7 @@ class Scheduler;
 class Runtime;
 class CameraMotion;
 class SceneTargets;
+class FrameGenerator;
 
 class TemporalUpscaler {
 public:
@@ -48,6 +49,12 @@ public:
 
     [[nodiscard]] bool Enabled() const noexcept {
         return enabled;
+    }
+
+    /// The presenter's frame generator: its depth, motion and picture without UI are taken at
+    /// the upscale (RunScaled). Null to stop.
+    void SetFrameGenerator(FrameGenerator* generator) noexcept {
+        frame_generator = generator;
     }
 
     /// A draw into a full-size RGBA16F target with the scene depth: the scene color.
@@ -82,6 +89,12 @@ public:
     /// the upscale (post and UI are not jittered).
     [[nodiscard]] std::array<float, 2> Jitter() const noexcept {
         return done_this_frame ? std::array<float, 2>{} : jitter;
+    }
+
+    /// Killzone: the draw copying the game's own temporal AA result (TMAA) back into the scene
+    /// (GOW3_GAME_TAA_PS). Skipped while the port jitters, so FSR / DLSS get the current frame.
+    [[nodiscard]] bool SkipGameTaa(u64 ps_hash) const noexcept {
+        return game_taa_ps && ps_hash == game_taa_ps && last_jitter && !done_this_frame;
     }
 
     // Scaled presets.
@@ -213,6 +226,11 @@ private:
     bool context_hdr = true;
     u32 target_width = 1920, target_height = 1080; ///< output size of scaled presets
     u64 ui_trigger_vs = 0x34e8a281;
+    u64 game_taa_ps = 0;
+    FrameGenerator* frame_generator = nullptr;
+    /// The format of the port's display buffer (RedirectColor): frame generation's picture
+    /// without UI is converted the same way.
+    vk::Format display_format = vk::Format::eUndefined;
     VideoCore::ImageId ldr_target{};
     VideoCore::ImageId ui_color{}, ui_depth{};
     bool ui_phase = false;         ///< from the upscale to the next display pass

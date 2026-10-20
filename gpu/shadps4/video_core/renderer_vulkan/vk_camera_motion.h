@@ -53,6 +53,19 @@ public:
     [[nodiscard]] VideoCore::ImageId Depth() const noexcept {
         return depth_id;
     }
+    /// Killzone: the G-buffer's fourth target (RGBA16F, scene size) holds the game's own
+    /// per-pixel velocity in xy (objects and the first-person weapon included), or null.
+    [[nodiscard]] VideoCore::ImageId Velocity() const noexcept {
+        return velocity_id;
+    }
+    /// A G-buffer draw's fourth color target (the frame's first one is kept).
+    void OnGBufferVelocity(VideoCore::ImageId color);
+    /// The scene depth, or before this frame's G-buffer pass the previous frame's one: Killzone
+    /// lays scene depth down in a depth-only pass first, which must get the same jitter as the
+    /// G-buffer it then tests EQUAL against.
+    [[nodiscard]] bool SceneDepth(VideoCore::ImageId depth) const noexcept {
+        return depth && (depth == depth_id || (!depth_id && depth == last_depth_id));
+    }
     /// The render size in the scene constants (the game's viewport; its targets may be
     /// allocated larger, e.g. 1916x1080 for a 1916x1078 scene), or zero before the first camera.
     [[nodiscard]] std::array<u32, 2> RenderSize() const noexcept {
@@ -65,9 +78,10 @@ public:
     [[nodiscard]] std::array<std::array<float, 4>, 3> TaaDepthParameters() const noexcept;
 
     /// Records the motion vector pass: `depth_view` (depth aspect, General layout) into
-    /// `motion_view` (RG16F storage, General), pixels, previous minus current.
+    /// `motion_view` (RG16F storage, General), pixels, previous minus current. `velocity_view`
+    /// (Killzone's G-buffer velocity, sampled in General layout): used where the scene was drawn.
     void RecordMotion(vk::CommandBuffer cmdbuf, vk::ImageView depth_view, vk::ImageView motion_view,
-                      u32 width, u32 height);
+                      u32 width, u32 height, vk::ImageView velocity_view = {});
 
     /// A bound constant buffer of 864 bytes: checks the scene constant signature.
     void OnConstants(const float* data);
@@ -106,9 +120,19 @@ private:
     ObjectMotion* object_motion = nullptr;
     Camera current, previous;
     bool frame_has_camera = false;
+    /// Killzone: this frame's G-buffer cameras and how many draws used each (the world's has
+    /// the most; its first-person weapon has its own field of view and near plane).
+    struct Candidate {
+        Camera camera;
+        u32 draws = 0;
+    };
+    std::array<Candidate, 4> candidates{};
+    u32 candidate_count = 0;
     std::array<float, 2> jitter{}, previous_jitter{};
     std::array<u32, 2> render_size{};
     VideoCore::ImageId depth_id{};
+    VideoCore::ImageId last_depth_id{}; ///< the previous frame's scene depth
+    VideoCore::ImageId velocity_id{};
 
     vk::UniqueDescriptorSetLayout desc_layout;
     vk::UniquePipelineLayout pipeline_layout;

@@ -25,6 +25,7 @@
 #include "video_core/renderer_vulkan/vk_shader_util.h"
 #include "video_core/renderer_vulkan/vk_camera_motion.h"
 #include "video_core/renderer_vulkan/vk_frame_capture.h"
+#include "video_core/renderer_vulkan/vk_frame_generation.h"
 #include "video_core/renderer_vulkan/vk_instance.h"
 #include "video_core/renderer_vulkan/vk_runtime.h"
 #include "video_core/renderer_vulkan/vk_scheduler.h"
@@ -181,6 +182,9 @@ TemporalUpscaler::TemporalUpscaler(const Instance& instance_, Scheduler& schedul
     if (const char* hash = std::getenv("GOW3_UI_TRIGGER_VS")) {
         ui_trigger_vs = std::strtoull(hash, nullptr, 16);
     }
+    if (const char* hash = std::getenv("GOW3_GAME_TAA_PS")) {
+        game_taa_ps = std::strtoull(hash, nullptr, 16);
+    }
     if (const char* res = std::getenv("GOW3_OUTPUT_RES")) {
         u32 w = 0, h = 0;
         if (std::sscanf(res, "%ux%u", &w, &h) == 2 && w && h) {
@@ -335,6 +339,9 @@ bool TemporalUpscaler::OnFrameStart() {
     Gow3Settings::Get().active_render_height = Scaled() ? render_height : scene_targets.Size().height;
     if (changed || !dispatched_last_frame) reset = true;
     if (changed) jitter_index = 0;
+    if (jitter_on != last_jitter) {
+        std::printf("Upscaler: jitter %s\n", jitter_on ? "on" : "off");
+    }
     applied_preset = preset;
     applied_output = output;
     applied_upscaler = upscaler;
@@ -359,7 +366,9 @@ bool TemporalUpscaler::OnFrameStart() {
     }
     // CameraMotion::OnDisplayPass has already cleared Depth(). Use the context's render
     // size, which survives the frame boundary (Performance 960 -> 1920 needs 32 phases).
+    // A native scene (Killzone) renders 1920 wide and the upscaler alone reaches the output.
     const u32 phases = Scaled() ? Motion::JitterPhases(render_width, target_width)
+        : scene_native ? Motion::JitterPhases(1920, target_width)
         : Motion::JitterPhases(scene_targets.Size().width, 1920);
     jitter_index = jitter_index % phases + 1;
     jitter = {Halton(jitter_index, 2) - 0.5f, Halton(jitter_index, 3) - 0.5f};
@@ -1294,7 +1303,13 @@ float TemporalUpscaler::SceneMipBias() const {
 }
 
 bool TemporalUpscaler::Scaled() const {
-    return scaled_session || target_width != 1920 || target_height != 1080;
+    // GOW3_NATIVE_AA=1: FSR / DLSS at the game's own 1920x1080 (anti-aliasing only, like DLAA),
+    // through the same path as an upscale (frame generation takes its inputs there).
+    static const bool native_aa = [] {
+        const char* v = std::getenv("GOW3_NATIVE_AA");
+        return v && v[0] == '1';
+    }();
+    return scaled_session || native_aa || target_width != 1920 || target_height != 1080;
 }
 
 void TemporalUpscaler::OnColorTarget(VideoCore::ImageId color) {
@@ -1566,7 +1581,7 @@ void TemporalUpscaler::RunScaled() {
     const auto depth_format = depth.info.pixel_format;
     // Views kept across frames: FSR 4 registers images by view in a registry of eight.
     vk::Image depth_image = depth.GetImage(), color_image = color.GetImage();
-    vk::ImageView depth_view{}, color_view{};
+    vk::ImageView depth_view{}, color_view{}, velocity_view{};
     u32 source_width = iw, source_height = ih;
     if (!scaled_session && scene_targets.Reduced()) {
         VideoCore::ImageViewInfo ci, di;
@@ -1587,6 +1602,27 @@ void TemporalUpscaler::RunScaled() {
                         vk::AccessFlagBits2::eShaderRead);
         runtime.Transit(&color, vk::ImageLayout::eGeneral, vk::PipelineStageFlagBits2::eComputeShader,
                         vk::AccessFlagBits2::eShaderRead);
+        // Killzone: the game's own velocity target replaces the camera reprojection wherever
+        // the scene was drawn (its first-person weapon has its own camera). GOW3_KZ_VELOCITY=0:
+        // camera reprojection only.
+        static const bool use_velocity = [] {
+            const char* v = std::getenv("GOW3_KZ_VELOCITY");
+            return !v || v[0] != '0';
+        }();
+        if (const auto velocity_id = camera_motion.Velocity(); use_velocity && velocity_id) {
+            auto& velocity = texture_cache.GetImage(velocity_id);
+            if (velocity.info.size.width == iw && velocity.info.size.height == ih) {
+                velocity_view = CachedView(velocity, velocity.info.pixel_format,
+                                           vk::ImageAspectFlagBits::eColor);
+                runtime.Transit(&velocity, vk::ImageLayout::eGeneral,
+                                vk::PipelineStageFlagBits2::eComputeShader,
+                                vk::AccessFlagBits2::eShaderRead);
+                static bool reported = false;
+                if (!std::exchange(reported, true)) {
+                    std::printf("Camera motion: Killzone's velocity target for the motion vectors\n");
+                }
+            }
+        }
         runtime.FlushBarriers();
     }
 
@@ -1618,10 +1654,19 @@ void TemporalUpscaler::RunScaled() {
     barrier(vk::Image(motion_image), vk::ImageAspectFlagBits::eColor, vk::ImageLayout::eUndefined,
             all, vk::AccessFlagBits2::eNone, vk::ImageLayout::eGeneral,
             vk::PipelineStageFlagBits2::eComputeShader, vk::AccessFlagBits2::eShaderWrite);
-    camera_motion.RecordMotion(cmdbuf, depth_view, *motion_view, w, h);
+    camera_motion.RecordMotion(cmdbuf, depth_view, *motion_view, w, h, velocity_view);
     barrier(vk::Image(motion_image), vk::ImageAspectFlagBits::eColor, vk::ImageLayout::eGeneral,
             vk::PipelineStageFlagBits2::eComputeShader, vk::AccessFlagBits2::eShaderWrite,
             vk::ImageLayout::eGeneral, all, vk::AccessFlagBits2::eShaderRead);
+    // Frame generation: its own copy of the depth and motion (the presenter uses them after the
+    // next frame has started here).
+    if (frame_generator) {
+        if (const vk::ImageView fg_motion = frame_generator->BeginCapture(cmdbuf, depth_view, w, h)) {
+            camera_motion.RecordMotion(cmdbuf, depth_view, fg_motion, w, h, velocity_view);
+            frame_generator->EndCapture(cmdbuf, jitter, camera_motion.Ready(),
+                                        {camera_motion.Near(), camera_motion.VerticalFov()});
+        }
+    }
 
     const auto now = std::chrono::steady_clock::now();
     float frame_ms = std::chrono::duration<float, std::milli>(now - last_frame).count();
@@ -1675,6 +1720,10 @@ void TemporalUpscaler::RunScaled() {
                     vk::ImageLayout::eGeneral, vk::PipelineStageFlagBits2::eBlit,
                     vk::AccessFlagBits2::eTransferWrite, vk::ImageLayout::eGeneral,
                     vk::PipelineStageFlagBits2::eColorAttachmentOutput, color_access);
+            if (frame_generator) {
+                frame_generator->CaptureHudless(cmdbuf, vk::Image(ui_image), ow, oh,
+                                                display_format, ow, oh);
+            }
             reset = false;
             dispatched_last_frame = true;
             if (const int dump = DumpFrame(); dump >= 0) {
@@ -1685,6 +1734,17 @@ void TemporalUpscaler::RunScaled() {
                 DumpImages(instance, scheduler, cmdbuf, dump,
                            {{depth_image, source_width, source_height, 4, "depth", "f32",
                              vk::ImageAspectFlagBits::eDepth}});
+                // Killzone: its own velocity target, to calibrate against "motion".
+                if (const auto velocity_id = camera_motion.Velocity()) {
+                    auto& velocity = texture_cache.GetImage(velocity_id);
+                    runtime.Transit(&velocity, vk::ImageLayout::eGeneral,
+                                    vk::PipelineStageFlagBits2::eTransfer,
+                                    vk::AccessFlagBits2::eTransferRead);
+                    runtime.FlushBarriers();
+                    DumpImages(instance, scheduler, cmdbuf, dump,
+                               {{velocity.GetImage(), velocity.info.size.width,
+                                 velocity.info.size.height, 8, "velocity", "rgba16f"}});
+                }
                 if (Gow3Settings::Get().upscaler == Gow3Settings::UpscalerTaa &&
                     std::getenv("GOW3_TAA_DIAGNOSTICS")) {
                     DumpImages(instance, scheduler, cmdbuf, dump,
@@ -1773,6 +1833,10 @@ void TemporalUpscaler::RunScaled() {
     barrier(vk::Image(ui_image), vk::ImageAspectFlagBits::eColor, vk::ImageLayout::eGeneral, all,
             rw, vk::ImageLayout::eGeneral, vk::PipelineStageFlagBits2::eColorAttachmentOutput,
             color_access);
+    if (ok && frame_generator) {
+        frame_generator->CaptureHudless(cmdbuf, vk::Image(ui_image), ow, oh, display_format, ow,
+                                        oh);
+    }
 
     done_this_frame = true; // the UI is not jittered
     if (ok) {
@@ -1880,6 +1944,11 @@ bool TemporalUpscaler::RedirectColor(VideoCore::ImageId color,
         cmd.pipelineBarrier2({.imageMemoryBarrierCount = 1, .pImageMemoryBarriers = &b});
     });
     display.valid = true;
+    display_format = display.format;
+    // Frame generation: the frame captured last is the one copied into this display buffer.
+    if (frame_generator) {
+        frame_generator->TagDisplay(address);
+    }
     if (display_blit && ui_image) {
         if (!display.sink || display.sink_width != ui_width || display.sink_height != ui_height ||
             display.sink_format != display.format) {

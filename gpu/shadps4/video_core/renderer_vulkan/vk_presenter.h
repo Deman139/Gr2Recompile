@@ -3,6 +3,9 @@
 
 #pragma once
 
+#include <array>
+#include <atomic>
+#include <chrono>
 #include <deque>
 
 #include <condition_variable>
@@ -10,6 +13,7 @@
 #include "core/libraries/videoout/buffer.h"
 #include "video_core/renderer_vulkan/host_passes/fsr_pass.h"
 #include "video_core/renderer_vulkan/host_passes/pp_pass.h"
+#include "video_core/renderer_vulkan/vk_frame_generation.h"
 #include "video_core/renderer_vulkan/vk_instance.h"
 #include "video_core/renderer_vulkan/vk_runtime.h"
 #include "video_core/renderer_vulkan/vk_scheduler.h"
@@ -38,6 +42,15 @@ struct Frame {
     bool is_hdr{false};
     u8 id{};
     vk::Format format{}; ///< gow3: of `image` (screenshots)
+    /// gow3: frame generation: the frames made between the previous frame and this one,
+    /// presented before it (FrameGenerator), the first `generated_count` of them. Made on use.
+    struct Generated {
+        vk::Image image;
+        vk::ImageView view;
+        VmaAllocation allocation{};
+    };
+    std::array<Generated, FrameGenerator::MaxGenerated> generated{};
+    u32 generated_count{};
 };
 
 enum SchedulerType {
@@ -107,6 +120,12 @@ private:
     Frame* GetRenderFrame();
 
     void RecreateFrame(Frame* frame, u32 width, u32 height);
+    /// gow3: frame generation's output images of a frame.
+    void EnsureGenerated(Frame* frame, u32 count);
+    void DestroyGenerated(Frame* frame);
+    /// gow3: blits `image` (a frame's, or one generated for it) into a swapchain image and
+    /// presents it; `last`: the frame's own image, which signals its present fence.
+    bool PresentImage(Frame* frame, vk::Image image, bool last);
 
     void SetExpectedGameSize(s32 width, s32 height);
 
@@ -138,6 +157,11 @@ private:
     std::condition_variable free_cv;
     std::condition_variable_any frame_cv;
     std::vector<VAddr> vo_buffers_addr;
+    // gow3: frame generation. hudless_frame: the picture without UI composed like a frame.
+    std::unique_ptr<FrameGenerator> frame_generator;
+    Frame hudless_frame{};
+    std::atomic<double> game_frame_ms{16.6}; ///< smoothed interval of the game's frames
+    std::chrono::steady_clock::time_point last_game_present{};
 };
 
 } // namespace Vulkan

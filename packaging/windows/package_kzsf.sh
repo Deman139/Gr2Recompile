@@ -50,6 +50,10 @@ done
 # NVIDIA DLSS (packaging/windows/build_dlss_kzsf.sh): the MSVC bridge and NVIDIA's runtime, when built.
 if [[ -f out/gow3_dlss.dll && -f out/nvngx_dlss.dll ]]; then
     cp out/gow3_dlss.dll out/nvngx_dlss.dll "$dest/bin/"
+    # DLSS Frame Generation (GeForce RTX 40/50), next to nvngx_dlss.dll where NGX looks for it.
+    if [[ -f out/nvngx_dlssg.dll ]]; then
+        cp out/nvngx_dlssg.dll "$dest/bin/"
+    fi
     mkdir -p "$dest/licenses"
     cp out/NVIDIA-DLSS-LICENSE.txt "$dest/licenses/"
     cp gpu/dlss_bridge/LICENSE.txt "$dest/licenses/gow3_dlss-LICENSE.txt"

@@ -238,7 +238,9 @@ void Swapchain::SetSurfaceProperties() {
     }
 
     // Select number of images in swap chain, we prefer one buffer in the background to work on
-    image_count = capabilities.minImageCount + 1;
+    // (gow3: two with frame generation, which presents two images per game frame).
+    image_count = capabilities.minImageCount +
+                  (Gow3Settings::Get().frame_gen != Gow3Settings::FrameGenOff ? 2 : 1);
     if (capabilities.maxImageCount > 0) {
         image_count = std::min(image_count, capabilities.maxImageCount);
     }
