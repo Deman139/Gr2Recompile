@@ -4,6 +4,8 @@ support the project and future ports
 
 **English** | [Español](#español) Support Project  
 
+[![Support the project and future ports](https://img.shields.io/badge/PayPal-Support%20the%20project%20%26%20future%20ports-00457C?logo=paypal&logoColor=white)](https://www.paypal.com/paypalme/SantiagoLescano577) *Optional: the ports are and will stay free.*
+
 Native Windows port of **Killzone Shadow Fall** (PS4). The game's code runs directly on the CPU;
 graphics are translated to Vulkan in real time. Public beta: the whole campaign is playable, and
 it keeps improving with testers' reports.
@@ -77,6 +79,8 @@ build the bridge first with Visual Studio 2022 and the [NVIDIA DLSS SDK](https:/
 ---
 
 ## Español
+
+[![Apoyá el proyecto y futuros ports](https://img.shields.io/badge/PayPal-Apoy%C3%A1%20el%20proyecto%20y%20futuros%20ports-00457C?logo=paypal&logoColor=white)](https://www.paypal.com/paypalme/SantiagoLescano577) *Opcional: los ports son y seguirán siendo gratuitos.*
 
 Port nativo para Windows de **Killzone Shadow Fall** (PS4). El código del juego corre directamente
 en la CPU; los gráficos se traducen a Vulkan en tiempo real. Beta pública: se puede jugar la
