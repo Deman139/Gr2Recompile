@@ -721,6 +721,13 @@ public:
         this->on_submit = std::move(on_submit);
     }
 
+    /// gow3: called before every submission, outside the submit lock (the rasterizer drains its
+    /// draw pipeline there when the GPU command thread submits).
+    void SetBeforeSubmitHook(void (*hook)(void*), void* context) {
+        before_submit = hook;
+        before_submit_context = context;
+    }
+
     /// Returns the current render state.
     const RenderState& GetRenderState() const {
         return render_state;
@@ -929,6 +936,8 @@ private:
     CommandPool command_pool;
     DynamicState dynamic_state;
     SubmitFunc on_submit{};
+    void (*before_submit)(void*) = nullptr;
+    void* before_submit_context = nullptr;
     vk::CommandBuffer current_cmdbuf;
     std::condition_variable_any event_cv;
     struct PendingOp {

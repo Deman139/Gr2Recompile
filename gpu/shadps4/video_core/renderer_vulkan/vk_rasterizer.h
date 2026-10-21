@@ -146,7 +146,8 @@ public:
     bool IsGpuSideThread() const;
     bool IsGpuSideThreadId(u32 tid) const;
     /// A guest write hit a protected page.
-    bool OnWriteFault(VAddr addr, bool assume_locks);
+    /// gow3: nowait: the fault comes from a GOW3_NOWAIT_WRITES instruction (page_manager.cpp).
+    bool OnWriteFault(VAddr addr, bool assume_locks, bool nowait = false);
     bool ReadMemory(VAddr addr, u64 size, bool assume_locks = false);
     void ProcessDownloadImages();
     bool IsMapped(VAddr addr, u64 size);
@@ -227,6 +228,7 @@ private:
     void DrawRecord(const GraphicsPipeline* pipeline, const PreparedDraw* used_prepared,
                     bool is_indexed, u32 index_offset);
     static bool DrawPipeWanted();
+    static void DrainBeforeSubmit(void* context);
     bool UseDrawPipe() const;
     bool OnStageA() const;
     /// Arguments of an indirect draw: `args` holds `max_count` commands `stride` apart.

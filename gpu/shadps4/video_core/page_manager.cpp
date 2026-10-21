@@ -9,6 +9,13 @@
 #include "common/error.h"
 #include "common/range_lock.h"
 #include "common/signal_context.h"
+#include "gow3_guest_image.h"
+#include <algorithm>
+#include <array>
+#include <chrono>
+#include <mutex>
+#include <unordered_map>
+#include <vector>
 #include "core/emulator_settings.h"
 #include "core/memory.h"
 #include "core/signals.h"
@@ -66,7 +73,126 @@ struct PageManager::Impl {
 
     virtual void Protect(VAddr address, size_t size, Core::MemoryPermission perms) = 0;
 
+    // gow3: GOW3_FAULT_PROFILE=1 prints, every 5 s, the guest instructions whose faults on GPU
+    // tracked pages cost the most time (game code that waits for the GPU; from iss_pc). Raw
+    // addresses: subtract "Guest image base" (game.log) for guest offsets.
+    struct FaultSite {
+        u64 count = 0, ns = 0, caller = 0;
+        std::array<u64, 4> guest_callers{};
+        VAddr last = 0;
+        bool write = false;
+    };
+    static void ProfileFault(void* context, VAddr addr, bool write, u64 ns) {
+        static const bool enabled = [] {
+            const char* e = std::getenv("GOW3_FAULT_PROFILE");
+            return e && *e == '1';
+        }();
+        if (!enabled) {
+            return;
+        }
+        static std::mutex mutex;
+        static std::unordered_map<u64, FaultSite> sites;
+        static auto window = std::chrono::steady_clock::now();
+        const u64 rip = reinterpret_cast<u64>(Common::GetRip(context));
+#ifdef _WIN32
+        const u64 rsp = static_cast<EXCEPTION_POINTERS*>(context)->ContextRecord->Rsp;
+#else
+        const u64 rsp =
+            static_cast<u64>(static_cast<ucontext_t*>(context)->uc_mcontext.gregs[REG_RSP]);
+#endif
+        // The return address at the top of the stack (right for leaf routines such as memcpy).
+        const u64 caller = rsp ? *reinterpret_cast<const u64*>(rsp) : 0;
+        // Deeper callers: the first guest-image addresses found in the next 64 stack words (a
+        // heuristic; names the game code that called a library copy routine).
+        std::array<u64, 4> guest_callers{};
+        if (rsp) {
+            const auto* stack = reinterpret_cast<const u64*>(rsp);
+            for (u32 i = 1, found = 0; i < 64 && found < guest_callers.size(); ++i) {
+                if (Gow3GuestImage::Offset(stack[i]) != ~u64{0}) {
+                    guest_callers[found++] = stack[i];
+                }
+            }
+        }
+        std::scoped_lock lock{mutex};
+        auto& site = sites[rip];
+        ++site.count;
+        site.ns += ns;
+        site.last = addr;
+        site.write = write;
+        site.caller = caller;
+        site.guest_callers = guest_callers;
+        const auto now = std::chrono::steady_clock::now();
+        if (now - window < std::chrono::seconds(5)) {
+            return;
+        }
+        window = now;
+        std::vector<std::pair<u64, FaultSite>> top(sites.begin(), sites.end());
+        std::sort(top.begin(), top.end(),
+                  [](const auto& a, const auto& b) { return a.second.ns > b.second.ns; });
+        // Guest offsets where the address is in the guest image, else the host address.
+        const auto name = [](u64 address) {
+            const u64 offset = Gow3GuestImage::Offset(address);
+            return static_cast<unsigned long long>(offset != ~u64{0} ? offset : address);
+        };
+        std::printf("Fault profile (5 s; guest offsets):");
+        for (size_t i = 0; i < top.size() && i < 10; ++i) {
+            const auto& s = top[i].second;
+            std::printf(" [%s %#llx<-%#llx x%llu %.1f ms @%#llx stack", s.write ? "W" : "R",
+                        name(top[i].first), name(s.caller),
+                        static_cast<unsigned long long>(s.count), s.ns / 1e6,
+                        static_cast<unsigned long long>(s.last));
+            for (const u64 c : s.guest_callers) {
+                if (c) {
+                    std::printf(" %#llx", name(c));
+                }
+            }
+            std::printf("]");
+        }
+        std::printf("\n");
+        std::fflush(stdout);
+        sites.clear();
+    }
+
     static bool GuestFaultSignalHandler(void* context, void* fault_address) {
+        const auto start = std::chrono::steady_clock::now();
+        const bool handled = HandleGuestFault(context, fault_address);
+        ProfileFault(context, reinterpret_cast<VAddr>(fault_address), Common::IsWriteError(context),
+                     static_cast<u64>(std::chrono::duration_cast<std::chrono::nanoseconds>(
+                                          std::chrono::steady_clock::now() - start)
+                                          .count()));
+        return handled;
+    }
+
+    // gow3: GOW3_NOWAIT_WRITES=<offset>[,<offset>...] (guest offsets, hex; from iss_pc): guest
+    // instructions whose write faults take the page over without reading the GPU data back
+    // (BufferCache::NoWaitWrite). For pages the game refills while it never reads what the GPU
+    // wrote there.
+    static bool IsNoWaitWriteSite(void* context) {
+        static const std::vector<u64> sites = [] {
+            std::vector<u64> list;
+            const char* e = std::getenv("GOW3_NOWAIT_WRITES");
+            for (const char* p = e; p && *p;) {
+                char* end = nullptr;
+                const u64 offset = std::strtoull(p, &end, 16);
+                if (end == p) {
+                    break;
+                }
+                list.push_back(offset);
+                p = *end ? end + 1 : end;
+            }
+            if (!list.empty()) {
+                std::printf("No-wait writes: %zu guest instruction(s)\n", list.size());
+            }
+            return list;
+        }();
+        if (sites.empty()) {
+            return false;
+        }
+        const u64 offset = Gow3GuestImage::Offset(reinterpret_cast<u64>(Common::GetRip(context)));
+        return std::find(sites.begin(), sites.end(), offset) != sites.end();
+    }
+
+    static bool HandleGuestFault(void* context, void* fault_address) {
         const auto addr = reinterpret_cast<VAddr>(fault_address);
         // gow3: the draw recording thread handles its faults inline too (vk_draw_pipe.h).
         const auto is_gpu_thread = rasterizer->IsGpuSideThread();
@@ -75,7 +201,8 @@ struct PageManager::Impl {
         }
         if (Common::IsWriteError(context)) {
             Gow3Stats::Timer timer{Gow3Stats::t_write_faults};
-            return rasterizer->OnWriteFault(addr, is_gpu_thread);
+            const bool nowait = !is_gpu_thread && IsNoWaitWriteSite(context);
+            return rasterizer->OnWriteFault(addr, is_gpu_thread, nowait);
         } else {
             Gow3Stats::read_faults.fetch_add(1, std::memory_order_relaxed);
             Gow3Stats::Timer timer{Gow3Stats::t_read_faults};

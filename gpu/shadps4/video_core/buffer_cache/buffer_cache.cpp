@@ -4,6 +4,9 @@
 #include <chrono>
 #include <array>
 #include <map>
+#include <mutex>
+#include <tuple>
+#include <vector>
 #include <unordered_map>
 #include <algorithm>
 #include <bit>
@@ -180,6 +183,16 @@ void BufferCache::ReadMemory(VAddr device_addr, u64 size, bool is_write, bool as
     }
 }
 
+bool BufferCache::NoWaitWrite(VAddr device_addr) {
+    const VAddr page = Common::AlignDown(device_addr, TRACKER_BYTES_PER_PAGE);
+    memory_tracker->MarkRegionAsCpuModifiedNoReadback(page, TRACKER_BYTES_PER_PAGE);
+    // gow3: unlike iss_pc, the GPU-written bytes of the page are kept (gpu_modified_ranges is
+    // left as it is): the upload of the page skips them (SynchronizeMemory), so only what the
+    // CPU owns is copied over and the GPU's own output there stays valid.
+    pages_shared_with_gpu.store(true, std::memory_order_relaxed);
+    return true;
+}
+
 void BufferCache::DownloadMemory(const Buffer* arena, VAddr device_addr, u64 size) {
     boost::container::small_vector<vk::BufferCopy, 1> copies;
     u64 total_size_bytes = 0;
@@ -302,8 +315,61 @@ void PrintBufferStats() {
 }
 } // namespace
 
+namespace {
+// gow3: GOW3_WRITTEN_BINDINGS=1 (from iss_pc): every 5 s, the buffer ranges bound as written (the
+// whole range becomes GPU modified, whatever the GPU stores), most bound first, with their source
+// (shader hash, fill, copy): which GPU work makes the pages that guest write faults wait on
+// (GOW3_FAULT_PROFILE) GPU modified. GOW3_WRITTEN_BINDINGS_RANGE=<lo>-<hi> (hex) filters.
+void NoteWrittenBinding(VAddr addr, u32 size) {
+    static const bool enabled = [] {
+        const char* e = std::getenv("GOW3_WRITTEN_BINDINGS");
+        return e && *e == '1';
+    }();
+    if (!enabled) {
+        return;
+    }
+    static const std::pair<VAddr, VAddr> range = [] {
+        const char* e = std::getenv("GOW3_WRITTEN_BINDINGS_RANGE");
+        char* end = nullptr;
+        const VAddr lo = e ? std::strtoull(e, &end, 16) : 0;
+        const VAddr hi = end && *end == '-' ? std::strtoull(end + 1, nullptr, 16) : ~VAddr{0};
+        return std::pair{lo, hi};
+    }();
+    if (addr + size <= range.first || range.second <= addr) {
+        return;
+    }
+    using Key = std::tuple<VAddr, u32, const char*, u64>;
+    static std::mutex mutex;
+    static std::map<Key, u64> bindings;
+    static auto window = std::chrono::steady_clock::now();
+    std::scoped_lock lock{mutex};
+    ++bindings[{addr, size, written_binding_source.kind, written_binding_source.hash}];
+    const auto now = std::chrono::steady_clock::now();
+    if (now - window < std::chrono::seconds(5)) {
+        return;
+    }
+    window = now;
+    std::vector<std::pair<Key, u64>> top(bindings.begin(), bindings.end());
+    std::sort(top.begin(), top.end(),
+              [](const auto& a, const auto& b) { return a.second > b.second; });
+    std::printf("Written bindings (5 s, %zu ranges; kind, shader):", top.size());
+    for (size_t i = 0; i < top.size() && i < 16; ++i) {
+        const auto& [b_addr, b_size, b_kind, b_hash] = top[i].first;
+        std::printf(" [%#llx+%#x x%llu %s %#llx]", static_cast<unsigned long long>(b_addr), b_size,
+                    static_cast<unsigned long long>(top[i].second), b_kind,
+                    static_cast<unsigned long long>(b_hash));
+    }
+    std::printf("\n");
+    std::fflush(stdout);
+    bindings.clear();
+}
+} // namespace
+
 std::pair<const Buffer*, u64> BufferCache::ObtainBuffer(VAddr device_addr, u32 size,
                                                         bool is_written, bool is_texel_buffer) {
+    if (is_written) {
+        NoteWrittenBinding(device_addr, size);
+    }
     texture_cache.ResolveReadbacks(device_addr, size, true, ReadbackSource::BufferObtain);
     const bool stats = BufferStatsEnabled();
     if (stats) {
@@ -583,8 +649,17 @@ bool BufferCache::SynchronizeMemory(const Buffer* arena, VAddr device_addr, u32 
     memory_tracker->ForEachUploadRange(
         device_addr, size, is_written,
         [&](u64 addr, u64 size) {
-            copies.emplace_back(total_size_bytes, addr, size);
-            total_size_bytes += size;
+            const auto add = [&](u64 start, u64 bytes) {
+                copies.emplace_back(total_size_bytes, start, bytes);
+                total_size_bytes += bytes;
+            };
+            // gow3: pages a no-wait write took over keep the bytes the GPU wrote there.
+            if (pages_shared_with_gpu.load(std::memory_order_relaxed) &&
+                gpu_modified_ranges.Intersects(addr, size)) {
+                gpu_modified_ranges.ForEachNotInRange(addr, size, add);
+            } else {
+                add(addr, size);
+            }
         },
         [&] { src_buffer = UploadCopies(arena, copies, total_size_bytes); });
 

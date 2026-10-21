@@ -53,6 +53,19 @@ public:
                             });
     }
 
+    /// gow3: a write fault from a GOW3_NOWAIT_WRITES instruction (from iss_pc): the pages become
+    /// CPU modified (writable, uploaded later) without the GPU data being read back first. Under
+    /// the region lock, so the GPU side never sees them both GPU and CPU modified.
+    void MarkRegionAsCpuModifiedNoReadback(VAddr dirty_cpu_addr, u64 query_size) {
+        IteratePages<false>(dirty_cpu_addr, query_size,
+                            [](RegionManager* manager, u64 offset, size_t size) {
+                                std::scoped_lock lk{manager->lock};
+                                const VAddr addr = manager->GetCpuAddr() + offset;
+                                manager->template ChangeRegionState<Type::GPU, false>(addr, size);
+                                manager->template ChangeRegionState<Type::CPU, true>(addr, size);
+                            });
+    }
+
     /// gow3: see RegionManager::ExtendWriteFault.
     void ExtendWriteFault(VAddr window_addr, u64 size) {
         IteratePages<false>(window_addr, size,

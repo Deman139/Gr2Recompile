@@ -212,6 +212,9 @@ Rasterizer::Rasterizer(const Instance& instance_, Scheduler& scheduler_, Runtime
     }
     // gow3: this thread joins the texture binding helper before it changes image state.
     runtime.SetImageAccessHook(&JoinBindHelper, this);
+    if (draw_pipe) {
+        scheduler.SetBeforeSubmitHook(&DrainBeforeSubmit, this);
+    }
     scheduler.SetSubmitCallback([this](Vulkan::SubmitInfo& info) {
         runtime.FlushBarriers();
         buffer_cache.SubmitPendingArenaBinds(info);
@@ -568,6 +571,22 @@ void Rasterizer::DrainDrawPipe(u32 reason, u32 line, const char* function) {
     if (const u64 waited = draw_pipe->drain_cycles - before) {
         drain_sites[function][line] += waited;
     }
+}
+
+void Rasterizer::DrainBeforeSubmit(void* context) {
+    // A submission from stage A while stage B records would end or replace the command buffer
+    // under it (driver crashes). Every known path drains first; this catches the others.
+    auto& self = *static_cast<Rasterizer*>(context);
+    if (!self.OnStageA() || self.draw_pipe->Idle()) {
+        return;
+    }
+    static std::atomic<u32> reports{0};
+    if (reports.fetch_add(1, std::memory_order_relaxed) < 10) {
+        std::printf("Draw pipe: the GPU command thread submitted while the draw recording "
+                    "thread had work; drained first\n");
+        std::fflush(stdout);
+    }
+    self.DrainDrawPipe(DrawPipe::ReasonRasterizer);
 }
 
 bool Rasterizer::IsGpuSideThread() const {
@@ -2452,6 +2471,7 @@ void Rasterizer::BindBuffers(const Shader::Info& stage, const PreparedStage* pre
                                     int(prepared != nullptr));
                     }
                 }
+                VideoCore::written_binding_source = {"shader", stage.pgm_hash};
                 const auto [buffer, offset] = buffer_cache.ObtainBuffer(
                     vsharp.base_address, size, desc.is_written, desc.is_formatted);
                 const u64 offset_aligned = Common::AlignDown(offset, alignment);
@@ -3484,6 +3504,7 @@ void Rasterizer::FillBuffer(VAddr address, u32 num_bytes, u32 value, bool is_gds
         if (is_gds) {
             return {buffer_cache.GetGdsBuffer(), address};
         }
+        VideoCore::written_binding_source = {"fill", 0};
         return buffer_cache.ObtainBuffer(address, num_bytes, true);
     }();
     runtime.FillBuffer(buffer, offset, num_bytes, value);
@@ -3516,6 +3537,7 @@ void Rasterizer::CopyBuffer(VAddr dst, VAddr src, u32 num_bytes, bool dst_gds, b
         if (dst_gds) {
             return {gds_buffer, dst};
         }
+        VideoCore::written_binding_source = {"dma copy", 0};
         return buffer_cache.ObtainBuffer(dst, num_bytes, true, true);
     }();
     const vk::BufferCopy copy = {
@@ -3546,7 +3568,14 @@ bool Rasterizer::InvalidateMemory(VAddr addr, u64 size, bool assume_locks) {
     return true;
 }
 
-bool Rasterizer::OnWriteFault(VAddr addr, bool assume_locks) {
+bool Rasterizer::OnWriteFault(VAddr addr, bool assume_locks, bool nowait) {
+    // gow3: a no-wait write takes the page over at once (BufferCache::NoWaitWrite): no draw pipe
+    // drain, no GPU wait. Images there are still invalidated.
+    if (nowait && !assume_locks && IsMapped(addr, 8) && buffer_cache.NoWaitWrite(addr)) {
+        texture_cache.InvalidateMemory(addr, 8);
+        buffer_cache.ExtendWriteFault(addr);
+        return true;
+    }
     DrainDrawPipe();
     if (!InvalidateMemory(addr, 8, assume_locks)) {
         return false;

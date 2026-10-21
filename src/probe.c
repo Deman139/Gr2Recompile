@@ -1044,6 +1044,8 @@ int main(int argc, char **argv) {
 #ifdef _WIN32
     profiler_start(describe_address);
 #endif
+    printf("Guest image base %p\n", (void *)image);
+    if (gpu_enabled) gow3gpu_set_guest_image(image);
     printf("Entering original x86-64 code at guest offset 0x%" PRIx64 "\n", entry);
     entered_game=1;
     struct { uint64_t argc; const char *argv[2]; } params = {1, {"/app0/eboot.bin", NULL}};

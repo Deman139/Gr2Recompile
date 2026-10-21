@@ -8,6 +8,7 @@
 #include <sys/resource.h>
 #endif
 #include "gow3_toggles.h"
+#include "gow3_guest_image.h"
 #include <algorithm>
 #include <atomic>
 #include <condition_variable>
@@ -278,6 +279,10 @@ extern "C" uintptr_t gow3gpu_resolve(const char* scoped_nid) {
         }
     }
     return 0;
+}
+
+extern "C" void gow3gpu_set_guest_image(const void* base) {
+    Gow3GuestImage::base.store(reinterpret_cast<std::uintptr_t>(base));
 }
 
 extern "C" int gow3gpu_handle_fault(void* ucontext, void* address) {

@@ -39,6 +39,8 @@ int gow3gpu_overlay_captures_input(void);
  * the motion (pixels) and wheel steps since the last call and the buttons held (1 left, 2 right,
  * 4 middle, 8 and 16 side). Returns 1 while the mouse is captured. */
 void gow3gpu_mouse_configure(int look);
+/* Where the guest image starts (fault diagnostics and per-instruction fault policies). */
+void gow3gpu_set_guest_image(const void *base);
 int gow3gpu_mouse_sample(float *dx, float *dy, uint32_t *buttons, int *wheel);
 /* Controller vibration strength set in the menu, 0 (off) to 100 (the game's own). */
 int gow3gpu_vibration_percent(void);

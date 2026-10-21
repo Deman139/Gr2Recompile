@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <atomic>
 #include <map>
 #include <string>
 #include <optional>
@@ -43,6 +44,15 @@ struct ResidencyTag {
     explicit ResidencyTag(const char* tag) : previous{residency_tag} { residency_tag = tag; }
     ~ResidencyTag() { residency_tag = previous; }
 };
+
+/// gow3: who binds the next written buffer (GOW3_WRITTEN_BINDINGS diagnostic, from iss_pc): a
+/// short kind and, for shader bindings, the program hash. Set by the caller of ObtainBuffer on its
+/// thread.
+struct WrittenBindingSource {
+    const char* kind = "?";
+    u64 hash = 0;
+};
+inline thread_local WrittenBindingSource written_binding_source;
 
 class TextureCache;
 class MemoryTracker;
@@ -103,6 +113,12 @@ public:
 
     /// gow3: a guest write fault at `device_addr` was handled; unprotect its neighbourhood.
     void ExtendWriteFault(VAddr device_addr);
+
+    /// gow3: a write fault from a GOW3_NOWAIT_WRITES instruction (from iss_pc): the page becomes
+    /// writable at once, without reading the GPU data back (no GPU wait); the GPU bytes there are
+    /// dropped and the page is uploaded from the CPU copy. Only for pages the game refills while
+    /// it never reads what the GPU wrote there. Guest threads.
+    bool NoWaitWrite(VAddr device_addr);
 
     /// Flushes any GPU modified buffer in the logical page range back to CPU memory.
     void ReadMemory(VAddr device_addr, u64 size, bool is_write = false, bool assume_locks = false);
@@ -181,6 +197,8 @@ private:
     StreamBuffer stream_buffer;
     Buffer gds_buffer;
     RangeSet gpu_modified_ranges;
+    /// gow3: a no-wait write left GPU-written bytes in a CPU modified page (NoWaitWrite).
+    std::atomic<bool> pages_shared_with_gpu{false};
 
     std::unique_ptr<FaultManager> fault_manager;
     std::unique_ptr<Buffer> bda_pagetable_buffer;
