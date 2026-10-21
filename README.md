@@ -246,6 +246,8 @@ compilá antes el puente con Visual Studio 2022 y el [SDK de NVIDIA DLSS](https:
   driver pipeline cache, texture LOD bias).
 - **shadPS4 team**: the [shadPS4](https://github.com/shadps4-emu/shadPS4) video core (GPU and
   shader translation to Vulkan).
+- **clearfeather**: startup crash fix for base 01.00 + update installs (file symlink stat, PR #31)
+  and controller/audio suggestions.
 - **AMD FidelityFX FSR 3.1** ([FSR-Vulkan](https://github.com/FireBurn/FSR-Vulkan)) and **NVIDIA
   DLSS** ([DLSS SDK](https://github.com/NVIDIA/DLSS); NVIDIA's license is in `licenses\`).
 

@@ -208,6 +208,26 @@ static uint8_t mouse_axis(float speed) {
     const int v=(int)(128.0f+(speed<0 ? -x : x)*127.5f);
     return (uint8_t)(v<0 ? 0 : v>255 ? 255 : v);
 }
+/* Physical stick dead zone (GOW3_PAD_DEAD_ZONE 0..0.3, launcher Controls): radial, rescaled so
+ * the stick still reaches full deflection; worn sticks stop drifting. Off (0) by default: the
+ * game keeps its own dead zone after this one. Gamepad sticks only, not mouse look or keys. */
+static void stick_axes(SDL_Gamepad *g, SDL_GamepadAxis ax, SDL_GamepadAxis ay, uint8_t *x, uint8_t *y) {
+    static float dead_zone=-1.0f;
+    if (dead_zone<0.0f) {
+        dead_zone=env_float("GOW3_PAD_DEAD_ZONE",0.0f);
+        if (dead_zone>0.3f) dead_zone=0.3f;
+        if (dead_zone>0.0f) printf("Runtime: stick dead zone %.0f%%\n",dead_zone*100.0f);
+    }
+    int16_t vx=SDL_GetGamepadAxis(g,ax), vy=SDL_GetGamepadAxis(g,ay);
+    if (dead_zone>0.0f) {
+        const float fx=vx/32767.0f, fy=vy/32767.0f, m=SDL_sqrtf(fx*fx+fy*fy);
+        float scale=m<=dead_zone ? 0.0f : (m-dead_zone)/(1.0f-dead_zone)/m;
+        if (m*scale>1.0f) scale=1.0f/m;
+        vx=(int16_t)SDL_clamp(fx*scale*32767.0f,-32768.0f,32767.0f);
+        vy=(int16_t)SDL_clamp(fy*scale*32767.0f,-32768.0f,32767.0f);
+    }
+    *x=axis(vx); *y=axis(vy);
+}
 static int source_down(int source, const bool *k, uint32_t mouse, uint64_t now) {
     if (source>=WHEEL_UP_SOURCE) return now<wheel_until_us[source-WHEEL_UP_SOURCE];
     if (source>=MOUSE_SOURCE) return (mouse & (uint32_t)(source & 0xff))!=0;
@@ -282,8 +302,8 @@ static void sample_host(PadData *d) {
         for (size_t i=0;i<pad_map.count;++i)
             if (SDL_GetGamepadButton(g,(SDL_GamepadButton)pad_map.entries[i].source)) d->buttons|=pad_map.entries[i].ps;
         const uint32_t mapped=d->buttons;
-        d->left_x=axis(SDL_GetGamepadAxis(g,SDL_GAMEPAD_AXIS_LEFTX)); d->left_y=axis(SDL_GetGamepadAxis(g,SDL_GAMEPAD_AXIS_LEFTY));
-        d->right_x=axis(SDL_GetGamepadAxis(g,SDL_GAMEPAD_AXIS_RIGHTX)); d->right_y=axis(SDL_GetGamepadAxis(g,SDL_GAMEPAD_AXIS_RIGHTY));
+        stick_axes(g,SDL_GAMEPAD_AXIS_LEFTX,SDL_GAMEPAD_AXIS_LEFTY,&d->left_x,&d->left_y);
+        stick_axes(g,SDL_GAMEPAD_AXIS_RIGHTX,SDL_GAMEPAD_AXIS_RIGHTY,&d->right_x,&d->right_y);
         d->l2=trigger(SDL_GetGamepadAxis(g,SDL_GAMEPAD_AXIS_LEFT_TRIGGER)); d->r2=trigger(SDL_GetGamepadAxis(g,SDL_GAMEPAD_AXIS_RIGHT_TRIGGER));
         if (d->l2>30) d->buttons|=BTN_L2;
         if (d->r2>30) d->buttons|=BTN_R2;

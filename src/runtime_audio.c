@@ -32,6 +32,7 @@
 typedef struct {
     int used, type, channels, is_float, frames, sample_bytes, std_layout, downmix;
     int32_t volume[8];
+    float extra_gain; /* pad speaker volume (launcher) */
     SDL_AudioStream *stream;
     uint64_t next_deadline_ns; /* next return of sceAudioOutOutput */
     int64_t adjust_ns; int window_min, window_count; /* queue level control */
@@ -115,6 +116,19 @@ static ABI int32_t audio_init(void) {
     pthread_mutex_unlock(&table_lock);
     return r;
 }
+/* Controller speaker sounds (port type 4) play on the main output; GOW3_PAD_SPEAKER_VOLUME
+ * (0..100, launcher Audio) scales them, 0 mutes them while the port keeps its timing. */
+static float pad_speaker_gain(void) {
+    static float gain=-1.0f;
+    if (gain<0.0f) {
+        const char *v=getenv("GOW3_PAD_SPEAKER_VOLUME");
+        int percent=v && *v ? atoi(v) : 100;
+        percent=percent<0 ? 0 : percent>100 ? 100 : percent;
+        gain=(float)percent/100.0f;
+        if (percent!=100) printf("Runtime: controller speaker sounds at %d%%\n",percent);
+    }
+    return gain;
+}
 static ABI int32_t audio_open(int32_t user, int32_t type, int32_t index, uint32_t length, uint32_t freq, uint32_t param) {
     (void)user; (void)index;
     if (!initialized) return ERR_NOT_INIT;
@@ -135,6 +149,7 @@ static ABI int32_t audio_open(int32_t user, int32_t type, int32_t index, uint32_
     p->used=1; p->type=type; p->channels=channels[format]; p->is_float=format>=3 && format!=6;
     p->sample_bytes=p->is_float ? 4 : 2; p->frames=(int)length; p->std_layout=format>=6;
     for (int c=0;c<8;++c) p->volume[c]=VOLUME_0DB;
+    p->extra_gain=type==4 ? pad_speaker_gain() : 1.0f;
     if (sdl_audio()) {
         SDL_AudioSpec device; int device_frames;
         p->downmix=p->channels==8 && SDL_GetAudioDeviceFormat(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK,&device,&device_frames)
@@ -189,7 +204,7 @@ static int32_t output_port(int32_t handle, const void *data, int pace) {
         for (size_t f=0;f<(size_t)p->frames;++f) for (int c=0;c<p->channels;++c) {
             int target=p->channels==8 && !p->std_layout ? remap[c] : c;
             size_t from=f*(size_t)p->channels+(size_t)c, to=f*(size_t)p->channels+(size_t)target;
-            float gain=(float)p->volume[c]/VOLUME_0DB;
+            float gain=(float)p->volume[c]/VOLUME_0DB*p->extra_gain;
             if (p->is_float) { float v; memcpy(&v,(const char *)data+from*4,4); v*=gain; memcpy(converted+to*4,&v,4); }
             else { int16_t v; memcpy(&v,(const char *)data+from*2,2); v=(int16_t)((float)v*gain); memcpy(converted+to*2,&v,2); }
         }

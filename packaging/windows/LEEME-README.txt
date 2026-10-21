@@ -1,4 +1,4 @@
-KILLZONE SHADOW FALL - Native Windows port (Lesca) - Beta 0.2.4
+KILLZONE SHADOW FALL - Native Windows port (Lesca) - Beta 0.2.5
 =================================================================
 
 [ENGLISH]
@@ -53,6 +53,8 @@ Controls
   - Controller: Xbox, DualShock 4, DualSense and other SDL-compatible pads.
   - Keyboard and mouse: WASD to move, mouse for the camera, left click fires, right click aims.
     Change everything on the Controls tab (sensitivity, Y axis). Left Alt frees the cursor.
+  - Controls tab: stick dead zone (worn sticks that drift) and controller speaker volume
+    (sounds the PS4 plays on the controller, here on your speakers; 0% = off).
   - Touchpad (OWL drone) without a touchpad: hold Delete and drag the mouse.
   - Insert: the port's menu while playing (R3 + L2 on a controller).
   - F12: screenshot.
@@ -154,6 +156,8 @@ Controles
   - Mando: Xbox, DualShock 4, DualSense y otros compatibles con SDL.
   - Teclado y mouse: WASD moverse, mouse cámara, click izquierdo dispara, click derecho apunta.
     Todo se cambia en la pestaña Controles (sensibilidad, eje Y). Alt izquierdo libera el cursor.
+  - Pestaña Controles: zona muerta de sticks (sticks gastados que se mueven solos) y volumen
+    del altavoz del mando (lo que la PS4 suena en el mando, acá por tus parlantes; 0% = apagado).
   - Touchpad (dron OWL) sin touchpad: mantené Suprimir y arrastrá el mouse.
   - Insert: menú del port durante el juego (también R3 + L2 en el mando).
   - F12: captura de pantalla.

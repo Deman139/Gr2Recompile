@@ -40,7 +40,7 @@ FROZEN = getattr(sys, 'frozen', False)
 PORT_DIR = Path(sys.executable).resolve().parent if FROZEN else Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PORT_DIR / 'scripts'))
 
-VERSION = '0.2.4'
+VERSION = '0.2.5'
 TITLE_ID = 'CUSA00190'
 # Other releases of the game players run (their languages), accepted untested: the port was built and
 # tested on CUSA00190. Every one must be at version 01.81.
@@ -139,6 +139,10 @@ TEXTS = {
                          'derecho del touchpad.',
         'controller_help': 'Botón del mando que hace de cada botón de PS4. Los gatillos y sticks no se cambian.',
         'vibration': 'Vibración',
+        'dead_zone': 'Zona muerta de sticks', 'pad_speaker': 'Altavoz del mando',
+        'pad_extra_help': 'Zona muerta: subila si la cámara o el personaje se mueven solos (stick gastado). '
+                          'Altavoz del mando: sonidos que la PS4 manda al parlante del mando; acá suenan '
+                          'por tus parlantes (0% = apagado).',
         'mouse': 'Mouse', 'mouse_look': 'Apuntar con el mouse',
         'mouse_look_help': 'El mouse mueve la cámara; click izquierdo dispara (R2), derecho apunta (L2). '
                            'Alt izquierdo libera el cursor.',
@@ -248,6 +252,10 @@ TEXTS = {
                          'touchpad click.',
         'controller_help': 'The controller button that acts as each PS4 button. Triggers and sticks are fixed.',
         'vibration': 'Vibration',
+        'dead_zone': 'Stick dead zone', 'pad_speaker': 'Controller speaker',
+        'pad_extra_help': 'Dead zone: raise it if the camera or character moves on its own (worn stick). '
+                          'Controller speaker: sounds the PS4 sends to the controller speaker; here they '
+                          'play on your speakers (0% = off).',
         'mouse': 'Mouse', 'mouse_look': 'Aim with the mouse',
         'mouse_look_help': 'The mouse moves the camera; left click fires (R2), right click aims (L2). '
                            'Left Alt frees the cursor.',
@@ -416,7 +424,8 @@ GRAPHICS_DEFAULTS = {
 LAUNCHER_DEFAULTS = {'game_dir': '', 'update_dir': '', 'language': '', 'window_size': '1920x1080',
                      'key_map': {}, 'pad_map': {}, 'mouse_look': True, 'mouse_sens': 1.0,
                      'mouse_invert': False, 'check_updates': True, 'smart_pending': True,
-                     'res_method': 'upscale', 'discord_rpc': True}
+                     'res_method': 'upscale', 'discord_rpc': True, 'pad_dead_zone': 0,
+                     'pad_speaker': 100}
 # Discord Rich Presence: the application "Killzone Shadow Fall" (its name is what Discord shows) and the
 # key of its large image asset. Empty ID: no presence.
 DISCORD_ID = '1562348304153706608'
@@ -1062,6 +1071,37 @@ class Launcher:
         self.images['vibration_var'] = var
         self.button(bottom, tr('reset_defaults'), self.reset_controls).pack(side='right')
         self.note(parent, tr('controller_help'))
+        self.pad_extra_section(parent)
+
+    def pad_extra_section(self, parent):
+        tk = self.tk
+        row = tk.Frame(parent, bg=PANEL)
+        row.pack(fill='x', pady=(self.px(8), 0))
+        sliders = []
+        # launcher.json key, label, maximum percent, default percent
+        for key, label, top, default in (('pad_dead_zone', 'dead_zone', 30, 0),
+                                         ('pad_speaker', 'pad_speaker', 100, 100)):
+            tk.Label(row, text=tr(label), bg=PANEL, fg=TEXT, font=self.font(10)).pack(
+                side='left', padx=(self.px(24) if sliders else 0, 0))
+            try:
+                current = max(0, min(top, int(self.settings.get(key, default))))
+            except (TypeError, ValueError):
+                current = default
+            var = tk.IntVar(value=current)
+            value_label = tk.Label(row, text=f'{current}%', bg=PANEL, fg=MUTED, font=self.font(9), width=5)
+
+            def moved(value, key=key, value_label=value_label):
+                value = int(float(value))
+                value_label.configure(text=f'{value}%')
+                if value != self.settings.get(key):
+                    self.settings[key] = value
+                    save_launcher(self.settings)
+            self.ttk.Scale(row, from_=0, to=top, variable=var, command=moved,
+                           length=self.px(150)).pack(side='left', padx=self.px(10))
+            value_label.pack(side='left')
+            sliders.append(var)
+        self.images['pad_extra_vars'] = sliders
+        self.note(parent, tr('pad_extra_help'))
 
     def mouse_section(self, parent):
         tk = self.tk
@@ -1154,7 +1194,8 @@ class Launcher:
         save_launcher(self.settings)
 
     def reset_controls(self):
-        self.settings.update(key_map={}, pad_map={}, mouse_look=True, mouse_sens=1.0, mouse_invert=False)
+        self.settings.update(key_map={}, pad_map={}, mouse_look=True, mouse_sens=1.0, mouse_invert=False,
+                             pad_dead_zone=0, pad_speaker=100)
         save_launcher(self.settings)
         self.set_graphic('vibration', '100')
         self.show_tab('controls')
@@ -1224,7 +1265,7 @@ class Launcher:
         save_graphics(self.graphics)
         self.settings.update(window_size='1920x1080', key_map={}, pad_map={}, mouse_look=True, mouse_sens=1.0,
                              mouse_invert=False, smart_pending=True, res_method='upscale', frame_gen='off',
-                             discord_rpc=True)
+                             discord_rpc=True, pad_dead_zone=0, pad_speaker=100)
         save_launcher(self.settings)
         self.show_tab('advanced')
 
@@ -1342,6 +1383,8 @@ class Launcher:
             'GOW3_MOUSE_LOOK': '1' if self.settings.get('mouse_look', True) else '0',
             'GOW3_MOUSE_SENS': str(self.settings.get('mouse_sens', 1.0)),
             'GOW3_MOUSE_INVERT_Y': '1' if self.settings.get('mouse_invert') else '0',
+            'GOW3_PAD_DEAD_ZONE': str(int(self.settings.get('pad_dead_zone', 0)) / 100),
+            'GOW3_PAD_SPEAKER_VOLUME': str(int(self.settings.get('pad_speaker', 100))),
             'GOW3_DISCORD': '1' if DISCORD_ID and self.settings.get('discord_rpc', True) else '0',
             'GOW3_DISCORD_ID': DISCORD_ID,
             'GOW3_DISCORD_DETAILS': DISCORD_DETAILS,
