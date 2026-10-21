@@ -9,7 +9,7 @@ uintptr_t runtime_lookup(const RuntimeExport *table,size_t n,const char *name) {
     return 0;
 }
 int main(void) {
-    char root[]="/tmp/gow3-mod-files-XXXXXX";
+    char root[]="out/gow3-mod-files-XXXXXX";
     assert(mkdtemp(root));
     char game[512],user[512],source[512],link[512];
     snprintf(game,sizeof(game),"%s/game",root);
@@ -18,13 +18,22 @@ int main(void) {
     snprintf(link,sizeof(link),"%s/game/asset.dcx",root);
     assert(!mkdir(game,0755));
     FILE *f=fopen(source,"w"); assert(f); assert(fputs("modded",f)>=0); assert(!fclose(f));
+#ifdef _WIN32
+    char target[512]; assert(_fullpath(target,source,sizeof(target)));
+    assert(CreateSymbolicLinkA(link,target,SYMBOLIC_LINK_FLAG_ALLOW_UNPRIVILEGED_CREATE));
+#else
     assert(!symlink(source,link));
+#endif
     runtime_file_configure(game,user);
     for (int i=0;i<3;++i) {
         const char *path=i==0 ? "/app0/asset.dcx" : i==1 ? "/hostapp/asset.dcx" : "asset.dcx";
         int fd=(int)do_open(path,0,0); assert(fd>=3);
         char content[8]={0}; assert(do_read(fd,content,6)==6 && !strcmp(content,"modded"));
-        GuestStat info; assert(!do_stat(path,&info) && info.size==6);
+        /* game_update uses file symlinks. stat, like open, must describe their targets; the
+         * Windows CRT otherwise reports a successful zero-size stat for the link itself. */
+        GuestStat opened_info,info;
+        assert(!do_fstat(fd,&opened_info) && opened_info.size==6);
+        assert(!do_stat(path,&info) && info.size==opened_info.size);
         assert(!do_close(fd));
         assert(do_open(path,2,0)==-EROFS);
         assert(do_open(path,0x400,0)==-EROFS);

@@ -185,6 +185,27 @@ static void convert_stat(const HostStat *s,GuestStat *g) {
 #endif
     g->birthtime=g->ctime;
 }
+#ifdef _WIN32
+/* _stat64 reports a file symlink itself rather than its target. In particular, the links in
+ * game_update's merged view have size zero even though open() follows them. PS4 stat follows
+ * symlinks, so refresh file-link metadata through the descriptor that open() resolves. Keep the
+ * successful _stat64 result if the target cannot be opened (for example, an unusual special file). */
+static int host_stat_follow(const char *path,HostStat *s) {
+    if (host_stat(path,s)) return -1;
+    DWORD attributes=GetFileAttributesA(path);
+    if (attributes==INVALID_FILE_ATTRIBUTES || !(attributes&FILE_ATTRIBUTE_REPARSE_POINT) ||
+        (attributes&FILE_ATTRIBUTE_DIRECTORY)) return 0;
+    int fd=open(path,O_RDONLY|O_BINARY);
+    if (fd>=0) {
+        HostStat target;
+        if (!host_fstat(fd,&target)) *s=target;
+        close(fd);
+    }
+    return 0;
+}
+#else
+#define host_stat_follow(path,s) host_stat(path,s)
+#endif
 static File *get(int fd) {
     if (fd<3 || fd>=MAX_FILES || !files[fd].used) return NULL;
     return &files[fd];
@@ -392,7 +413,7 @@ static int64_t do_stat(const char *guest,GuestStat *out) {
     int e=translate(guest,path,sizeof(path));
     if (e) return -e;
     if (!out) return -EFAULT;
-    if (host_stat(path,&s)) return -errno;
+    if (host_stat_follow(path,&s)) return -errno;
     convert_stat(&s,out); return 0;
 }
 static int64_t do_getdents(int fd,char *buffer,uint64_t size,int64_t *basep) {
