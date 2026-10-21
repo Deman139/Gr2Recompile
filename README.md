@@ -59,6 +59,10 @@ stable on Windows.
 
 ## What's included
 
+- **Much higher FPS (0.2.5):** two performance options, on by default under *Advanced →
+  Performance*, keep the GPU busy instead of waiting (about +40-50% FPS in heavy scenes in our
+  tests, GPU usage up from ~60% to ~90%). **If you get a crash or a graphics error, turn them off
+  (one at a time) and play as before**, and tell us in an issue.
 - **Resolutions above 1080p with AMD FSR 3.1 or NVIDIA DLSS** (1440p, 1800p, 4K): the game renders
   at 1080p and the upscaler takes it to your resolution, while the HUD, menus and videos are drawn
   sharp at full resolution. The classic method (a game patch) is still under *Advanced*.
@@ -79,6 +83,9 @@ stable on Windows.
 
 ## Known issues
 
+- **New performance options (0.2.5):** tested on one setup only. If the game closes or something
+  looks wrong, turn off *Advanced → Performance* (both options) and try again before opening an
+  issue; tell us whether that fixed it.
 - **First play:** some effects can show up a few frames late while their shader compiles.
 - **Above 60 FPS (experimental):** turn VSync off on a 60 Hz monitor, otherwise it stays at 60.
 - The shader cache can take several GB ("Clear cache" in the launcher).
@@ -87,7 +94,7 @@ stable on Windows.
 ## Future plans
 
 **High priority**
-- Performance: better use of the GPU and CPU.
+- Performance: even better use of the GPU and CPU (a big step already in 0.2.5).
 - Mouse input: direct camera control instead of the emulated right stick.
 - Launcher options in the in-game menu (Insert), changeable while playing.
 
@@ -103,7 +110,9 @@ stable on Windows.
 ## Reporting bugs
 
 Open an [issue](../../issues) with what happened, where (chapter), your GPU, CPU and driver, and
-attach that session's folder from `user\logs\` (launcher **Logs** button).
+attach that session's folder from `user\logs\` (launcher **Logs** button). **Crash or graphics
+error?** First try with *Advanced → Performance* turned off and say in the issue whether it still
+happens.
 
 ## Building from source
 
@@ -175,6 +184,10 @@ nativa para Linux (AppImage).
 
 ## Qué incluye
 
+- **Muchos más FPS (0.2.5):** dos opciones de rendimiento, activadas por defecto en *Avanzado →
+  Rendimiento*, hacen que la GPU trabaje en vez de esperar (cerca de +40-50% de FPS en escenas
+  pesadas en nuestras pruebas, uso de GPU de ~60% a ~90%). **Si tenés un crash o un error gráfico,
+  desactivalas (de a una) y jugás como antes**, y contanos en un issue.
 - **Resoluciones mayores a 1080p con AMD FSR 3.1 o NVIDIA DLSS** (1440p, 1800p, 4K): el juego
   renderiza en 1080p y el reescalador lo lleva a tu resolución, mientras el HUD, los menús y los
   videos se dibujan nítidos a resolución completa. El método clásico (parche del juego) sigue
@@ -196,6 +209,9 @@ nativa para Linux (AppImage).
 
 ## Problemas conocidos
 
+- **Opciones de rendimiento nuevas (0.2.5):** probadas en una sola PC. Si el juego se cierra o algo
+  se ve mal, desactivá *Avanzado → Rendimiento* (las dos opciones) y probá de nuevo antes de abrir
+  un issue; contanos si eso lo solucionó.
 - **Primera partida:** algunos efectos pueden aparecer unos cuadros tarde mientras se compila su shader.
 - **Más de 60 FPS (experimental):** con un monitor de 60 Hz desactivá VSync, si no se queda en 60.
 - La caché de shaders puede ocupar varios GB ("Borrar caché" en el launcher).
@@ -204,7 +220,7 @@ nativa para Linux (AppImage).
 ## Planes futuros
 
 **Prioridad alta**
-- Rendimiento: mejor aprovechamiento de GPU y CPU.
+- Rendimiento: aprovechar todavía mejor GPU y CPU (en la 0.2.5 ya hubo un salto grande).
 - Input del mouse: control directo de la cámara en lugar del stick derecho emulado.
 - Opciones del launcher en el menú dentro del juego (Insert), cambiables mientras jugás.
 
@@ -220,7 +236,8 @@ nativa para Linux (AppImage).
 ## Reportar errores
 
 Abrí un [issue](../../issues) con qué pasó, dónde (capítulo), tu GPU, CPU y driver, y adjuntá la
-carpeta de esa partida en `user\logs\` (botón **Logs** del launcher).
+carpeta de esa partida en `user\logs\` (botón **Logs** del launcher). **¿Crash o error gráfico?**
+Primero probá con *Avanzado → Rendimiento* desactivado y decí en el issue si sigue pasando.
 
 ## Compilar desde el código
 

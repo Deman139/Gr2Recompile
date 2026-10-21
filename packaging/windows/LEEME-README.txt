@@ -49,6 +49,12 @@ How to play
   3. On the Game tab, Browse... and choose your dump's folder (the one holding eboot.bin).
   4. PLAY.
 
+Performance (new in 0.2.5)
+  Advanced > Performance has two options, on by default: "Parallel drawing" and "Game copies
+  without waiting for the GPU". Together about +40-50% FPS in heavy scenes in our tests.
+  If the game closes or something looks wrong, turn them off (one at a time) and play as before;
+  please tell us in an issue whether that fixed it.
+
 Controls
   - Controller: Xbox, DualShock 4, DualSense and other SDL-compatible pads.
   - Keyboard and mouse: WASD to move, mouse for the camera, left click fires, right click aims.
@@ -151,6 +157,12 @@ Cómo jugar
   2. Abrí "Killzone Shadow Fall.exe".
   3. En la pestaña Juego, Examinar... y elegí la carpeta de tu dump (la que tiene eboot.bin).
   4. JUGAR.
+
+Rendimiento (nuevo en 0.2.5)
+  Avanzado > Rendimiento tiene dos opciones, activadas por defecto: "Dibujo en paralelo" y
+  "Copias del juego sin esperar a la GPU". Juntas, cerca de +40-50% de FPS en escenas pesadas en
+  nuestras pruebas. Si el juego se cierra o algo se ve mal, desactivalas (de a una) y jugás como
+  antes; contanos en un issue si eso lo solucionó.
 
 Controles
   - Mando: Xbox, DualShock 4, DualSense y otros compatibles con SDL.

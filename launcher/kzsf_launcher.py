@@ -163,6 +163,11 @@ TEXTS = {
                            'DLSS: lo mismo con NVIDIA DLSS (GeForce RTX; en otras placas usa FSR 3.1). Clásico: '
                            'el juego mismo renderiza a esa resolución; más exigente, y pueden aparecer parpadeos '
                            'de luz, una sombra que sigue a la cámara y videos con zoom.',
+        'perf_heading': 'Rendimiento',
+        'draw_pipe': 'Dibujo en paralelo (2 hilos de GPU)',
+        'nowait_writes': 'Copias del juego sin esperar a la GPU',
+        'perf_help': 'Más FPS y más uso de la GPU. Si ves errores gráficos o el juego se cierra, '
+                     'desactivalos de a uno para comparar y contanos en un issue.',
         'smart_pending': 'Saltar dibujos mientras su shader compila',
         'smart_pending_help': 'Casi sin tirones la primera vez que jugás un nivel. Desactivalo si ves objetos, '
                               'luces o sombras que faltan o parpadean al entrar en zonas nuevas: el juego '
@@ -276,6 +281,11 @@ TEXTS = {
                            'same with NVIDIA DLSS (GeForce RTX; other cards get FSR 3.1). Classic: the game itself '
                            'renders at that resolution; heavier, and lighting flicker, a shadow following the '
                            'camera and zoomed-in videos may appear.',
+        'perf_heading': 'Performance',
+        'draw_pipe': 'Parallel drawing (2 GPU threads)',
+        'nowait_writes': 'Game copies without waiting for the GPU',
+        'perf_help': 'More FPS and higher GPU usage. If you see graphics errors or the game closes, '
+                     'turn them off one at a time to compare and tell us in an issue.',
         'smart_pending': 'Skip draws while their shader compiles',
         'smart_pending_help': 'Almost no stutter the first time you play a level. Turn it off if objects, lights '
                               'or shadows go missing or flicker when you reach new areas: the game then waits '
@@ -424,6 +434,7 @@ GRAPHICS_DEFAULTS = {
 LAUNCHER_DEFAULTS = {'game_dir': '', 'update_dir': '', 'language': '', 'window_size': '1920x1080',
                      'key_map': {}, 'pad_map': {}, 'mouse_look': True, 'mouse_sens': 1.0,
                      'mouse_invert': False, 'check_updates': True, 'smart_pending': True,
+                     'draw_pipe': True, 'nowait_writes': True,
                      'res_method': 'upscale', 'discord_rpc': True, 'pad_dead_zone': 0,
                      'pad_speaker': 100}
 # Discord Rich Presence: the application "Killzone Shadow Fall" (its name is what Discord shows) and the
@@ -1202,6 +1213,22 @@ class Launcher:
 
     # -- advanced tab -----------------------------------------------------------------------
 
+    def perf_section(self, parent):
+        row = self.tk.Frame(parent, bg=PANEL)
+        row.pack(fill='x', pady=(self.px(6), 0))
+        self.tk.Label(row, text=tr('perf_heading') + ':', bg=PANEL, fg=ACCENT,
+                      font=self.font(9, 'bold')).pack(side='left')
+        for key in ('draw_pipe', 'nowait_writes'):
+            var = self.tk.BooleanVar(value=bool(self.settings.get(key, True)))
+
+            def changed(key=key, var=var):
+                self.settings[key] = var.get()
+                save_launcher(self.settings)
+            self.ttk.Checkbutton(row, text=tr(key), variable=var, command=changed).pack(
+                side='left', padx=(self.px(12), 0))
+            self.images.setdefault('vars', []).append(var)
+        self.note(parent, '      ' + tr('perf_help'))
+
     def advanced_tab(self, parent):
         self.note(parent, tr('advanced_help'), color=WARN)
         self.tk.Frame(parent, bg=PANEL, height=self.px(8)).pack()
@@ -1216,6 +1243,7 @@ class Launcher:
                              command=smart_changed).pack(anchor='w', pady=self.px(4))
         self.images.setdefault('vars', []).append(smart)
         self.note(parent, '      ' + tr('smart_pending_help'))
+        self.perf_section(parent)
         self.tk.Frame(parent, bg=PANEL, height=self.px(8)).pack()
         method = self.settings.get('res_method') if self.settings.get('res_method') in RES_METHODS else 'upscale'
 
@@ -1264,7 +1292,8 @@ class Launcher:
         self.graphics = dict(GRAPHICS_DEFAULTS)
         save_graphics(self.graphics)
         self.settings.update(window_size='1920x1080', key_map={}, pad_map={}, mouse_look=True, mouse_sens=1.0,
-                             mouse_invert=False, smart_pending=True, res_method='upscale', frame_gen='off',
+                             mouse_invert=False, smart_pending=True, draw_pipe=True, nowait_writes=True,
+                             res_method='upscale', frame_gen='off',
                              discord_rpc=True, pad_dead_zone=0, pad_speaker=100)
         save_launcher(self.settings)
         self.show_tab('advanced')
@@ -1390,6 +1419,13 @@ class Launcher:
             'GOW3_DISCORD_DETAILS': DISCORD_DETAILS,
             'GOW3_DISCORD_IMAGE': DISCORD_IMAGE,
             'GOW3_SMART_PENDING': '1' if self.settings.get('smart_pending', True) else '0',
+            # Performance (2026-10-21 measurements): the two-stage draw pipeline, and libc's copy
+            # routine (0x3d99a2) writing next to a compute shader's output without a GPU readback.
+            # A variable set before the launcher starts (test .bat files) wins.
+            'GOW3_DRAW_PIPE': os.environ.get(
+                'GOW3_DRAW_PIPE', '1' if self.settings.get('draw_pipe', True) else '0'),
+            'GOW3_NOWAIT_WRITES': os.environ.get(
+                'GOW3_NOWAIT_WRITES', '3d99a2' if self.settings.get('nowait_writes', True) else ''),
             # One save folder for every release of the game: switching region keeps the saves.
             'GOW3_SAVEDATA_ID': TITLE_ID,
         })
