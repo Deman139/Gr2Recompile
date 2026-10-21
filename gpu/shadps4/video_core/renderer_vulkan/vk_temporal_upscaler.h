@@ -188,6 +188,12 @@ private:
     /// Records FSR 4 into output_image; on a permanent failure FSR 3 takes over.
     bool RecordFsr4(vk::CommandBuffer cmdbuf, Fsr4Upscaler::Image color, Fsr4Upscaler::Image depth,
                     u32 w, u32 h, u32 ow, u32 oh, float frame_ms);
+    /// Records the scaled-path FSR 3 into output_image (RGBA16F, any UI image format after it).
+    bool RecordFsr3Scaled(vk::CommandBuffer cmdbuf, vk::Image color_image, vk::Format color_format,
+                          vk::ImageUsageFlags color_usage, vk::Image depth_image,
+                          vk::Format depth_format, vk::ImageUsageFlags depth_usage,
+                          u32 source_width, u32 source_height, u32 w, u32 h, u32 ow, u32 oh,
+                          float frame_ms);
     void RecordTaa(vk::CommandBuffer cmdbuf, vk::ImageView color, vk::ImageView depth);
     /// Sharpness above 1 for FSR 3/4 (their RCAS stops at 1): one more RCAS pass over the target
     /// (output_image, or the 8-bit UI image with ldr) in General layout after the upscaler.

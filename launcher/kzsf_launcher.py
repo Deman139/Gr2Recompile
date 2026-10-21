@@ -40,8 +40,12 @@ FROZEN = getattr(sys, 'frozen', False)
 PORT_DIR = Path(sys.executable).resolve().parent if FROZEN else Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PORT_DIR / 'scripts'))
 
-VERSION = '0.2.3'
+VERSION = '0.2.4'
 TITLE_ID = 'CUSA00190'
+# Other releases of the game players run (their languages), accepted untested: the port was built and
+# tested on CUSA00190. Every one must be at version 01.81.
+OTHER_TITLE_IDS = {'CUSA00191': 'LATAM', 'CUSA00002': 'Europe', 'CUSA00085': 'Japan'}
+TITLE_IDS = {TITLE_ID, *OTHER_TITLE_IDS}
 GAME_VERSION = '01.81'
 USER_DIR = Path(os.environ.get('KZSF_USER_DIR', PORT_DIR / 'user'))
 LAUNCHER_FILE = USER_DIR / 'launcher.json'
@@ -79,7 +83,8 @@ TEXTS = {
         'tab_game': 'Juego', 'tab_graphics': 'Gráficos', 'tab_controls': 'Controles', 'tab_advanced': 'Avanzado',
         'play': 'JUGAR', 'playing': 'EN JUEGO', 'preparing': 'Iniciando…',
         'game_folder': 'Carpeta del juego',
-        'game_folder_help': f'La carpeta de tu dump de PS4 ({TITLE_ID}, versión {GAME_VERSION}): la que contiene eboot.bin.',
+        'game_folder_help': f'La carpeta de tu dump de PS4 (versión {GAME_VERSION}; {TITLE_ID}, la probada, o '
+                            f'{", ".join(sorted(OTHER_TITLE_IDS))}, sin probar): la que contiene eboot.bin.',
         'update_folder': 'Carpeta de la actualización',
         'update_folder_help': f'Tu dump base no es la versión {GAME_VERSION}: elegí la carpeta de la actualización {GAME_VERSION} (CUSA00190-patch).',
         'browse': 'Examinar…', 'choose_game': 'Elegí la carpeta del juego (la que tiene eboot.bin)',
@@ -88,6 +93,8 @@ TEXTS = {
         'no_eboot': 'En esa carpeta no hay eboot.bin.',
         'no_sfo': 'Falta sce_sys/param.sfo: el dump está incompleto.',
         'wrong_game': 'Esa carpeta es de otro juego ({id}). Este port es para Killzone Shadow Fall ({want}).',
+        'other_region': 'Versión {id}: no probada (el port se desarrolló y probó en CUSA00190), puede funcionar; contanos cómo te va en GitHub.',
+        'other_region_jp': 'Versión {id} (japonesa): no probada (el port se desarrolló y probó en CUSA00190); los textos en japonés pueden verse mal o faltar.',
         'need_update': 'Versión {ver}: falta la actualización {want}.',
         'bad_update': 'La carpeta de actualización no es {want} versión {ver_want} (es {id} {ver}).',
         'ready': 'Listo: {title} · {id} · versión {ver}',
@@ -170,6 +177,9 @@ TEXTS = {
         'update_close_game': 'Cerrá el juego antes de actualizar.',
         'update_previous_failed': 'La última actualización no se pudo aplicar. Probá de nuevo o descargala desde GitHub.',
         'check_updates': 'Buscar actualizaciones al iniciar', 'check_updates_now': 'Buscar actualizaciones',
+        'discord_rpc': 'Mostrar en Discord que estás jugando',
+        'discord_rpc_help': 'Discord muestra "Killzone Shadow Fall" y el tiempo jugado en tu perfil (Discord '
+                            'tiene que estar abierto).',
         'updates': 'Actualizaciones',
         'reset_all_confirm': '¿Volver todas las opciones gráficas, avanzadas y de controles a los valores por defecto?',
         'language': 'Idioma',
@@ -183,7 +193,8 @@ TEXTS = {
         'tab_game': 'Game', 'tab_graphics': 'Graphics', 'tab_controls': 'Controls', 'tab_advanced': 'Advanced',
         'play': 'PLAY', 'playing': 'IN GAME', 'preparing': 'Starting…',
         'game_folder': 'Game folder',
-        'game_folder_help': f'The folder of your PS4 dump ({TITLE_ID}, version {GAME_VERSION}): the one holding eboot.bin.',
+        'game_folder_help': f'The folder of your PS4 dump (version {GAME_VERSION}; {TITLE_ID}, the tested one, or '
+                            f'{", ".join(sorted(OTHER_TITLE_IDS))}, untested): the one holding eboot.bin.',
         'update_folder': 'Update folder',
         'update_folder_help': f'Your base dump is not version {GAME_VERSION}: choose the folder of update {GAME_VERSION} (CUSA00190-patch).',
         'browse': 'Browse…', 'choose_game': 'Choose the game folder (the one with eboot.bin)',
@@ -192,6 +203,8 @@ TEXTS = {
         'no_eboot': 'There is no eboot.bin in that folder.',
         'no_sfo': 'sce_sys/param.sfo is missing: the dump is incomplete.',
         'wrong_game': 'That folder holds another game ({id}). This port is for Killzone Shadow Fall ({want}).',
+        'other_region': 'Release {id}: untested (the port was built and tested on CUSA00190), it may work; tell us how it goes on GitHub.',
+        'other_region_jp': 'Release {id} (Japanese): untested (the port was built and tested on CUSA00190); Japanese texts may look wrong or be missing.',
         'need_update': 'Version {ver}: update {want} is missing.',
         'bad_update': 'The update folder is not {want} version {ver_want} (it is {id} {ver}).',
         'ready': 'Ready: {title} · {id} · version {ver}',
@@ -273,6 +286,9 @@ TEXTS = {
         'update_close_game': 'Close the game before updating.',
         'update_previous_failed': 'The last update could not be applied. Try again or download it from GitHub.',
         'check_updates': 'Check for updates at startup', 'check_updates_now': 'Check for updates',
+        'discord_rpc': 'Show on Discord that you are playing',
+        'discord_rpc_help': 'Discord shows "Killzone Shadow Fall" and the time played on your profile (Discord '
+                            'must be open).',
         'updates': 'Updates',
         'reset_all_confirm': 'Set every graphics, advanced and control option back to its default?',
         'language': 'Language',
@@ -365,19 +381,22 @@ def check_game(game_dir, update_dir):
     if not sfo:
         return False, tr('no_sfo'), False
     title_id = str(sfo.get('TITLE_ID', '?'))
-    if title_id != TITLE_ID:
+    if title_id not in TITLE_IDS:
         return False, tr('wrong_game', id=title_id, want=TITLE_ID), False
     title = clean_title(sfo.get('TITLE', 'Killzone Shadow Fall'))
     version = str(sfo.get('APP_VER', '?'))
+    # Another region: playable message plus the warning (untested, Japanese texts).
+    other = '' if title_id == TITLE_ID else ' ' + tr('other_region_jp' if title_id == 'CUSA00085' else 'other_region',
+                                                     id=title_id)
     if version == GAME_VERSION:
-        return True, tr('ready', title=title, id=title_id, ver=version), False
+        return True, tr('ready', title=title, id=title_id, ver=version) + other, False
     if not update_dir:
         return False, tr('need_update', ver=version, want=GAME_VERSION), True
     update = read_sfo(Path(update_dir) / 'sce_sys' / 'param.sfo') or {}
     up_id, up_ver = str(update.get('TITLE_ID', '?')), str(update.get('APP_VER', '?'))
-    if up_id != TITLE_ID or up_ver != GAME_VERSION or not (Path(update_dir) / 'eboot.bin').is_file():
-        return False, tr('bad_update', want=TITLE_ID, ver_want=GAME_VERSION, id=up_id, ver=up_ver), True
-    return True, tr('ready_update', title=title, id=title_id, ver=up_ver), True
+    if up_id not in TITLE_IDS or up_ver != GAME_VERSION or not (Path(update_dir) / 'eboot.bin').is_file():
+        return False, tr('bad_update', want=title_id, ver_want=GAME_VERSION, id=up_id, ver=up_ver), True
+    return True, tr('ready_update', title=title, id=title_id, ver=up_ver) + other, True
 
 
 def clean_title(title):
@@ -397,7 +416,12 @@ GRAPHICS_DEFAULTS = {
 LAUNCHER_DEFAULTS = {'game_dir': '', 'update_dir': '', 'language': '', 'window_size': '1920x1080',
                      'key_map': {}, 'pad_map': {}, 'mouse_look': True, 'mouse_sens': 1.0,
                      'mouse_invert': False, 'check_updates': True, 'smart_pending': True,
-                     'res_method': 'upscale'}
+                     'res_method': 'upscale', 'discord_rpc': True}
+# Discord Rich Presence: the application "Killzone Shadow Fall" (its name is what Discord shows) and the
+# key of its large image asset. Empty ID: no presence.
+DISCORD_ID = '1562348304153706608'
+DISCORD_IMAGE = 'logo'
+DISCORD_DETAILS = 'PC Port by Lesca'
 RES_METHODS = ('upscale', 'dlss', 'patch')
 # Frame generation (GOW3_FRAME_GEN): FSR 3.1 on any GPU; DLSS Frame Generation for RTX 40/50
 # (the port falls back to FSR 3.1 until it is supported).
@@ -559,6 +583,21 @@ def open_folder(path):
         os.startfile(str(path))  # noqa: S606
     else:
         subprocess.Popen(['xdg-open', str(path)])
+
+
+def adopt_region_saves():
+    """Copies saves of another release (CUSA00002/...) into the shared CUSA00190 folder for each user
+    that has none there yet (GOW3_SAVEDATA_ID). Nothing is moved or overwritten."""
+    for user in (PS4_DIR / 'savedata').glob('*'):
+        target = user / TITLE_ID
+        if not user.is_dir() or target.exists():
+            continue
+        source = next((user / i for i in sorted(OTHER_TITLE_IDS) if (user / i).is_dir()), None)
+        if source:
+            try:
+                shutil.copytree(source, target)
+            except OSError:
+                shutil.rmtree(target, ignore_errors=True)
 
 
 def prune_logs():
@@ -866,7 +905,11 @@ class Launcher:
         ok, message, needs_update = check_game(self.settings['game_dir'], self.settings['update_dir'])
         self.game_ok = ok
         if getattr(self, 'game_status', None) is not None and self.game_status.winfo_exists():
-            self.game_status.configure(text=('✓  ' if ok else '✕  ') + message, fg=OK if ok else
+            # Another region plays, in the warning colour (untested).
+            sfo = read_sfo(Path(self.settings['game_dir']) / 'sce_sys' / 'param.sfo') if ok else None
+            other = bool(sfo) and str(sfo.get('TITLE_ID')) != TITLE_ID
+            self.game_status.configure(text=('✓  ' if ok else '✕  ') + message,
+                                       fg=(WARN if other else OK) if ok else
                                        (WARN if needs_update or not self.settings['game_dir'] else ERROR))
             for child in self.update_frame.winfo_children():
                 child.destroy()
@@ -887,9 +930,9 @@ class Launcher:
         if not folder:
             return
         folder = Path(folder)
-        # The eboot.bin may be one level down (a folder holding CUSA00190/).
-        if not (folder / 'eboot.bin').is_file() and (folder / TITLE_ID / 'eboot.bin').is_file():
-            folder = folder / TITLE_ID
+        # The eboot.bin may be one level down (a folder holding CUSA00190/ or another release).
+        if not (folder / 'eboot.bin').is_file():
+            folder = next((folder / i for i in sorted(TITLE_IDS) if (folder / i / 'eboot.bin').is_file()), folder)
         self.settings['game_dir'] = str(folder)
         save_launcher(self.settings)
         self.images.pop('banner_key', None)
@@ -1162,6 +1205,15 @@ class Launcher:
         self.button(row, tr('check_updates_now'), lambda: self.check_updates(quiet=False)).pack(
             side='left', padx=self.px(16))
         self.images.setdefault('vars', []).append(var)
+        discord = self.tk.BooleanVar(value=bool(self.settings.get('discord_rpc', True)))
+
+        def discord_changed():
+            self.settings['discord_rpc'] = discord.get()
+            save_launcher(self.settings)
+        self.ttk.Checkbutton(parent, text=tr('discord_rpc'), variable=discord,
+                             command=discord_changed).pack(anchor='w', pady=(self.px(8), 0))
+        self.note(parent, '      ' + tr('discord_rpc_help'))
+        self.images.setdefault('vars', []).append(discord)
         self.tk.Frame(parent, bg=LINE, height=1).pack(fill='x', pady=self.px(14))
         self.button(parent, tr('reset_all'), self.reset_all).pack(anchor='w')
 
@@ -1171,7 +1223,8 @@ class Launcher:
         self.graphics = dict(GRAPHICS_DEFAULTS)
         save_graphics(self.graphics)
         self.settings.update(window_size='1920x1080', key_map={}, pad_map={}, mouse_look=True, mouse_sens=1.0,
-                             mouse_invert=False, smart_pending=True, res_method='upscale', frame_gen='off')
+                             mouse_invert=False, smart_pending=True, res_method='upscale', frame_gen='off',
+                             discord_rpc=True)
         save_launcher(self.settings)
         self.show_tab('advanced')
 
@@ -1275,6 +1328,7 @@ class Launcher:
         run_dir = LOGS_DIR / time.strftime('%Y-%m-%d_%H-%M-%S')
         run_dir.mkdir(parents=True, exist_ok=True)
         prune_logs()
+        adopt_region_saves()
         env = dict(os.environ)
         env.update({
             'GOW3_GAME_DIR': self.settings['game_dir'],
@@ -1288,8 +1342,13 @@ class Launcher:
             'GOW3_MOUSE_LOOK': '1' if self.settings.get('mouse_look', True) else '0',
             'GOW3_MOUSE_SENS': str(self.settings.get('mouse_sens', 1.0)),
             'GOW3_MOUSE_INVERT_Y': '1' if self.settings.get('mouse_invert') else '0',
-            'GOW3_DISCORD': '0',  # its Discord presence is God of War III's
+            'GOW3_DISCORD': '1' if DISCORD_ID and self.settings.get('discord_rpc', True) else '0',
+            'GOW3_DISCORD_ID': DISCORD_ID,
+            'GOW3_DISCORD_DETAILS': DISCORD_DETAILS,
+            'GOW3_DISCORD_IMAGE': DISCORD_IMAGE,
             'GOW3_SMART_PENDING': '1' if self.settings.get('smart_pending', True) else '0',
+            # One save folder for every release of the game: switching region keeps the saves.
+            'GOW3_SAVEDATA_ID': TITLE_ID,
         })
         # Upscaling method (any saved value but 'patch'): above 1080p the game stays at 1080p (run.py
         # drops the patch) and FSR 3.1 reaches the output, with the UI and videos drawn at that size.

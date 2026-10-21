@@ -1675,8 +1675,10 @@ void TemporalUpscaler::RunScaled() {
     }
     last_frame = now;
 
-    // gow3: FSR 4 writes its HDR-format output, copied into the output-size UI image.
-    if (UseFsr4() || UseDlss() || Gow3Settings::Get().upscaler == Gow3Settings::UpscalerTaa) {
+    // Every upscaler writes its RGBA16F output, blitted (format conversion included) into the
+    // output-size UI image. Killzone's UI image is B10G11R11: an FSR 3 storage write through an
+    // RGBA8 view of it gave a red and yellow screen (issue #37).
+    {
         barrier(vk::Image(output_image), vk::ImageAspectFlagBits::eColor,
                 vk::ImageLayout::eUndefined, all, vk::AccessFlagBits2::eNone,
                 vk::ImageLayout::eGeneral, all, rw);
@@ -1690,10 +1692,14 @@ void TemporalUpscaler::RunScaled() {
                              {depth_image, depth_view, depth_format, vk::ImageAspectFlagBits::eDepth,
                               source_width, source_height},
                              w, h, ow, oh, frame_ms, false);
-        } else {
+        } else if (UseFsr4()) {
             ok4 = RecordFsr4(cmdbuf, {color_image, color_view, source_width, source_height},
                             {depth_image, depth_view, source_width, source_height}, w, h, ow,
                             oh, frame_ms);
+        } else {
+            ok4 = RecordFsr3Scaled(cmdbuf, color_image, color.info.pixel_format, color.usage_flags,
+                                   depth_image, depth_format, depth.usage_flags, source_width,
+                                   source_height, w, h, ow, oh, frame_ms);
         }
         if (ok4) {
             if (Gow3Settings::Get().upscaler != Gow3Settings::UpscalerTaa) {
@@ -1768,24 +1774,31 @@ void TemporalUpscaler::RunScaled() {
         }
         return;
     }
+}
 
+bool TemporalUpscaler::RecordFsr3Scaled(vk::CommandBuffer cmdbuf, vk::Image color_image,
+                                        vk::Format color_format, vk::ImageUsageFlags color_usage,
+                                        vk::Image depth_image, vk::Format depth_format,
+                                        vk::ImageUsageFlags depth_usage, u32 source_width,
+                                        u32 source_height, u32 w, u32 h, u32 ow, u32 oh,
+                                        float frame_ms) {
     const auto& settings = Gow3Settings::Get();
     FfxVkPortableUpscaleDispatchInfo info{};
     info.structSize = sizeof(info);
     info.commandBuffer = cmdbuf;
-    info.color = Describe(color_image, color.info.pixel_format, source_width, source_height,
-                          color.usage_flags, vk::ImageAspectFlagBits::eColor,
+    info.color = Describe(color_image, color_format, source_width, source_height, color_usage,
+                          vk::ImageAspectFlagBits::eColor,
                           FFX_VK_PORTABLE_RESOURCE_STATE_GENERIC_READ);
-    info.depth = Describe(depth_image, depth_format, source_width, source_height, depth.usage_flags,
+    info.depth = Describe(depth_image, depth_format, source_width, source_height, depth_usage,
                           vk::ImageAspectFlagBits::eDepth,
                           FFX_VK_PORTABLE_RESOURCE_STATE_GENERIC_READ);
     info.motionVectors = Describe(vk::Image(motion_image), vk::Format::eR16G16Sfloat, w, h,
                                   vk::ImageUsageFlagBits::eStorage | vk::ImageUsageFlagBits::eSampled,
                                   vk::ImageAspectFlagBits::eColor,
                                   FFX_VK_PORTABLE_RESOURCE_STATE_GENERIC_READ);
-    info.output = Describe(vk::Image(ui_image), vk::Format::eR8G8B8A8Unorm, ow, oh,
+    info.output = Describe(vk::Image(output_image), vk::Format::eR16G16B16A16Sfloat, ow, oh,
                            vk::ImageUsageFlagBits::eStorage | vk::ImageUsageFlagBits::eSampled |
-                               vk::ImageUsageFlagBits::eColorAttachment,
+                               vk::ImageUsageFlagBits::eTransferSrc,
                            vk::ImageAspectFlagBits::eColor,
                            FFX_VK_PORTABLE_RESOURCE_STATE_UNORDERED_ACCESS);
     info.exposure.structSize = sizeof(info.exposure);
@@ -1817,7 +1830,6 @@ void TemporalUpscaler::RunScaled() {
     create_info.structSize = sizeof(create_info);
     create_info.maxRenderSize = {w, h};
     create_info.maxOutputSize = {ow, oh};
-    bool ok = false;
     if (const u64 issues = ffxVkPortableValidateUpscaleDispatchInfo(&create_info, &info)) {
         PrintIssues("scaled dispatch", issues);
         failed = true;
@@ -1825,25 +1837,9 @@ void TemporalUpscaler::RunScaled() {
         std::printf("Upscaler: FSR 3 scaled dispatch failed\n");
         failed = true;
     } else {
-        ok = true;
-        reset = false;
-        dispatched_last_frame = true;
-        ExtraSharpen(cmdbuf, vk::Image(ui_image), true, ow, oh);
+        return true;
     }
-    barrier(vk::Image(ui_image), vk::ImageAspectFlagBits::eColor, vk::ImageLayout::eGeneral, all,
-            rw, vk::ImageLayout::eGeneral, vk::PipelineStageFlagBits2::eColorAttachmentOutput,
-            color_access);
-    if (ok && frame_generator) {
-        frame_generator->CaptureHudless(cmdbuf, vk::Image(ui_image), ow, oh, display_format, ow,
-                                        oh);
-    }
-
-    done_this_frame = true; // the UI is not jittered
-    if (ok) {
-        ui_phase = true;
-        ui_color = ldr_target;
-        ui_depth = camera_motion.Depth();
-    }
+    return false;
 }
 
 vk::ImageView TemporalUpscaler::Mirror(vk::Image image, std::vector<MirrorView>& views,

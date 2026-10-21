@@ -636,6 +636,11 @@ u32 FrameGenerator::GenerateFsr3(vk::CommandBuffer cmdbuf, const Slot& slot, vk:
             .usage = static_cast<VkImageUsageFlags>(usage),
         };
     };
+    // A frame without the game's camera (loads, cutscenes) must not end frame generation: FSR
+    // rejects a zero or invalid near plane / field of view.
+    const auto valid = [](float v, float max) { return std::isfinite(v) && v > 0.0f && v < max; };
+    const float camera_near = valid(slot.camera.near_plane, CameraFar) ? slot.camera.near_plane : 0.1f;
+    const float camera_fov = valid(slot.camera.vertical_fov, 3.1f) ? slot.camera.vertical_fov : 1.0f;
     const u64 id = ++fsr3_frame_id;
     const FfxVkFsr3_3_1_6FrameGenerationPrepareInfo prepare{
         .commandBuffer = cmdbuf,
@@ -654,10 +659,10 @@ u32 FrameGenerator::GenerateFsr3(vk::CommandBuffer cmdbuf, const Slot& slot, vk:
         .minLuminance = 0.0f,
         .maxLuminance = 1.0f,
         .transferFunction = FFX_VK_FSR3_3_1_6_FRAMEGEN_TRANSFER_SRGB,
-        .cameraNear = slot.camera.near_plane,
+        .cameraNear = camera_near,
         .cameraFar = CameraFar,
         .viewSpaceToMeters = 1.0f,
-        .cameraVerticalFovRadians = slot.camera.vertical_fov,
+        .cameraVerticalFovRadians = camera_fov,
         .cameraPosition = {0.0f, 0.0f, 0.0f},
         .cameraUp = {0.0f, 1.0f, 0.0f},
         .cameraRight = {1.0f, 0.0f, 0.0f},
@@ -665,11 +670,10 @@ u32 FrameGenerator::GenerateFsr3(vk::CommandBuffer cmdbuf, const Slot& slot, vk:
         .frameId = id,
         .reset = reset ? VK_TRUE : VK_FALSE,
     };
-    if (ffxVkFsr3_3_1_6FrameGenerationContextRecordPrepare(fsr3, &prepare) !=
-        FFX_VK_FSR3_3_1_6_FRAMEGEN_OK) {
+    if (const auto result = ffxVkFsr3_3_1_6FrameGenerationContextRecordPrepare(fsr3, &prepare);
+        result != FFX_VK_FSR3_3_1_6_FRAMEGEN_OK) {
         fsr3_pending.push_back({id, scheduler.CurrentTick()});
-        Fail(Gow3Settings::FrameGenFsr3, "FSR 3.1 frame generation (prepare) failed");
-        return 0;
+        return Fsr3Failed("prepare", result);
     }
     const FfxVkFsr3_3_1_6FrameGenerationDispatchInfo dispatch{
         .commandBuffer = cmdbuf,
@@ -693,10 +697,23 @@ u32 FrameGenerator::GenerateFsr3(vk::CommandBuffer cmdbuf, const Slot& slot, vk:
     const auto result = ffxVkFsr3_3_1_6FrameGenerationContextRecordDispatch(fsr3, &dispatch);
     fsr3_pending.push_back({id, scheduler.CurrentTick()});
     if (result != FFX_VK_FSR3_3_1_6_FRAMEGEN_OK) {
-        Fail(Gow3Settings::FrameGenFsr3, "FSR 3.1 frame generation (dispatch) failed");
-        return 0;
+        return Fsr3Failed("dispatch", result);
     }
+    fsr3_failures = 0;
     return 1;
+}
+
+u32 FrameGenerator::Fsr3Failed(const char* step, int result) {
+    // One bad frame skips its generated frame; only a run of them turns frame generation off.
+    std::printf("Frame generation: FSR 3.1 %s failed (code %d), frame skipped\n", step, result);
+    if (++fsr3_failures >= 30) {
+        Fail(Gow3Settings::FrameGenFsr3, step[0] == 'p'
+                                             ? "FSR 3.1 frame generation (prepare) failed"
+                                             : "FSR 3.1 frame generation (dispatch) failed");
+        fsr3_failures = 0;
+    }
+    reset = true;
+    return 0;
 }
 
 u32 FrameGenerator::GenerateDlss(vk::CommandBuffer cmdbuf, const Slot& slot, vk::Image color,

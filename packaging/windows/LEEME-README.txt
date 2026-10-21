@@ -1,4 +1,4 @@
-KILLZONE SHADOW FALL - Native Windows port (Lesca) - Beta 0.2.3
+KILLZONE SHADOW FALL - Native Windows port (Lesca) - Beta 0.2.4
 =================================================================
 
 [ENGLISH]
@@ -7,7 +7,18 @@ What it is
   An unofficial port that runs Killzone Shadow Fall (PS4) on Windows. The game's code runs
   directly on your CPU; graphics are translated to Vulkan in real time.
   It does NOT include any game files: you need your own dumped copy of the game,
-  CUSA00190 version 01.81. If your base dump is 01.00, also the 01.81 update.
+  version 01.81. If your base dump is 01.00, also the 01.81 update.
+
+Game versions
+  Developed and tested on CUSA00190 (USA, English and French). The launcher also accepts,
+  untested (they may work, no guarantees): CUSA00191 (Latin America), CUSA00002 (Europe) and
+  CUSA00085 (Japan; Japanese texts may look wrong or be missing). Version 01.81 is required in
+  every region: without it the game will most likely not work. All of them share the same saves.
+
+Linux and Steam Deck (Proton, not tested by us)
+  No Linux build yet. Add "Killzone Shadow Fall.exe" to Steam as a non-Steam game, force a
+  Proton version in its Properties > Compatibility (Proton Experimental or GE-Proton) and start
+  it from Steam. A native Linux version will come once the game is fully stable.
 
 Requirements
   - Windows 10 (1903 or later) or 11, 64-bit.
@@ -94,7 +105,20 @@ Qué es
   Un port no oficial que ejecuta Killzone Shadow Fall (PS4) en Windows. El código del juego
   corre directamente en tu CPU; la parte gráfica se traduce a Vulkan en tiempo real.
   NO incluye ningún archivo del juego: necesitás tu propia copia dumpeada del juego,
-  CUSA00190 versión 01.81. Si tu dump base es 01.00, también la actualización 01.81.
+  versión 01.81. Si tu dump base es 01.00, también la actualización 01.81.
+
+Versiones del juego
+  Desarrollado y probado en CUSA00190 (EE. UU., inglés y francés). El launcher también acepta,
+  sin probar (pueden funcionar, sin garantías): CUSA00191 (Latinoamérica), CUSA00002 (Europa) y
+  CUSA00085 (Japón; los textos en japonés pueden verse mal o faltar). Es obligatorio que sea la
+  versión 01.81 en cualquier región: sin ella, lo más probable es que no funcione. Todas
+  comparten las mismas partidas.
+
+Linux y Steam Deck (Proton, no probado por nosotros)
+  Todavía no hay versión para Linux. Agregá "Killzone Shadow Fall.exe" a Steam como juego que no
+  es de Steam, forzá una versión de Proton en Propiedades > Compatibilidad (Proton Experimental
+  o GE-Proton) y abrilo desde Steam. Cuando el juego esté 100% estable va a salir una versión
+  nativa para Linux.
 
 Requisitos
   - Windows 10 (1903 o superior) u 11, 64 bits.

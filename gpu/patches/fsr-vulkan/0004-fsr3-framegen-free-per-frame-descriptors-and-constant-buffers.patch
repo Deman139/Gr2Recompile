@@ -1,0 +1,30 @@
+From: kzsf_pc
+Subject: [PATCH] FSR 3.1.6 frame generation: free per-frame descriptor sets and constant buffers
+
+The frame generation context never called the bridge's BeginFrame/RetireFrame (the 3.1.5
+upscaler does): every descriptor set (its own VkDescriptorPool) and constant buffer (its own
+memory allocation) stayed tagged frame 0 and was never freed.
+---
+diff --git a/src/ffx_vk_fsr3_3_1_6_framegen.cpp b/src/ffx_vk_fsr3_3_1_6_framegen.cpp
+index 9636cec..e755345 100644
+--- a/src/ffx_vk_fsr3_3_1_6_framegen.cpp
++++ b/src/ffx_vk_fsr3_3_1_6_framegen.cpp
+@@ -463,6 +463,10 @@ ffxVkFsr3_3_1_6FrameGenerationContextRecordPrepare(
+         !valid_image(info->depth, VK_FORMAT_R32_SFLOAT, info->renderWidth, info->renderHeight, false) ||
+         !valid_motion_image(info->motionVectors, info->renderWidth, info->renderHeight))
+         return FFX_VK_FSR3_3_1_6_FRAMEGEN_ERROR_INVALID_ARGUMENT;
++    /* Tags this frame's descriptor sets and constant buffers so RetireFrame frees them. Without
++     * it they stayed at frame 0, never freed: one descriptor pool and one memory allocation per
++     * compute job and frame (gigabytes of RAM, then failed allocations). */
++    ffxVkFsr3_3_1_5BridgeBeginFrame(context->bridge, info->frameId);
+     if (!context->initialized) {
+         const OwnedSharedImage shared[] = {
+             context->opticalFlowVector, context->opticalFlowScd, context->dilatedDepth,
+@@ -656,6 +660,7 @@ ffxVkFsr3_3_1_6FrameGenerationContextRetireFrame(
+ {
+     if (!context)
+         return FFX_VK_FSR3_3_1_6_FRAMEGEN_ERROR_INVALID_ARGUMENT;
++    ffxVkFsr3_3_1_5BridgeRetireFrame(context->bridge, completedFrameId);
+     if (context->prepared && context->frameId <= completedFrameId) {
+         for (const FfxVkFsr3_3_1_5Resource resource : context->pendingImports)
+             ffxVkFsr3_3_1_5BridgeReleaseImportedImage(context->bridge, resource);

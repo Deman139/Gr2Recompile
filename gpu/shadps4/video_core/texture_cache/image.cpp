@@ -3,6 +3,8 @@
 
 #include "gow3_toggles.h"
 #include <algorithm>
+#include <atomic>
+#include <cstdio>
 #include <map>
 #include <mutex>
 #include <ranges>
@@ -165,6 +167,20 @@ void UniqueImage::Create(const vk::ImageCreateInfo& image_ci) {
     VmaAllocationInfo alloc_info{};
     VkResult result = vmaCreateImage(allocator, &image_ci_unsafe, &alloc_ci, &unsafe_image,
                                      &allocation, &alloc_info);
+    // Over Windows' VRAM budget (it moves with the other programs open): let the driver page to
+    // system memory instead of closing the game.
+    if (result == VK_ERROR_OUT_OF_DEVICE_MEMORY) {
+        VmaAllocationCreateInfo retry_ci = alloc_ci;
+        retry_ci.flags &= ~VMA_ALLOCATION_CREATE_WITHIN_BUDGET_BIT;
+        result = vmaCreateImage(allocator, &image_ci_unsafe, &retry_ci, &unsafe_image, &allocation,
+                                &alloc_info);
+        static std::atomic<u32> reports{0};
+        if (reports.fetch_add(1, std::memory_order_relaxed) < 20) {
+            std::printf("VRAM: image %ux%u refused by the budget; over it %s\n",
+                        image_ci.extent.width, image_ci.extent.height,
+                        result == VK_SUCCESS ? "instead" : "failed too");
+        }
+    }
     ASSERT_MSG(result == VK_SUCCESS, "Failed allocating image with error {}",
                vk::to_string(vk::Result{result}));
     image = vk::Image{unsafe_image};

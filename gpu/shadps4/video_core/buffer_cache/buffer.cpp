@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include <algorithm>
+#include <atomic>
+#include <cstdio>
 #include <cstdlib>
 #include <map>
 #include <mutex>
@@ -183,6 +185,29 @@ void UniqueBuffer::Create(vk::BufferCreateInfo& buffer_ci, MemoryType mem_type,
         VkBuffer unsafe_buffer{};
         VkResult result = vmaCreateBuffer(allocator, &buffer_ci_unsafe, &alloc_ci, &unsafe_buffer,
                                           &allocation, out_alloc_info);
+        // Windows' VRAM budget moves with the other programs open: a buffer over it closed the
+        // game ("ErrorOutOfDeviceMemory" with half the card free). Over the budget (the driver
+        // pages to system memory), then in system memory, before giving up.
+        if (result == VK_ERROR_OUT_OF_DEVICE_MEMORY) {
+            VmaAllocationCreateInfo retry_ci = alloc_ci;
+            retry_ci.flags &= ~VMA_ALLOCATION_CREATE_WITHIN_BUDGET_BIT;
+            result = vmaCreateBuffer(allocator, &buffer_ci_unsafe, &retry_ci, &unsafe_buffer,
+                                     &allocation, out_alloc_info);
+            const char* where = "over the VRAM budget";
+            if (result != VK_SUCCESS) {
+                retry_ci.usage = VMA_MEMORY_USAGE_AUTO_PREFER_HOST;
+                retry_ci.preferredFlags = 0;
+                result = vmaCreateBuffer(allocator, &buffer_ci_unsafe, &retry_ci, &unsafe_buffer,
+                                         &allocation, out_alloc_info);
+                where = "in system memory";
+            }
+            static std::atomic<u32> reports{0};
+            if (reports.fetch_add(1, std::memory_order_relaxed) < 20) {
+                std::printf("VRAM: buffer of %llu MiB refused by the budget; %s %s\n",
+                            (unsigned long long)(buffer_ci.size >> 20), where,
+                            result == VK_SUCCESS ? "instead" : "failed too");
+            }
+        }
         ASSERT_MSG(result == VK_SUCCESS, "Failed allocating buffer with error {}",
                    vk::to_string(vk::Result{result}));
         buffer = vk::Buffer{unsafe_buffer};

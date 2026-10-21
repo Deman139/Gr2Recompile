@@ -10,3 +10,6 @@ patches here to its working tree when they are not applied yet:
 - `0003-...`: the rest of the standard includes the FFX 1.1.4 SDK relies on being pulled in
   transitively by libstdc++ but not by libc++ / MinGW: `<cstdlib>` for `_countof`, `<wchar.h>`
   for `swprintf_s`, `<cmath>` for `log2` and `<new>` for placement new.
+- `0004-...`: FSR 3.1.6 frame generation tags each frame (`BeginFrame`) and frees its descriptor
+  sets and constant buffers when the frame retires; without it they were never freed (RAM growth
+  and failed generated frames).

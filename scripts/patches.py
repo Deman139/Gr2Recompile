@@ -162,7 +162,8 @@ PATCHES_DIR=Path(__file__).resolve().parent.parent/'patches'
 # any region or version whose code matches, so the eboot.bin build is not checked.
 GAMES=[({'CUSA01623','CUSA01715','CUSA01720'},PATCHES_DIR/'God_of_War_III_Remastered.xml','01.02',
         'God of War III'),
-       ({'CUSA00190'},PATCHES_DIR/'Killzone_Shadow_Fall.xml','01.81','Killzone Shadow Fall')]
+       ({'CUSA00190','CUSA00191','CUSA00002','CUSA00085'},PATCHES_DIR/'Killzone_Shadow_Fall.xml','01.81',
+        'Killzone Shadow Fall')]
 # The build the built-in Address values and third-party patch files are written for.
 REFERENCE_SHA256='d85c8135d330c3b601bf5dc3f1dd86bd6119fb8a9fce372bed2c9785f9a79299'
 DMEM_RETAIL_MB=4608  # runtime_memory.c POOL_SIZE default

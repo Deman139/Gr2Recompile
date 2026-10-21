@@ -128,6 +128,8 @@ private:
     void DestroyFsr3();
     /// A provider failed for good: DLSS hands over to FSR 3.1, FSR 3.1 switches it off.
     void Fail(int provider, const char* reason);
+    /// A failed FSR 3.1 step: skips this generated frame; a run of 30 turns generation off.
+    u32 Fsr3Failed(const char* step, int result);
 
     const Instance& instance;
     Scheduler& scheduler;
@@ -153,6 +155,7 @@ private:
     FfxVkFsr3_3_1_6FrameGenerationContext* fsr3 = nullptr;
     u32 fsr3_width = 0, fsr3_height = 0, fsr3_render_width = 0, fsr3_render_height = 0;
     u64 fsr3_frame_id = 0;
+    u32 fsr3_failures = 0; ///< in a row
     struct Pending {
         u64 frame_id;
         u64 tick;

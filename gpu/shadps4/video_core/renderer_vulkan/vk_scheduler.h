@@ -5,6 +5,7 @@
 
 #include <atomic>
 #include <chrono>
+#include <cstdio>
 #include <cstring>
 #include <condition_variable>
 #include <deque>
@@ -615,6 +616,13 @@ public:
         return storage + offset;
     }
 
+    /// Heap storage for data too large for the chunk (a descriptor or copy list over its
+    /// capacity), freed with the chunk's commands.
+    void* AllocateOverflow(size_t bytes) {
+        overflow.push_back(std::make_unique<std::byte[]>(bytes));
+        return overflow.back().get();
+    }
+
     void Execute(vk::CommandBuffer cmdbuf) {
         for (CommandBase* command = first; command;) {
             CommandBase* const next = command->next;
@@ -624,6 +632,7 @@ public:
         }
         first = last = nullptr;
         used = 0;
+        overflow.clear();
     }
 
     [[nodiscard]] bool Empty() const noexcept {
@@ -662,6 +671,7 @@ private:
 
     alignas(64) std::byte storage[Capacity];
     size_t used = 0;
+    std::vector<std::unique_ptr<std::byte[]>> overflow;
     CommandBase* first{};
     CommandBase* last{};
 };
@@ -758,6 +768,7 @@ public:
             const bool pushed = record_chunk->Push(std::forward<Func>(func));
             ASSERT(pushed);
         }
+        record_overflow = false;
     }
 
     /// True when Record() defers commands (and RecordData() copies into chunks).
@@ -772,7 +783,12 @@ public:
         if (!IsRecordingDeferred()) {
             return;
         }
-        ASSERT(bytes + 1024 <= RecordChunk::Capacity);
+        // Data over the chunk's capacity goes to its overflow (RecordData): room for the
+        // command only. It closed the game climbing a ladder in chapter 5 (issue #14).
+        if (bytes + 1024 > RecordChunk::Capacity) {
+            bytes = 0;
+            record_overflow = true; // until the command is recorded: all its data beside
+        }
         if (RecordChunk::Capacity - record_chunk->Size() < bytes + 1024) {
             full_chunks.push_back(std::move(record_chunk));
             record_chunk = AcquireChunk();
@@ -788,8 +804,23 @@ public:
         }
         // Room for the data and the command that follows it, so both stay in one chunk.
         const size_t bytes = data.size_bytes();
-        ReserveRecordData(bytes + alignof(T));
-        auto* dst = static_cast<T*>(record_chunk->Allocate(bytes, alignof(T)));
+        if (!record_overflow) {
+            ReserveRecordData(bytes + alignof(T));
+        }
+        // The last 1024 bytes stay free for the command that uses the data.
+        T* dst = nullptr;
+        if (!record_overflow &&
+            bytes + alignof(T) + 1024 <= RecordChunk::Capacity - record_chunk->Size()) {
+            dst = static_cast<T*>(record_chunk->Allocate(bytes, alignof(T)));
+        }
+        if (!dst) {
+            dst = static_cast<T*>(record_chunk->AllocateOverflow(bytes));
+            static std::atomic<u32> reports{0};
+            if (reports.fetch_add(1, std::memory_order_relaxed) < 5) {
+                std::printf("Scheduler: %zu bytes of command data over a recording chunk, kept "
+                            "beside it\n", bytes);
+            }
+        }
         std::memcpy(dst, data.data(), bytes);
         return {dst, data.size()};
     }
@@ -916,6 +947,8 @@ private:
     bool is_rendering = false;
     // gow3: threaded recording
     std::unique_ptr<RecordChunk> record_chunk;
+    /// A reserve over a chunk's capacity: the command's data goes to the chunk's overflow.
+    bool record_overflow = false;
     std::vector<std::unique_ptr<RecordChunk>> full_chunks;
     std::mutex recorder_mutex;
     std::condition_variable_any recorder_cv;

@@ -741,7 +741,11 @@ int main(int argc, char **argv) {
         }
         char sfo[4096], id[16]="";
         snprintf(sfo,sizeof(sfo),"%s/sce_sys/param.sfo",app0);
-        if (sfo_value(sfo,"INSTALL_DIR_SAVEDATA",id,sizeof(id),NULL) || sfo_value(sfo,"TITLE_ID",id,sizeof(id),NULL))
+        /* GOW3_SAVEDATA_ID (launcher): one save folder for every region of the game. */
+        const char *save_id=getenv("GOW3_SAVEDATA_ID");
+        if (save_id && *save_id)
+            runtime_savedata_configure(save_id);
+        else if (sfo_value(sfo,"INSTALL_DIR_SAVEDATA",id,sizeof(id),NULL) || sfo_value(sfo,"TITLE_ID",id,sizeof(id),NULL))
             runtime_savedata_configure(id);
     }
     gow3gpu_register_kernel();

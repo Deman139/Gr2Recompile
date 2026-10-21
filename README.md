@@ -8,9 +8,10 @@ Native Windows port of **Killzone Shadow Fall** (PS4). The game's code runs dire
 graphics are translated to Vulkan in real time. Public beta: the whole campaign is playable, and
 it keeps improving with testers' reports.
 
-> **No game files are included.** You need your own dumped copy of the game: **CUSA00190,
-> version 01.81**. This project is not affiliated with Sony Interactive Entertainment or Guerrilla
-> Games. Killzone is a trademark of Sony Interactive Entertainment.
+> **No game files are included.** You need your own dumped copy of the game, **version 01.81**:
+> **CUSA00190** (the tested one) or another region (see [Game versions](#game-versions)). This
+> project is not affiliated with Sony Interactive Entertainment or Guerrilla Games. Killzone is a
+> trademark of Sony Interactive Entertainment.
 
 ## Download and play
 
@@ -25,6 +26,36 @@ recommended for 1080p-1440p; 8 GB for 1800p and 4K.
 Tested on a Ryzen 7 5700 + RTX 2060 Super (8 GB): the game should be playable from start to
 finish. Shader compilation barely stutters, even on a first play, and levels load fast. Not
 tested yet on AMD GPUs or Intel CPUs.
+
+## Game versions
+
+The launcher accepts **CUSA00190, CUSA00191, CUSA00002 and CUSA00085**. The port was **developed and
+tested on CUSA00190 (USA, English and French)**; the others are **untested**: players have run some
+of them, but there are no guarantees.
+
+| Release | Region | Status |
+|---|---|---|
+| CUSA00190 | USA | ✅ Tested (the port's reference) |
+| CUSA00191 | Latin America | ⚠️ Not tested, may work |
+| CUSA00002 | Europe | ⚠️ Not tested, may work (players report choosing the language in the game's options) |
+| CUSA00085 | Japan | ⚠️ Not tested; Japanese texts may look wrong or be missing |
+
+- **Version 01.81 is required** in every region (the base game or its update). Without that
+  update the game will most likely not work.
+- Saves are shared: every release uses the same save folder, so switching region keeps them.
+- No need to rename folders or edit `param.sfo` anymore.
+
+## Linux and Steam Deck (Proton, not tested by us)
+
+There is no Linux build yet, but players have run the Windows version through Proton:
+
+1. Unzip the release and add **Killzone Shadow Fall.exe** to Steam as a *non-Steam game*.
+2. In its *Properties → Compatibility*, force a Proton version (Proton Experimental or GE-Proton).
+3. Start it from Steam, choose your dump's folder in the launcher and press **PLAY**.
+
+We can't test it ourselves: reports in [issues](../../issues) (distro or Steam Deck, Proton
+version, GPU) are welcome. A native Linux version (AppImage) will come once the game is fully
+stable on Windows.
 
 ## What's included
 
@@ -66,6 +97,9 @@ tested yet on AMD GPUs or Intel CPUs.
 - Debug menu, cheats and patches (for example unlocking every chapter).
 - Fixes for bugs reported on specific hardware.
 
+**Once the game is fully stable**
+- Native Linux version (AppImage), with Steam Deck in mind.
+
 ## Reporting bugs
 
 Open an [issue](../../issues) with what happened, where (chapter), your GPU, CPU and driver, and
@@ -89,9 +123,10 @@ Port nativo para Windows de **Killzone Shadow Fall** (PS4). El código del juego
 en la CPU; los gráficos se traducen a Vulkan en tiempo real. Beta pública: se puede jugar la
 campaña completa, y se sigue puliendo con los reportes de los testers.
 
-> **No incluye archivos del juego.** Necesitás tu propia copia dumpeada del juego: **CUSA00190,
-> versión 01.81**. Este proyecto no está afiliado a Sony Interactive Entertainment ni a Guerrilla
-> Games. Killzone es una marca de Sony Interactive Entertainment.
+> **No incluye archivos del juego.** Necesitás tu propia copia dumpeada del juego, **versión 01.81**:
+> **CUSA00190** (la probada) u otra región (ver [Versiones del juego](#versiones-del-juego)). Este
+> proyecto no está afiliado a Sony Interactive Entertainment ni a Guerrilla Games. Killzone es una
+> marca de Sony Interactive Entertainment.
 
 ## Descargar y jugar
 
@@ -106,6 +141,37 @@ Requisitos: Windows 10 (1903+) u 11 de 64 bits, GPU con Vulkan 1.3, 16 GB de RAM
 Probado en Ryzen 7 5700 + RTX 2060 Super (8 GB): el juego debería poder jugarse completo, de
 principio a fin. La compilación de shaders casi no da tirones, aun en la primera partida, y los
 niveles cargan rápido. Todavía no fue probado en gráficas AMD ni en procesadores Intel.
+
+## Versiones del juego
+
+El launcher acepta **CUSA00190, CUSA00191, CUSA00002 y CUSA00085**. El port se **desarrolló y probó
+en CUSA00190 (EE. UU., inglés y francés)**; las demás están **sin probar**: algunos jugadores las
+corrieron, pero no hay garantías.
+
+| Versión | Región | Estado |
+|---|---|---|
+| CUSA00190 | EE. UU. | ✅ Probada (la referencia del port) |
+| CUSA00191 | Latinoamérica | ⚠️ No probada, puede funcionar |
+| CUSA00002 | Europa | ⚠️ No probada, puede funcionar (hay reportes de que se elige el idioma en las opciones del juego) |
+| CUSA00085 | Japón | ⚠️ No probada; los textos en japonés pueden verse mal o faltar |
+
+- **Es obligatorio que sea la versión 01.81** en cualquier región (el juego base o su
+  actualización). Sin esa actualización, lo más probable es que no funcione.
+- Las partidas se comparten: todas las versiones usan la misma carpeta de guardado, así que
+  cambiar de región las conserva.
+- Ya no hace falta renombrar carpetas ni editar `param.sfo`.
+
+## Linux y Steam Deck (Proton, no probado por nosotros)
+
+Todavía no hay versión para Linux, pero hay jugadores que corrieron la de Windows con Proton:
+
+1. Descomprimí la release y agregá **Killzone Shadow Fall.exe** a Steam como *juego que no es de Steam*.
+2. En *Propiedades → Compatibilidad*, forzá una versión de Proton (Proton Experimental o GE-Proton).
+3. Abrilo desde Steam, elegí la carpeta de tu dump en el launcher y dale a **JUGAR**.
+
+No podemos probarlo nosotros: se agradecen reportes en [issues](../../issues) (distro o Steam
+Deck, versión de Proton, GPU). Cuando el juego esté 100% estable en Windows, va a salir una versión
+nativa para Linux (AppImage).
 
 ## Qué incluye
 
@@ -147,6 +213,9 @@ niveles cargan rápido. Todavía no fue probado en gráficas AMD ni en procesado
 - Soporte ultrawide (21:9).
 - Menú debug, trucos y parches (por ejemplo desbloquear todos los capítulos).
 - Arreglos de errores reportados en hardware específico.
+
+**Cuando el juego esté 100% estable**
+- Versión nativa para Linux (AppImage), pensando en Steam Deck.
 
 ## Reportar errores
 
