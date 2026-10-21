@@ -85,7 +85,7 @@ stable on Windows.
 
 - **New performance options (0.2.5):** tested on one setup only. If the game closes or something
   looks wrong, turn off *Advanced → Performance* (both options) and try again before opening an
-  issue; tell us whether that fixed it.
+  issue; tell us whether that fixed it. (This gives 40-50% more FPS, but if it causes any problems or crashes, try deactivating it before opening an issue)
 - **First play:** some effects can show up a few frames late while their shader compiles.
 - **Above 60 FPS (experimental):** turn VSync off on a 60 Hz monitor, otherwise it stays at 60.
 - The shader cache can take several GB ("Clear cache" in the launcher).
@@ -211,7 +211,7 @@ nativa para Linux (AppImage).
 
 - **Opciones de rendimiento nuevas (0.2.5):** probadas en una sola PC. Si el juego se cierra o algo
   se ve mal, desactivá *Avanzado → Rendimiento* (las dos opciones) y probá de nuevo antes de abrir
-  un issue; contanos si eso lo solucionó.
+  un issue; contanos si eso lo solucionó. (Esto da un 40-50% mas de de FPS, pero si te genera algun problema o crash prueba desactivarlo antes de abrir un reporte)
 - **Primera partida:** algunos efectos pueden aparecer unos cuadros tarde mientras se compila su shader.
 - **Más de 60 FPS (experimental):** con un monitor de 60 Hz desactivá VSync, si no se queda en 60.
 - La caché de shaders puede ocupar varios GB ("Borrar caché" en el launcher).
