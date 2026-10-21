@@ -1776,7 +1776,13 @@ void Rasterizer::RunTextureTask(void* context) {
         }
         auto binding = stage.binding;
         u32 write_index = stage.write_index;
-        self.BindTextures(*stage.info, stage.prepared, binding, write_index, task.barrier, true);
+        try {
+            self.BindTextures(*stage.info, stage.prepared, binding, write_index, task.barrier,
+                              true);
+        } catch (const boost::container::bad_alloc&) {
+            // A full binding list: the GPU thread binds the rest again and skips the draw.
+            return;
+        }
         task.completed = i + 1;
     }
 }
@@ -1793,6 +1799,7 @@ bool Rasterizer::BindResources(const Pipeline* pipeline) {
         return false;
     }
 
+    bind_pipeline = pipeline;
     set_write_index = 0;
     set_writes.clear();
     buffer_infos.clear();
@@ -3973,6 +3980,50 @@ void Rasterizer::UpdateColorBlendingState(const GraphicsPipeline* pipeline) cons
     dynamic_state.SetBlendConstants(regs.blend_constants);
     dynamic_state.SetColorWriteMasks(pipeline->GetGraphicsKey().write_masks);
     dynamic_state.SetAttachmentFeedbackLoopEnabled(attachment_feedback_loop);
+}
+
+void Rasterizer::OnCommandFailed(const char* what) {
+    // The helper may still bind textures of the failed draw into the lists cleared below.
+    bind_helper.Join();
+    draw_inputs.pending = false;
+    bind_prepared = nullptr;
+    static u64 failures = 0;
+    ++failures;
+    if (failures <= 10 || failures % 1000 == 0) {
+        std::printf("GPU: %s %s skipped (%s), failure %llu; images %zu/%u buffers %zu/%u "
+                    "bound images %zu/%u bound buffers %zu/%u stage image bindings %zu/%u "
+                    "descriptions %zu/%zu\n",
+                    bind_pipeline ? (bind_pipeline->IsCompute() ? "dispatch" : "draw")
+                                  : "command",
+                    bind_pipeline ? "binding resources" : "before binding", what,
+                    (unsigned long long)failures, image_infos.size(), MaxDrawImages,
+                    buffer_infos.size(), MaxDrawBuffers, bound_images.size(), MaxDrawImages,
+                    bound_buffers.size(), MaxDrawBuffers, image_bindings.size(),
+                    MaxStageImageBindings, image_desc_storage.size(),
+                    image_desc_storage.capacity());
+        if (bind_pipeline) {
+            for (const auto* stage : bind_pipeline->GetStages()) {
+                if (stage) {
+                    std::printf("GPU:   stage %u shader %016llx: %zu images, %zu samplers, "
+                                "%zu buffers\n",
+                                u32(stage->sw_stage), (unsigned long long)stage->pgm_hash,
+                                stage->images.size(), stage->samplers.size(),
+                                stage->buffers.size());
+                }
+            }
+        }
+        std::fflush(stdout);
+    }
+    // Images marked bound by the first texture pass may not have reached bound_images yet.
+    for (const auto& [image_id, desc] : image_bindings) {
+        if (image_id) {
+            texture_cache.GetImage(image_id).binding = {};
+        }
+    }
+    image_bindings.clear();
+    image_binding_entries.clear();
+    ResetBindings(bind_pipeline && bind_pipeline->IsCompute());
+    bind_pipeline = nullptr;
 }
 
 void Rasterizer::ScopeMarkerBegin(const std::string_view& str, bool from_guest) {

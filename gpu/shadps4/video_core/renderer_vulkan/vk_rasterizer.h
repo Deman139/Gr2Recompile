@@ -69,12 +69,25 @@ public:
     void ScopeMarker(fmt::string_view fmt, fmt::format_args args, auto&& func) {
         if (host_markers_enabled) {
             ScopeMarkerBegin(fmt::vformat(fmt, args));
-            func();
+            RunCommand(func);
             ScopeMarkerEnd();
         } else {
-            func();
+            RunCommand(func);
         }
     }
+
+    /// gow3: a draw or dispatch overflowing one of the fixed-size binding lists (boost
+    /// static_vector throws bad_alloc) is skipped and logged instead of ending the game
+    /// (issues #26/#44, chapter 9 train).
+    void RunCommand(auto&& func) {
+        bind_pipeline = nullptr;
+        try {
+            func();
+        } catch (const boost::container::bad_alloc& e) {
+            OnCommandFailed(e.what());
+        }
+    }
+    void OnCommandFailed(const char* what);
 
     void ScopeMarkerBegin(const std::string_view& str, bool from_guest = false);
     void ScopeMarkerEnd(bool from_guest = false);
@@ -345,9 +358,16 @@ private:
     using RenderTargetInfo = std::pair<VideoCore::ImageId, VideoCore::TextureCache::ImageDesc>;
     std::array<RenderTargetInfo, AmdGpu::NUM_COLOR_BUFFERS> cb_descs;
     std::pair<VideoCore::ImageId, VideoCore::TextureCache::ImageDesc> db_desc;
-    boost::container::static_vector<vk::DescriptorImageInfo, Shader::NUM_IMAGES> image_infos;
-    boost::container::static_vector<vk::DescriptorBufferInfo, Shader::NUM_BUFFERS> buffer_infos;
-    boost::container::static_vector<VideoCore::ImageId, Shader::NUM_IMAGES> bound_images;
+    // gow3: per-draw lists sum every stage of the pipeline (plus samplers, mip arrays of storage
+    // images and the render targets), so they get room beyond one stage's limits (issues #26/#44).
+    static constexpr u32 MaxDrawImages = Shader::NUM_IMAGES * 4;
+    static constexpr u32 MaxDrawBuffers = Shader::NUM_BUFFERS * 4;
+    static constexpr u32 MaxStageImageBindings = Shader::NUM_IMAGES * 4;
+    boost::container::static_vector<vk::DescriptorImageInfo, MaxDrawImages> image_infos;
+    boost::container::static_vector<vk::DescriptorBufferInfo, MaxDrawBuffers> buffer_infos;
+    boost::container::static_vector<VideoCore::ImageId, MaxDrawImages> bound_images;
+    /// The pipeline BindResources is binding (OnCommandFailed's log), else null.
+    const Pipeline* bind_pipeline = nullptr;
     /// gow3 diagnostics (GOW3_DIAG_IMAGES=1, draw pipe off): while a frame capture records, the
     /// color targets of a pass are written to files when the next pass or dispatch begins.
     void DiagPassBoundary(bool force);
@@ -360,7 +380,7 @@ private:
         u32 size;
         bool is_written;
     };
-    boost::container::static_vector<BoundBuffer, Shader::NUM_BUFFERS> bound_buffers;
+    boost::container::static_vector<BoundBuffer, MaxDrawBuffers> bound_buffers;
 
     u32 set_write_index{};
     Pipeline::DescriptorWrites set_writes;
@@ -389,8 +409,8 @@ private:
     std::array<ImageDescCacheEntry, 4096> image_desc_cache{};
     u64 desc_use_counter = 0;
     /// Entries replacing pinned cache slots during one BindTextures call.
-    boost::container::static_vector<ImageDescCacheEntry, Shader::NUM_IMAGES> image_desc_overflow;
-    boost::container::static_vector<VideoCore::TextureCache::ImageDesc, Shader::NUM_IMAGES * 2>
+    boost::container::static_vector<ImageDescCacheEntry, MaxStageImageBindings> image_desc_overflow;
+    boost::container::static_vector<VideoCore::TextureCache::ImageDesc, MaxStageImageBindings * 2>
         image_desc_storage;
     u64 bind_epoch = 0;
     // gow3: render/depth target lookups memoized by their raw register bytes while image
@@ -429,7 +449,7 @@ private:
                                                               const Shader::ImageResource& res) {
         return CachedImageDescEntry(sharp, res).desc;
     }
-    boost::container::static_vector<ImageBindingInfo, Shader::NUM_IMAGES> image_bindings;
+    boost::container::static_vector<ImageBindingInfo, MaxStageImageBindings> image_bindings;
     struct VertexBinds {
         VertexInputs<vk::VertexInputAttributeDescription2EXT> attributes;
         VertexInputs<vk::VertexInputBindingDescription2EXT> bindings;
@@ -471,7 +491,8 @@ private:
     /// Draws whose textures the helper bound completely, partly or not at all (GOW3_FRAME_STATS).
     u64 helper_full = 0, helper_partial = 0, helper_serial = 0;
     /// The memoized cache entry of each image binding (FindImage memo taken), else null.
-    boost::container::static_vector<ImageDescCacheEntry*, Shader::NUM_IMAGES> image_binding_entries;
+    boost::container::static_vector<ImageDescCacheEntry*, MaxStageImageBindings>
+        image_binding_entries;
     bool fault_process_pending{};
     bool attachment_feedback_loop{};
     bool needs_barrier{};
