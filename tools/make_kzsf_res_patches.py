@@ -16,6 +16,7 @@ patches.py finds it by content.
           RenderData pool keeps its size. Region names are at 0x11aa319..0x11aa3ad.
 Other {0, 0, 1920, 1080} rectangles (0x50a0d3, 0xe80a9b, 0xe843b7, 0xfc39e3, 0xfc8773, 0xfc87ff)
 are not needed; patching them all made level loads hang.
+The FOV is a live setting of the loader (src/mouse_hook.h gow3_fov_site), not a patch here.
 Usage: make_kzsf_res_patches.py <eboot.elf> <out.xml>
 """
 import sys
@@ -38,8 +39,11 @@ NATIVE = {'w': 1920, 'h': 1080, 'hw': 960, 'hh': 540, 'arena': ARENA, 'rw': RW, 
 # count (415 and 8 MiB at 1080p).
 SIZES = {'720p': (1280, 720, 0, 0), '1440p': (2560, 1440, 384, 8), '1800p': (3200, 1800, 768, 16),
          '4K': (3840, 2160, 1280, 32)}
-
-
+# Upscaler quality modes (launcher, scripts/upscale_modes.py): render sizes below 1080p that
+# FSR / DLSS take to the output. Named by size; no extra memory below 1080p.
+SIZES.update({f'{w}x{h}': (w, h, 0, 0) for w, h in
+              ((1856, 1044), (1708, 960), (1600, 900), (1488, 836), (1280, 720), (1120, 630), (1066, 600),
+               (960, 540), (852, 480), (640, 360))})
 def lines(image, size):
     arena, rw = size[2] << 20, size[3] << 20
     values = {'w': size[0], 'h': size[1], 'hw': size[0] // 2, 'hh': size[1] // 2,

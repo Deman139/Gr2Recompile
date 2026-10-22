@@ -113,6 +113,14 @@ void Liverpool::Process(std::stop_token stoken) {
     }
 #else
     Gow3Stats::gpu_thread_id.store(GetCurrentThreadId());
+    // gow3: on CPUs with 8 threads or fewer the game's job threads compete with this one, the
+    // port's bottleneck: it runs above normal there. GOW3_THREAD_PRIORITIES=0: normal.
+    if (const char* v = std::getenv("GOW3_THREAD_PRIORITIES"); (!v || v[0] != '0') &&
+        std::thread::hardware_concurrency() <= 8) {
+        SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_ABOVE_NORMAL);
+        std::printf("GPU: command thread above normal priority (%u hardware threads)\n",
+                    std::thread::hardware_concurrency());
+    }
 #endif
     gpu_id = std::this_thread::get_id();
 #if defined(__linux__) || defined(_WIN32)

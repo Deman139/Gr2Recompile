@@ -177,9 +177,18 @@ def main():
     env.setdefault('GOW3_UI_TRIGGER_VS', '6a09714a')
     # Killzone's TMAA copy back into the scene: skipped while FSR / DLSS jitter the scene.
     env.setdefault('GOW3_GAME_TAA_PS', '9dfb876c')
-    if env['GOW3_OUTPUT_RES'] != '1920x1080':
+    # Upscaler quality modes (GOW3_RENDER_RES=WxH below 1080p, the launcher): the game renders at
+    # that size through its resolution patch of that name and FSR / DLSS reach the output.
+    render_res = env.get('GOW3_RENDER_RES', '')
+    if render_res and render_res != '1920x1080':
+        graphics = dict(graphics, render_resolution=render_res)
+        print(f"Graphics: game at {render_res}, output {env['GOW3_OUTPUT_RES']} by the upscaler", flush=True)
+    elif env['GOW3_OUTPUT_RES'] != '1920x1080':
+        env.pop('GOW3_RENDER_RES', None)
         graphics = dict(graphics, render_resolution='native')
         print(f"Graphics: output {env['GOW3_OUTPUT_RES']} by the port (game at 1080p)", flush=True)
+    else:
+        env.pop('GOW3_RENDER_RES', None)
     env.update(graphics_options.environment(graphics))
     if not env.get('GOW3_FSR411_DIR') and not (PORT / 'fsr4_411').is_dir() and (data / 'fsr4_411').is_dir():
         env['GOW3_FSR411_DIR'] = str(data / 'fsr4_411')
@@ -268,6 +277,10 @@ def main():
             # gow3.ini decides the resolution and frame rate patches (in-game menu, launcher).
             names = graphics_options.patch_names(names, graphics)
             names = graphics_options.restrict_to_available(names, patches.available_patches(profile[1], profile[2]))
+            if env.get('GOW3_RENDER_RES') and \
+                    f"{graphics_options.RESOLUTION_PREFIX} - {env['GOW3_RENDER_RES']}" not in names:
+                print(f"Graphics: no patch for {env['GOW3_RENDER_RES']}: the game stays at 1080p", flush=True)
+                env.pop('GOW3_RENDER_RES')
             env['GOW3_PATCHES'] = ';'.join(names)
             env['GOW3_PATCHES_ONLY'] = '1'
             # The in-game menu offers the engine frame rate only when this game has such patches.

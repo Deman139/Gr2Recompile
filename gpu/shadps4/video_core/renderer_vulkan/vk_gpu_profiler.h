@@ -62,7 +62,7 @@ private:
     void Print();
 
     static constexpr u32 NumSlices = 4;
-    static constexpr u32 SliceQueries = 4096;
+    static constexpr u32 SliceQueries = 16384;
     static inline GpuProfiler* instance_ptr = nullptr;
 
     vk::Device device;

@@ -13,6 +13,7 @@
 #include "orb_hook.h"
 #include "cheat_hook.h"
 #include "actor_hook.h"
+#include "mouse_hook.h"
 #include "damage_hook.h"
 #include "gpu/gow3gpu.h"
 #if !defined(__x86_64__) || !defined(__GNUC__)
@@ -414,6 +415,10 @@ extern void gow3_cheat_status(unsigned id);
 extern uintptr_t gow3_damage_multiplier(int taken);
 extern uintptr_t gow3_orb_pickup_multiplier(unsigned kind);
 extern void gow3_stat_multipliers_status(int damage, int orb_pickup);
+extern ABI void gow3_mouse_look_adjust(float *x, float *y);
+extern ABI void gow3_mouse_look_limits(float *limits);
+extern int gow3_mouse_direct_wanted(void);
+extern void gow3_mouse_direct_status(int ready);
 
 /* The hooks below find their sites by signature (src/signature.h), so they work in any region
  * and version of the game whose code matches; a site that is not found leaves its feature off. */
@@ -533,6 +538,59 @@ static int install_jump(uint64_t at, unsigned length, unsigned char *stub) {
     return 1;
 }
 
+/* Direct mouse look (src/mouse_hook.h): wraps the game's look input routine so the mouse turns
+ * the camera linearly instead of through an emulated, saturating right stick. */
+static void install_mouse_look(Segment *segments, uint64_t count, uint64_t size) {
+    if (!gow3_mouse_direct_wanted()) return;
+    const uint64_t at = gow3_signature_find(image, size, &gow3_mouse_site);
+    if (at == UINT64_MAX || !mapped(segments, count, at, GOW3_MOUSE_HOOK_LENGTH) ||
+        !gow3_mouse_signature_match(image + at, size - at)) {
+        printf("Mouse look: direct mode unavailable (code not found in this eboot.bin)\n");
+        return;
+    }
+    unsigned char *stub = allocate(page_size);
+    gow3_mouse_build_stub(stub, (uintptr_t)gow3_mouse_look_adjust, (uintptr_t)(image + at + GOW3_MOUSE_HOOK_LENGTH));
+    /* Optional: without it the mouse still turns, through the game's turn acceleration. */
+    const uint64_t limits = gow3_signature_find(image, size, &gow3_mouse_limits_site);
+    const int limits_found = limits != UINT64_MAX && mapped(segments, count, limits, GOW3_MOUSE_LIMITS_LENGTH) &&
+                             gow3_mouse_limits_signature_match(image + limits, size - limits);
+    if (limits_found)
+        gow3_mouse_limits_build_stub(stub + 128, (uintptr_t)gow3_mouse_look_limits,
+                                     (uintptr_t)(image + limits + GOW3_MOUSE_LIMITS_LENGTH));
+    protect(stub, page_size, 5);
+    if (!install_jump(at, GOW3_MOUSE_HOOK_LENGTH, stub)) {
+        printf("Mouse look: direct mode unavailable (hook outside relative-jump range)\n");
+        return;
+    }
+    gow3_mouse_direct_status(1);
+    printf("Mouse look: direct mode ready (look input routine at image+0x%" PRIx64 ")\n", at);
+    if (limits_found && install_jump(limits, GOW3_MOUSE_LIMITS_LENGTH, stub + 128))
+        printf("Mouse look: no turn acceleration while the mouse moves (limits at image+0x%" PRIx64 ")\n", limits);
+    else
+        printf("Mouse look: turn acceleration kept (limits code not found)\n");
+}
+
+/* Live FOV (src/mouse_hook.h gow3_fov_site): the FOV update's pi/180 operand reads a writable
+ * float near the image; the in-game menu and the launcher's FOV setting rewrite it. */
+static void install_fov(Segment *segments, uint64_t count, uint64_t size) {
+    const uint64_t at = gow3_signature_find(image, size, &gow3_fov_site);
+    if (at == UINT64_MAX || !mapped(segments, count, at + GOW3_FOV_DISP_OFFSET, 4)) {
+        printf("FOV: unavailable (camera code not found in this eboot.bin)\n");
+        return;
+    }
+    float *cell = allocate(page_size);
+    *cell = 0.017453292f;
+    const int64_t delta = (int64_t)(uintptr_t)cell - (int64_t)(uintptr_t)(image + at + GOW3_FOV_DISP_OFFSET + 4);
+    if (delta < INT32_MIN || delta > INT32_MAX) {
+        printf("FOV: unavailable (setting outside relative range)\n");
+        return;
+    }
+    const int32_t relative = (int32_t)delta;
+    memcpy(image + at + GOW3_FOV_DISP_OFFSET, &relative, 4);
+    gow3gpu_fov_register(cell);
+    printf("FOV: live setting ready (camera at image+0x%" PRIx64 ")\n", at);
+}
+
 /* Damage dealt/taken and green/blue/gold orb multipliers (src/damage_hook.h, src/orb_hook.h):
  * the stubs read the menu's floats directly, so changes apply on the next hit or pickup. */
 static void install_stat_multipliers(Segment *segments, uint64_t count, uint64_t size) {
@@ -600,6 +658,14 @@ static void apply_patches(const char *path, Segment *segments, uint64_t ns, cons
  * released before the new process opens its own. */
 void runtime_restart(void) {
     fflush(NULL);
+    /* Started by the launcher (GOW3_LAUNCHER_RESTART=1): it starts the game again itself on exit
+     * code 75, recomputing every option (upscaler and frame generation chosen in the menu too). */
+    const char *launcher=getenv("GOW3_LAUNCHER_RESTART");
+    if (launcher && launcher[0]=='1') {
+        puts("Runtime: restarting through the launcher");
+        fflush(NULL);
+        _exit(75);
+    }
 #ifdef _WIN32
     /* run.py sets GOW3_RESTART_COMMAND: the launch command line, started again (new patches). */
     const char *command=getenv("GOW3_RESTART_COMMAND");
@@ -979,6 +1045,8 @@ int main(int argc, char **argv) {
     if (gpu_enabled) install_cheats(segments, ns, size);
     if (gpu_enabled) install_actor_watch(segments, ns, size);
     if (gpu_enabled) install_stat_multipliers(segments, ns, size);
+    install_mouse_look(segments, ns, size);
+    if (gpu_enabled) install_fov(segments, ns, size);
 #ifdef _WIN32
     printf("Guest TCB loads redirected to the TEB TLS slot: %" PRIu64 "\n", patch_tcb_loads(segments, ns));
 #endif

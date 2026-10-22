@@ -131,6 +131,24 @@ void Set(Values& v, const std::string& key, const std::string& value) {
         v.vibration = value.empty() ? 100 : std::clamp(i, 0, 100);
     } else if (key == "mip_lod_bias") {
         v.mip_lod_bias = std::isfinite(f) ? Clamp(f, -3.0f, 3.0f) : 0.0f;
+    } else if (key == "mouse_sens") {
+        v.mouse_sens = std::isfinite(f) && f > 0.0f ? Clamp(f, 0.2f, 4.0f) : 1.0f;
+    } else if (key == "mouse_turn_boost") {
+        v.mouse_turn_boost = value.empty() ? 6 : std::clamp(i, 1, 12);
+    } else if (key == "mouse_invert") {
+        v.mouse_invert = i != 0;
+    } else if (key == "fov") {
+        v.fov = value.empty() ? 100 : std::clamp((i + 2) / 5 * 5, 80, 150);
+    } else if (key == "pad_dead_zone") {
+        v.pad_dead_zone = std::clamp(i, 0, 30);
+    } else if (key == "pad_speaker") {
+        v.pad_speaker = value.empty() ? 100 : std::clamp(i, 0, 100);
+    } else if (key == "quick_menu") {
+        v.quick_menu = i != 0;
+    } else if (key == "quick_menu_hint") {
+        v.quick_menu_hint = i != 0;
+    } else if (key == "upscaling_from_menu") {
+        v.upscaling_from_menu = i != 0;
     } else if (key == "restart_unconfirmed") {
         v.restart_unconfirmed = i != 0;
     } else if (key == "enemy_health_bar") {
@@ -203,6 +221,11 @@ void Load() {
         {"GOW3_RCAS", "rcas"},                        {"GOW3_FRAMES_AHEAD", "frames_queued"},
         {"GOW3_ANISOTROPY", "anisotropy"},            {"GOW3_VIBRATION", "vibration"},
         {"GOW3_MIP_LOD_BIAS", "mip_lod_bias"},        {"GOW3_OUTPUT_RES", "output_res"},
+        // Killzone controls (tests; the launcher keeps them in this file).
+        {"GOW3_MOUSE_SENS", "mouse_sens"},            {"GOW3_MOUSE_DIRECT_SPEED", "mouse_turn_boost"},
+        {"GOW3_MOUSE_INVERT_Y", "mouse_invert"},      {"GOW3_FOV", "fov"},
+        {"GOW3_PAD_SPEAKER_VOLUME", "pad_speaker"},   {"GOW3_QUICK_MENU", "quick_menu"},
+        {"GOW3_QUICK_MENU_HINT", "quick_menu_hint"},
     };
     for (const auto& [env, key] : env_keys) {
         if (const char* value = std::getenv(env); value && value[0]) {
@@ -211,6 +234,7 @@ void Load() {
     }
     v.startup_preset = v.preset;
     v.startup_upscaler = v.upscaler;
+    v.startup_frame_gen = v.frame_gen;
     v.startup_object_motion = v.object_motion;
     v.startup_output_res = v.output_res;
     v.startup_live_resolution = v.live_resolution;
@@ -332,6 +356,12 @@ void Save() {
                  int(v.restart_unconfirmed.load()));
     std::fprintf(file, "anisotropy=%d\nvibration=%d\nmip_lod_bias=%.3f\n", v.anisotropy.load(),
                  v.vibration.load(), v.mip_lod_bias.load());
+    std::fprintf(file,
+                 "mouse_sens=%.1f\nmouse_turn_boost=%d\nmouse_invert=%d\nfov=%d\npad_dead_zone=%d\n"
+                 "pad_speaker=%d\nquick_menu=%d\nquick_menu_hint=%d\nupscaling_from_menu=%d\n",
+                 v.mouse_sens.load(), v.mouse_turn_boost.load(), int(v.mouse_invert.load()), v.fov.load(),
+                 v.pad_dead_zone.load(), v.pad_speaker.load(), int(v.quick_menu.load()),
+                 int(v.quick_menu_hint.load()), int(v.upscaling_from_menu.load()));
     std::fprintf(file, "frame_gen=%s\nframe_gen_multiplier=%d\n", FrameGenName(v.frame_gen),
                  v.frame_gen_multiplier.load());
     // Read by run.sh at start.

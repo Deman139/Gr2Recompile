@@ -58,6 +58,8 @@ public:
     class TransferMark {
     public:
         TransferMark(Runtime& runtime, const char* what, const VideoCore::Image& image);
+        /// A buffer transfer: one label per `what` (a string literal).
+        TransferMark(Runtime& runtime, const char* what);
         ~TransferMark();
         TransferMark(const TransferMark&) = delete;
         TransferMark& operator=(const TransferMark&) = delete;

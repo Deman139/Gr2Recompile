@@ -70,6 +70,13 @@ std::mutex imgui_mutex; // the ImGui context: window thread (input) and present 
 bool initialized = false;
 std::atomic<bool> menu_open{false};
 bool r3_down = false, l2_down = false;
+// Quick menu (hold Select/Back/Share, runtime_pad.c): Resume / Settings / Exit game.
+std::atomic<bool> quick_open{false};
+// The FOV hook's float (src/probe.c), rewritten when the FOV changes; null without the hook.
+std::atomic<float*> fov_cell{nullptr};
+// Startup reminder of the quick menu: shown for a few seconds once the game runs.
+std::chrono::steady_clock::time_point hint_start{};
+std::atomic<bool> hint_done{false};
 std::atomic<bool> loading{false};
 std::atomic<u32> loading_done{0}, loading_total{0};
 std::atomic<u32> background_done{0}, background_total{0};
@@ -111,6 +118,30 @@ void SetOpen(bool value) {
         dirty = false;
         Gow3Settings::Save();
     }
+}
+
+void SetQuickOpen(bool value) {
+    if (quick_open.exchange(value) == value) {
+        return;
+    }
+    if (!value && dirty && !menu_open) {
+        dirty = false;
+        Gow3Settings::Save();
+    }
+}
+
+// pi/180 times the FOV scale: the hook multiplies the game's FOV (degrees) by it.
+void ApplyFov() {
+    if (float* cell = fov_cell.load()) {
+        *cell = 0.017453292f * float(Gow3Settings::Get().fov.load()) / 100.0f;
+    }
+}
+
+// Same path as closing the window (logs and cleanup).
+void ExitGame() {
+    SDL_Event quit{};
+    quit.type = SDL_EVENT_QUIT;
+    SDL_PushEvent(&quit);
 }
 
 ImGuiKey KeyFromSdl(SDL_Keycode key) {
@@ -393,6 +424,120 @@ void GameTab() {
     }
 }
 
+void FloatSliderRow(const char* label, std::atomic<float>& value, float lo, float hi, const char* format,
+                    const char* help) {
+    Row(label);
+    float v = value;
+    if (ImGui::SliderFloat("##value", &v, lo, hi, format, ImGuiSliderFlags_AlwaysClamp)) {
+        Store(value, std::clamp(v, lo, hi), true);
+    }
+    Help(help);
+    ImGui::PopID();
+}
+
+// Killzone: the game's own hooks of God of War III (cheats, orbs) are absent, so the first tab
+// holds the controls the launcher also sets; all apply at once.
+bool KillzoneMenu() {
+    const auto& s = Gow3Settings::Get();
+    return !s.cheats_supported.load() && !s.red_orbs_supported.load() && !s.orb_pickup_supported.load() &&
+           !s.damage_supported.load() && !s.actor_watch_supported.load();
+}
+
+void ControlsTab() {
+    auto& s = Gow3Settings::Get();
+    ImGui::SeparatorText("Mouse");
+    if (BeginRows("##mouse")) {
+        FloatSliderRow("Sensitivity", s.mouse_sens, 0.2f, 4.0f, "%.1f",
+                       "How far the camera turns for the mouse's motion (about 1 is recommended).");
+        SliderRow("Fast turns", s.mouse_turn_boost, 1, 12, "x%d",
+                  "Raises the game's turn speed limit while the mouse moves (x6 by default).");
+        CheckRow("Invert Y axis", s.mouse_invert, "Moving the mouse up looks down.");
+        ImGui::EndTable();
+    }
+    ImGui::SeparatorText("Camera");
+    if (BeginRows("##camera")) {
+        const bool fov_ready = fov_cell.load() != nullptr;
+        ImGui::BeginDisabled(!fov_ready);
+        Row("Field of view (FOV)");
+        int fov = s.fov;
+        if (ImGui::SliderInt("##value", &fov, 80, 150, "%d%%", ImGuiSliderFlags_AlwaysClamp)) {
+            fov = std::clamp((fov + 2) / 5 * 5, 80, 150);
+            Store(s.fov, fov, fov != s.fov.load());
+            ApplyFov();
+        }
+        Help(fov_ready ? "Percent of the game's horizontal field of view (100% = as on PS4); aiming zoom "
+                         "widens in the same proportion."
+                       : "Unavailable: the game's camera code was not found in this eboot.bin.");
+        ImGui::PopID();
+        ImGui::EndDisabled();
+        ImGui::EndTable();
+    }
+    ImGui::SeparatorText("Controller");
+    if (BeginRows("##controller")) {
+        SliderRow("Vibration", s.vibration, 0, 100, "%d%%", "0% turns vibration off.");
+        SliderRow("Stick dead zone", s.pad_dead_zone, 0, 30, "%d%%",
+                  "Raise it if the camera or character moves on its own (worn stick).");
+        SliderRow("Controller speaker", s.pad_speaker, 0, 100, "%d%%",
+                  "Sounds the PS4 sends to the controller's speaker; here they play on your speakers.");
+        CheckRow(PadText("Hold Share for the quick menu", "Hold View for the quick menu",
+                         "Hold - for the quick menu"),
+                 s.quick_menu,
+                 "Holding it about a second opens Resume / Settings / Exit game; a short press still "
+                 "clicks the touchpad.");
+        CheckRow("Tips at startup", s.quick_menu_hint,
+                 "A short note when the game starts: the OWL (hold Delete and move the mouse) and the quick menu.");
+        ImGui::EndTable();
+    }
+    ImGui::SeparatorText("Keyboard and mouse");
+    ImGui::TextDisabled("OWL drone: hold Delete and move the mouse (a finger on the touchpad).");
+    ImGui::TextDisabled("Keys can be changed in the launcher (Controls).");
+}
+
+// Killzone: upscaler and frame generation. Inside an upscaler session (the launcher started the
+// game through FSR / DLSS) both switch live; frame generation turned on from off needs a restart
+// (the swapchain is made for it). The launcher adopts the choice (upscaling_from_menu).
+void UpscalingSection() {
+    auto& s = Gow3Settings::Get();
+    static const bool session = [] {
+        const char* output = std::getenv("GOW3_OUTPUT_RES");
+        const char* upscaler = std::getenv("GOW3_UPSCALER");
+        return output && *output && upscaler && std::strcmp(upscaler, "none") != 0 &&
+               std::strcmp(upscaler, "off") != 0;
+    }();
+    ImGui::SeparatorText("Upscaling and frame generation");
+    if (!BeginRows("##upscaling")) {
+        return;
+    }
+    if (session) {
+        const bool dlss = s.dlss_supported.load();
+        const char* const labels[] = {"FSR 3.1", "DLSS"};
+        const int values[] = {Gow3Settings::UpscalerFsr3, Gow3Settings::UpscalerDlss};
+        const int before = s.upscaler;
+        ChoiceRow("Upscaler", s.upscaler, labels, values, dlss ? 2 : 1,
+                  dlss ? "Switches at once." : "DLSS needs an NVIDIA RTX card and its files.");
+        if (s.upscaler != before) {
+            s.upscaling_from_menu = true;
+        }
+    } else {
+        InfoRow("Upscaler", "Off (1080p): choose FSR or DLSS in the launcher");
+    }
+    const bool dlssg = s.dlssg_max_multiplier.load() >= 1;
+    const char* const fg_labels[] = {"Off", "FSR 3.1", "DLSS"};
+    const int fg_values[] = {Gow3Settings::FrameGenOff, Gow3Settings::FrameGenFsr3, Gow3Settings::FrameGenDlss};
+    const int before = s.frame_gen;
+    ChoiceRow("Frame generation", s.frame_gen, fg_labels, fg_values, dlssg ? 3 : 2,
+              s.startup_frame_gen == Gow3Settings::FrameGenOff
+                  ? "Turning it on needs a restart. Doubles the frames shown; best above 60 FPS."
+                  : "Switches at once. Doubles the frames shown; best above 60 FPS.");
+    if (s.frame_gen != before) {
+        s.upscaling_from_menu = true;
+    }
+    if (const char* problem = s.frame_gen_problem.load()) {
+        InfoRow("", problem);
+    }
+    ImGui::EndTable();
+}
+
 void ImageTab() {
     namespace G = Gow3Graphics;
     auto& s = Gow3Settings::Get();
@@ -421,6 +566,27 @@ void ImageTab() {
         SliderRow("Sharpening strength", s.rcas_strength, 0, 100, "%d%%", "How strong the sharpening is.");
         ImGui::EndDisabled();
         ImGui::EndTable();
+    }
+    if (KillzoneMenu()) {
+        UpscalingSection();
+        ImGui::SeparatorText("Textures");
+        if (BeginRows("##texture_live")) {
+            // The launcher's steps (MIP_BIASES), so both show the same value.
+            static constexpr float biases[] = {-1.0f, -0.5f, 0.0f, 0.5f, 1.0f};
+            static const char* const labels[] = {"Sharper (-1.0)", "Sharp (-0.5)", "Game default (0)", "Soft (+0.5)",
+                                                 "Softer (+1.0)"};
+            int current = 0;
+            for (int i = 1; i < 5; ++i) {
+                if (std::abs(biases[i] - s.mip_lod_bias) < std::abs(biases[current] - s.mip_lod_bias)) current = i;
+            }
+            Row("Texture sharpness (LOD bias)");
+            if (ImGui::Combo("##value", &current, labels, 5)) {
+                Store(s.mip_lod_bias, biases[current], true);
+            }
+            Help("Sharper: crisper textures at a distance, a little more shimmer. Softer: smoother.");
+            ImGui::PopID();
+            ImGui::EndTable();
+        }
     }
     ImGui::SeparatorText("Textures (applied on restart)");
     if (BeginRows("##textures")) {
@@ -592,7 +758,98 @@ int RestartChanges() {
     const auto& s = Gow3Settings::Get();
     return (s.render_resolution != s.startup_render_resolution) + (s.engine_fps != s.startup_engine_fps) +
            (s.deferred_readback != s.startup_deferred_readback) + (s.stale_readback != s.startup_stale_readback) +
-           (s.anisotropy != s.startup_anisotropy);
+           (s.anisotropy != s.startup_anisotropy) +
+           // Frame generation turned on in a launch that started without it (UpscalingSection).
+           (s.startup_frame_gen == Gow3Settings::FrameGenOff && s.frame_gen != Gow3Settings::FrameGenOff);
+}
+
+// Hold Select/Back/Share (runtime_pad.c): a small menu a controller alone can use.
+void QuickMenu() {
+    const ImGuiViewport* viewport = ImGui::GetMainViewport();
+    ImGui::SetNextWindowPos(ImVec2(viewport->WorkPos.x + viewport->WorkSize.x * 0.5f,
+                                   viewport->WorkPos.y + viewport->WorkSize.y * 0.5f),
+                            ImGuiCond_Always, ImVec2(0.5f, 0.5f));
+    constexpr ImGuiWindowFlags flags = ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
+                                       ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse |
+                                       ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings;
+    bool close = false;
+    if (ImGui::Begin("##quick_menu", nullptr, flags)) {
+        const std::string_view title = Common::ElfInfo::Instance().Title();
+        ImGui::TextUnformatted(title.empty() ? "Game" : std::string(title).c_str());
+        ImGui::Separator();
+        const ImVec2 size(280.0f * base_scale, 0.0f);
+        if (ImGui::IsWindowAppearing()) {
+            ImGui::SetKeyboardFocusHere();
+        }
+        if (ImGui::Button("Resume", size)) {
+            close = true;
+        }
+        if (ImGui::Button("Settings", size)) {
+            SetQuickOpen(false);
+            SetOpen(true);
+        }
+        if (ImGui::Button("Exit game", size)) {
+            Gow3Settings::Save();
+            ExitGame();
+        }
+        ImGui::TextDisabled("%s", PadText("Cross: choose    Circle: back", "A: choose    B: back",
+                                          "B: choose    A: back"));
+        if (ImGui::IsKeyPressed(ImGuiKey_GamepadFaceRight, false) || ImGui::IsKeyPressed(ImGuiKey_Escape, false)) {
+            close = true;
+        }
+    }
+    ImGui::End();
+    if (close) {
+        SetQuickOpen(false);
+    }
+}
+
+// Startup tips (quick_menu_hint): for a few seconds once the game runs, a small non-blocking note
+// at the bottom: the OWL on keyboard and mouse (players keep asking) and, with a controller, the
+// quick menu shortcut. Fades out.
+constexpr float HintSeconds = 10.0f;
+
+bool HintActive() {
+    const auto& s = Gow3Settings::Get();
+    return !hint_done.load() && s.quick_menu_hint.load() && !loading.load();
+}
+
+void QuickHint() {
+    if (!HintActive()) {
+        return;
+    }
+    const auto now = std::chrono::steady_clock::now();
+    if (hint_start == std::chrono::steady_clock::time_point{}) {
+        hint_start = now;
+    }
+    const float t = std::chrono::duration<float>(now - hint_start).count();
+    if (t > HintSeconds) {
+        hint_done = true;
+        return;
+    }
+    const float alpha = t < HintSeconds - 1.0f ? 1.0f : HintSeconds - t;
+    const char* lines[2];
+    int count = 0;
+    lines[count++] = "OWL drone: hold Delete and move the mouse   |   Insert: settings";
+    if (Gow3Settings::Get().quick_menu.load() && SDL_HasGamepad()) {
+        lines[count++] = PadText("Hold Share for the game menu", "Hold View for the game menu",
+                                 "Hold - for the game menu");
+    }
+    const ImGuiViewport* viewport = ImGui::GetMainViewport();
+    const float pad = 10.0f * base_scale, line = ImGui::GetTextLineHeightWithSpacing();
+    float width = 0.0f;
+    for (int i = 0; i < count; ++i) {
+        width = std::max(width, ImGui::CalcTextSize(lines[i]).x);
+    }
+    const float top = viewport->WorkPos.y + viewport->WorkSize.y * 0.86f;
+    const float left = viewport->WorkPos.x + (viewport->WorkSize.x - width) * 0.5f;
+    ImDrawList* draw = ImGui::GetForegroundDrawList();
+    draw->AddRectFilled(ImVec2(left - pad, top - pad * 0.6f), ImVec2(left + width + pad, top + line * count + pad * 0.3f),
+                        IM_COL32(0, 0, 0, int(150 * alpha)), 6.0f * base_scale);
+    for (int i = 0; i < count; ++i) {
+        const float x = viewport->WorkPos.x + (viewport->WorkSize.x - ImGui::CalcTextSize(lines[i]).x) * 0.5f;
+        draw->AddText(ImVec2(x, top + line * i), IM_COL32(255, 255, 255, int(235 * alpha)), lines[i]);
+    }
 }
 
 void Menu() {
@@ -628,7 +885,8 @@ void Menu() {
     }
     const float footer = ImGui::GetFrameHeightWithSpacing() * 2.0f + ImGui::GetTextLineHeightWithSpacing() * 2.0f;
     if (ImGui::BeginTabBar("##tabs")) {
-        static const char* const tabs[TabCount] = {"Game", "Image", "Performance", "Overlay"};
+        static const char* const tabs[TabCount] = {KillzoneMenu() ? "Controls" : "Game", "Image", "Performance",
+                                                   "Overlay"};
         for (int tab = 0; tab < TabCount; ++tab) {
             const ImGuiTabItemFlags flags = requested_tab == tab ? ImGuiTabItemFlags_SetSelected : 0;
             if (!ImGui::BeginTabItem(tabs[tab], nullptr, flags)) {
@@ -640,7 +898,13 @@ void Menu() {
             }
             if (ImGui::BeginChild("##body", ImVec2(0, -footer))) {
                 switch (tab) {
-                case 0: GameTab(); break;
+                case 0:
+                    if (KillzoneMenu()) {
+                        ControlsTab();
+                    } else {
+                        GameTab();
+                    }
+                    break;
                 case 1: ImageTab(); break;
                 case 2: PerformanceTab(); break;
                 default: OverlayTab(); break;
@@ -677,6 +941,11 @@ void Menu() {
     } else {
         ImGui::NewLine();
     }
+    if (ImGui::Button("Exit game")) {
+        Gow3Settings::Save();
+        ExitGame();
+    }
+    ImGui::SameLine();
     const float close_width = ImGui::CalcTextSize("Close").x + ImGui::GetStyle().FramePadding.x * 2;
     ImGui::SetCursorPosX(ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x - close_width);
     if (ImGui::Button("Close")) {
@@ -1073,7 +1342,16 @@ bool HandleEvent(const SDL_Event& event) {
         return HandleChoiceEvent(event);
     }
     ImGuiIO& io = ImGui::GetIO();
-    const bool is_open = menu_open;
+    const bool is_open = menu_open || quick_open;
+    // Insert / R3+L2: the settings menu (from the quick menu too); Esc closes either.
+    const auto toggle_menu = [] {
+        if (quick_open) {
+            SetQuickOpen(false);
+            SetOpen(true);
+        } else {
+            SetOpen(!menu_open);
+        }
+    };
     switch (event.type) {
     case SDL_EVENT_KEY_DOWN:
     case SDL_EVENT_KEY_UP: {
@@ -1094,7 +1372,13 @@ bool HandleEvent(const SDL_Event& event) {
         }
         if (down && !event.key.repeat &&
             (event.key.key == SDLK_INSERT || (is_open && event.key.key == SDLK_ESCAPE))) {
-            SetOpen(event.key.key == SDLK_INSERT ? !is_open : false);
+            if (event.key.key == SDLK_INSERT) {
+                toggle_menu();
+            } else if (quick_open) {
+                SetQuickOpen(false);
+            } else {
+                SetOpen(false);
+            }
             return true;
         }
         if (!is_open) {
@@ -1116,7 +1400,7 @@ bool HandleEvent(const SDL_Event& event) {
         if (button == SDL_GAMEPAD_BUTTON_RIGHT_STICK) {
             r3_down = down;
             if (down && l2_down) {
-                SetOpen(!is_open);
+                toggle_menu();
                 return true;
             }
         }
@@ -1133,7 +1417,7 @@ bool HandleEvent(const SDL_Event& event) {
             const bool down = event.gaxis.value > 16000;
             if (down && !l2_down && r3_down) {
                 l2_down = true;
-                SetOpen(!is_open);
+                toggle_menu();
                 return true;
             }
             l2_down = down;
@@ -1208,13 +1492,24 @@ void SetLoading(bool active, u32 done, u32 total) {
 
 bool Visible() {
     const auto& s = Gow3Settings::Get();
-    return initialized && (loading || background_total || menu_open || text_entry_active || choice_active ||
-                           choice_retiring || s.show_fps || NoticeActive() ||
+    return initialized && (loading || background_total || menu_open || quick_open || text_entry_active ||
+                           choice_active || choice_retiring || s.show_fps || NoticeActive() || HintActive() ||
                            (s.actor_watch_supported && s.enemy_health_bar));
 }
 
 bool CapturesInput() {
-    return menu_open || text_entry_active || choice_active;
+    return menu_open || quick_open || text_entry_active || choice_active;
+}
+
+void OpenQuickMenu() {
+    if (initialized && !menu_open) {
+        quick_open = true;
+    }
+}
+
+void SetFovCell(float* cell) {
+    fov_cell = cell;
+    ApplyFov();
 }
 
 void BeginChoice(const std::string& title, const std::vector<std::string>& items,
@@ -1262,6 +1557,12 @@ void Render(vk::CommandBuffer cmdbuf, vk::ImageView view, vk::Extent2D extent) {
         }
     }
     ConfirmRestart();
+    // FOV (menu, launcher or a settings load after the hook was installed).
+    static int applied_fov = -1;
+    if (fov_cell.load() && Gow3Settings::Get().fov.load() != applied_fov) {
+        applied_fov = Gow3Settings::Get().fov.load();
+        ApplyFov();
+    }
     if (!Visible()) {
         return;
     }
@@ -1284,8 +1585,14 @@ void Render(vk::CommandBuffer cmdbuf, vk::ImageView view, vk::Extent2D extent) {
     if (loading) {
         LoadingScreen();
     }
+    io.MouseDrawCursor = menu_open || quick_open;
     if (menu_open) {
         Menu();
+    } else if (quick_open) {
+        QuickMenu();
+    }
+    if (!menu_open && !quick_open) {
+        QuickHint();
     }
     if (Gow3Settings::Get().show_fps && !menu_open) {
         FpsCounter();

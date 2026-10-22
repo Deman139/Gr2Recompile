@@ -3,7 +3,9 @@ set -euo pipefail
 cd -- "$(dirname -- "$0")"
 mkdir -p out
 # Windows: MSYS2 CLANG64 (packages in packaging/windows/README.md). The GPU library is static
-# there and CMake links gow3-probe.exe as well; no PGO (GCC-only flags), LTO off by default.
+# there and CMake links gow3-probe.exe as well; LTO off by default (no gain measured). PGO
+# (GOW3_PGO: generate = instrumented build in out/gpu-pgo writing pgo/*.profraw while the game
+# runs; use = build with pgo/kzsf.profdata, merged from them; default use when that file exists).
 case $(uname -s) in
 MINGW*|MSYS*)
     # shellcheck source=msys2-env.sh
@@ -20,12 +22,32 @@ MINGW*|MSYS*)
             git -C gpu/third_party/fsr-vulkan apply "$PWD/$patch"
         fi
     done
-    cmake -S gpu -B out/gpu -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo -DGOW3_PGO=off \
-        -DGOW3_LTO="${GOW3_LTO:-OFF}" -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ >/dev/null
-    echo "GPU library and loader: LTO ${GOW3_LTO:-OFF}"
-    if ! ninja -C out/gpu gow3-probe gow3-gpu-capabilities gow3-play > out/gpu-build.log 2>&1; then
+    pgo=${GOW3_PGO:-}
+    if [[ -z $pgo ]]; then
+        if [[ -f pgo/kzsf.profdata ]]; then pgo=use; else pgo=off; fi
+    fi
+    if [[ $pgo == use && ! -f pgo/kzsf.profdata ]]; then
+        if compgen -G 'pgo/*.profraw' >/dev/null; then
+            llvm-profdata merge -o pgo/kzsf.profdata pgo/*.profraw
+        else
+            echo 'GOW3_PGO=use: no pgo/kzsf.profdata nor pgo/*.profraw' >&2; exit 1
+        fi
+    fi
+    # The instrumented build has its own directory: the normal one stays as it was.
+    build=out/gpu
+    [[ $pgo == generate ]] && build=out/gpu-pgo
+    mkdir -p pgo
+    cmake -S gpu -B "$build" -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo -DGOW3_PGO="$pgo" \
+        -DGOW3_PGO_DIR="$PWD/pgo" -DGOW3_LTO="${GOW3_LTO:-OFF}" -DCMAKE_C_COMPILER=clang \
+        -DCMAKE_CXX_COMPILER=clang++ >/dev/null
+    echo "GPU library and loader: PGO $pgo, LTO ${GOW3_LTO:-OFF}"
+    if ! ninja -C "$build" gow3-probe gow3-gpu-capabilities gow3-play > out/gpu-build.log 2>&1; then
         grep -v '^\[' out/gpu-build.log | tail -40 >&2
         echo 'Build failed (full log: out/gpu-build.log)' >&2; exit 1
+    fi
+    if [[ $pgo == generate ]]; then
+        echo "Built $PWD/$build/gow3-probe.exe (instrumented: play it, then GOW3_PGO=use bash build.sh)"
+        exit 0
     fi
     cp out/gpu/gow3-probe.exe out/gpu/gow3-gpu-capabilities.exe out/gpu/gow3-play.exe out/
     echo "Built $PWD/out/gow3-probe.exe"

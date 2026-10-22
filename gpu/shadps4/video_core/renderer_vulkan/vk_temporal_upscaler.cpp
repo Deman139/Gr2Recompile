@@ -1559,7 +1559,7 @@ void TemporalUpscaler::RunUiOnly(VideoCore::ImageId color_id, VideoCore::ImageId
 void TemporalUpscaler::RunScaled() {
     if (auto* profiler = GpuProfiler::Get()) {
         const char* label = Gow3Settings::Get().upscaler == Gow3Settings::UpscalerTaa
-            ? "upscaler RunScaled (TAA)" : "upscaler RunScaled (FSR)";
+            ? "upscaler RunScaled (TAA) setup + motion" : "upscaler RunScaled (FSR) setup + motion";
         profiler->Mark(0xF5A0'0000ull ^ std::hash<std::string_view>{}(label),
                        [label] { return std::string{label}; });
     }
@@ -1660,7 +1660,11 @@ void TemporalUpscaler::RunScaled() {
             vk::ImageLayout::eGeneral, all, vk::AccessFlagBits2::eShaderRead);
     // Frame generation: its own copy of the depth and motion (the presenter uses them after the
     // next frame has started here).
+    auto* profiler = GpuProfiler::Get();
     if (frame_generator) {
+        if (profiler) {
+            profiler->Mark(0xF5A3'0000ull, [] { return std::string{"frame generation capture"}; });
+        }
         if (const vk::ImageView fg_motion = frame_generator->BeginCapture(cmdbuf, depth_view, w, h)) {
             camera_motion.RecordMotion(cmdbuf, depth_view, fg_motion, w, h, velocity_view);
             frame_generator->EndCapture(cmdbuf, jitter, camera_motion.Ready(),
@@ -1679,6 +1683,14 @@ void TemporalUpscaler::RunScaled() {
     // output-size UI image. Killzone's UI image is B10G11R11: an FSR 3 storage write through an
     // RGBA8 view of it gave a red and yellow screen (issue #37).
     {
+        if (profiler) {
+            const char* label = Gow3Settings::Get().upscaler == Gow3Settings::UpscalerTaa ? "upscaler TAA"
+                                : UseDlss()                                                 ? "upscaler DLSS"
+                                : UseFsr4()                                                 ? "upscaler FSR 4"
+                                                                                            : "upscaler FSR 3";
+            profiler->Mark(0xF5A4'0000ull ^ std::hash<std::string_view>{}(label),
+                           [label] { return std::string{label}; });
+        }
         barrier(vk::Image(output_image), vk::ImageAspectFlagBits::eColor,
                 vk::ImageLayout::eUndefined, all, vk::AccessFlagBits2::eNone,
                 vk::ImageLayout::eGeneral, all, rw);
@@ -1727,6 +1739,10 @@ void TemporalUpscaler::RunScaled() {
                     vk::AccessFlagBits2::eTransferWrite, vk::ImageLayout::eGeneral,
                     vk::PipelineStageFlagBits2::eColorAttachmentOutput, color_access);
             if (frame_generator) {
+                if (profiler) {
+                    profiler->Mark(0xF5A5'0000ull,
+                                   [] { return std::string{"frame generation hudless copy"}; });
+                }
                 frame_generator->CaptureHudless(cmdbuf, vk::Image(ui_image), ow, oh,
                                                 display_format, ow, oh);
             }
@@ -1979,6 +1995,12 @@ bool TemporalUpscaler::RedirectColor(VideoCore::ImageId color,
                 cmd.pipelineBarrier2({.imageMemoryBarrierCount = 1, .pImageMemoryBarriers = &sb});
             });
         }
+        // GOW3_GPU_PROFILE: the blit apart from the game's display pass.
+        auto* profiler = GpuProfiler::Get();
+        const u64 resume = profiler ? profiler->Current() : 0;
+        if (profiler) {
+            profiler->Mark(0xF5A2'0000ull, [] { return std::string{"display blit (UI image)"}; });
+        }
         const vk::Image src = vk::Image(ui_image), dst = vk::Image(display.image);
         const u32 w = ui_width, h = ui_height;
         scheduler.Record([src, dst, w, h](vk::CommandBuffer cmd) {
@@ -2032,6 +2054,9 @@ bool TemporalUpscaler::RedirectColor(VideoCore::ImageId color,
             };
             cmd.pipelineBarrier2({.imageMemoryBarrierCount = 2, .pImageMemoryBarriers = after.data()});
         });
+        if (profiler && resume) {
+            profiler->Resume(resume);
+        }
         target = {Mirror(vk::Image(display.sink), display.sink_views, view_info.format, {}),
                   vk::ImageLayout::eGeneral, ui_width, ui_height};
         return true;

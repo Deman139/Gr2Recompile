@@ -201,8 +201,15 @@ u32 Gow3DisplayRefreshHz() {
 }
 
 #ifdef GOW3_PGO_GENERATE
+#ifdef __clang__
+extern "C" int __llvm_profile_write_file(void);
+extern "C" void __llvm_profile_reset_counters(void);
+static void __gcov_dump(void) { __llvm_profile_write_file(); }
+static void __gcov_reset(void) { __llvm_profile_reset_counters(); }
+#else
 extern "C" void __gcov_dump(void);
 extern "C" void __gcov_reset(void);
+#endif
 // Instrumented build (GOW3_PGO=generate): the game often ends through _exit (watchdog, guest
 // exit), which skips the profile write at exit. Write every 30 s and reset: the files sum the
 // intervals.
@@ -358,6 +365,27 @@ ScreenshotRequests ConsumeScreenshotRequests() {
 
 extern "C" int gow3gpu_vibration_percent(void) {
     return Gow3Settings::Get().vibration.load(std::memory_order_relaxed);
+}
+
+extern "C" void gow3gpu_input_settings(Gow3InputSettings* out) {
+    const auto& s = Gow3Settings::Get();
+    out->mouse_sens = s.mouse_sens.load(std::memory_order_relaxed);
+    out->mouse_turn_boost = float(s.mouse_turn_boost.load(std::memory_order_relaxed));
+    out->mouse_invert = s.mouse_invert.load(std::memory_order_relaxed) ? 1 : 0;
+    out->pad_dead_zone = float(s.pad_dead_zone.load(std::memory_order_relaxed)) / 100.0f;
+    out->quick_menu = s.quick_menu.load(std::memory_order_relaxed) ? 1 : 0;
+}
+
+extern "C" int gow3gpu_pad_speaker_percent(void) {
+    return Gow3Settings::Get().pad_speaker.load(std::memory_order_relaxed);
+}
+
+extern "C" void gow3gpu_quick_menu_open(void) {
+    Gow3Overlay::OpenQuickMenu();
+}
+
+extern "C" void gow3gpu_fov_register(float* cell) {
+    Gow3Overlay::SetFovCell(cell);
 }
 
 extern "C" int gow3gpu_overlay_captures_input(void) {

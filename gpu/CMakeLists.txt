@@ -27,7 +27,17 @@ if (GOW3_LTO)
         message(WARNING "LTO unavailable: ${gow3_ipo_error}")
     endif()
 endif()
-if (GOW3_PGO STREQUAL "generate")
+if (CMAKE_CXX_COMPILER_ID MATCHES "Clang" AND GOW3_PGO STREQUAL "generate")
+    # Clang (Windows): IR profiles, merged into GOW3_PGO_DIR/default_<id>.profraw at each write;
+    # llvm-profdata merges them into GOW3_PGO_DIR/kzsf.profdata for "use".
+    add_compile_options(-fprofile-generate=${GOW3_PGO_DIR} -fprofile-update=atomic)
+    add_link_options(-fprofile-generate=${GOW3_PGO_DIR})
+    add_compile_definitions(GOW3_PGO_GENERATE)
+elseif (CMAKE_CXX_COMPILER_ID MATCHES "Clang" AND GOW3_PGO STREQUAL "use")
+    # Code changed since the profile, or never run while it was taken, is optimized normally.
+    add_compile_options(-fprofile-use=${GOW3_PGO_DIR}/kzsf.profdata -Wno-profile-instr-unprofiled
+                        -Wno-profile-instr-out-of-date -Wno-profile-instr-missing -Wno-backend-plugin)
+elseif (GOW3_PGO STREQUAL "generate")
     # Atomic counters: the GPU, recording, preparation and copy threads run the same code.
     add_compile_options(-fprofile-generate=${GOW3_PGO_DIR} -fprofile-update=atomic)
     add_link_options(-fprofile-generate=${GOW3_PGO_DIR})

@@ -44,6 +44,21 @@ void gow3gpu_set_guest_image(const void *base);
 int gow3gpu_mouse_sample(float *dx, float *dy, uint32_t *buttons, int *wheel);
 /* Controller vibration strength set in the menu, 0 (off) to 100 (the game's own). */
 int gow3gpu_vibration_percent(void);
+/* Controls set in the launcher or the in-game menu (Controls tab), read live by the pad code. */
+typedef struct {
+    float mouse_sens;       /* mouse look sensitivity */
+    float mouse_turn_boost; /* fast turns: turn speed factor while the mouse moves */
+    int mouse_invert;       /* invert the mouse's Y axis */
+    float pad_dead_zone;    /* extra stick dead zone, 0..0.3 */
+    int quick_menu;         /* hold Select/Back/Share: quick menu */
+} Gow3InputSettings;
+void gow3gpu_input_settings(Gow3InputSettings *out);
+/* Controller speaker sounds, 0..100 percent (live). */
+int gow3gpu_pad_speaker_percent(void);
+/* Opens the quick menu (Resume / Settings / Exit game) over the game. */
+void gow3gpu_quick_menu_open(void);
+/* The FOV hook's float (pi/180 times the FOV scale) that the menu rewrites when the FOV changes. */
+void gow3gpu_fov_register(float *cell);
 /* Number of symbols registered by the vendored libraries (diagnostics). */
 unsigned gow3gpu_symbol_count(void);
 #ifdef __cplusplus

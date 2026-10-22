@@ -248,6 +248,21 @@ static void set_host_name(const char *name) {
     compat_set_thread_name(name); /* full name, for the profiler and debuggers */
 #endif
 }
+/* Threads the game creates with a high PS4 priority (below 400: brbDriver/brbClient sound,
+ * SceFios I/O, TempData) run above normal on the host, so audio and streaming keep up on CPUs
+ * with few threads (SpartanPort 4b843a7). GOW3_THREAD_PRIORITIES=0: all at normal priority. */
+enum { HIGH_GUEST_PRIO = 400 };
+static void set_host_priority(const char *name,int guest_prio) {
+    static int enabled=-1;
+    if (enabled<0) { const char *v=getenv("GOW3_THREAD_PRIORITIES"); enabled=!v || v[0]!='0'; }
+    if (!enabled || guest_prio>=HIGH_GUEST_PRIO) return;
+#ifdef _WIN32
+    if (!SetThreadPriority(GetCurrentThread(),THREAD_PRIORITY_ABOVE_NORMAL))
+        printf("Runtime: cannot raise the priority of '%s' (%lu)\n",name,GetLastError());
+#else
+    (void)name; /* raising needs CAP_SYS_NICE on Linux */
+#endif
+}
 #ifdef _WIN32
 #define exit_setjmp(t) gow3_setjmp((t)->exit_jump)
 #define exit_longjmp(t) gow3_longjmp((t)->exit_jump,1)
@@ -278,6 +293,7 @@ static void *host_start(void *p) {
     GuestThread *t=p;
     attach(t);
     set_host_name(t->name);
+    set_host_priority(t->name,t->attr.prio);
     runtime_set_guest_fpu();
     if (!exit_setjmp(t)) t->result=t->entry(t->argument);
     runtime_thread_keys_cleanup();

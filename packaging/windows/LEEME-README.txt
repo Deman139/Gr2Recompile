@@ -1,5 +1,8 @@
-KILLZONE SHADOW FALL - Native Windows port (Lesca) - Beta 0.2.5
+KILLZONE SHADOW FALL - Native Windows port (Lesca) - Beta 0.3.0
 =================================================================
+
+  Ports Discord (report problems, suggest features, hear about new ports first):
+  https://discord.gg/UYFcV5rbDw
 
 [ENGLISH]
 
@@ -56,13 +59,24 @@ Performance (new in 0.2.5)
   please tell us in an issue whether that fixed it.
 
 Controls
-  - Controller: Xbox, DualShock 4, DualSense and other SDL-compatible pads.
-  - Keyboard and mouse: WASD to move, mouse for the camera, left click fires, right click aims.
-    Change everything on the Controls tab (sensitivity, Y axis). Left Alt frees the cursor.
-  - Controls tab: stick dead zone (worn sticks that drift) and controller speaker volume
-    (sounds the PS4 plays on the controller, here on your speakers; 0% = off).
-  - Touchpad (OWL drone) without a touchpad: hold Delete and drag the mouse.
-  - Insert: the port's menu while playing (R3 + L2 on a controller).
+  - OWL DRONE ON KEYBOARD AND MOUSE: hold Delete and move the mouse (your finger on the
+    touchpad: swipe to pick the OWL's command).
+  - Keyboard and mouse (shooter style, change any key on the launcher's Controls tab):
+      WASD move, mouse camera, left click fire, right click aim, Space jump (X),
+      C crouch (Circle), R reload/use (Square), Q weapon (Triangle), 1 L1, 3 R1,
+      Left Shift sprint (L3), F melee (R3), arrow keys d-pad, Enter Options,
+      Tab / Backspace touchpad click left / right. Left Alt frees the cursor.
+  - Direct mouse aim (1:1): the mouse turns the camera itself, no emulated stick. Sensitivity
+    about 1 is recommended; "Fast turns" (x6) raises the game's turn speed limit while the mouse
+    moves. By the game's design walking turns slower than sprinting.
+  - Controller: Xbox, DualShock 4, DualSense and other SDL-compatible pads (remappable buttons,
+    stick dead zone, vibration, controller speaker volume).
+  - Insert (R3 + L2 on a controller): the in-game menu. Most launcher options change there
+    while you play (mouse, FOV, controller, display, VSync, sharpening, FSR / DLSS, frame
+    generation, texture sharpness, frame rate limit, performance overlay); the few that need a
+    restart have an "Apply and restart" button. "Exit game" closes the game.
+  - Hold Share / View / Select about a second: quick menu (Resume / Settings / Exit game).
+  - FOV: 80% to 150% in the launcher (Game tab) or live in the in-game menu.
   - F12: screenshot.
 
 Where your things are (user\ folder)
@@ -80,22 +94,22 @@ Known issues
   - First play: some effects can show up a few frames late while their shader compiles.
   - Above 60 FPS (Graphics, experimental): turn VSync off on a 60 Hz monitor, otherwise it
     stays at 60.
-  - The mouse is translated to the right stick: smooth, but not 1:1 like a PC shooter.
+  - Mouse: walking without sprinting turns at the game's own (slower) speed.
+  - The in-game menu is in English for now.
   - The shader cache can take several GB.
   - Multiplayer: offline only (Botzone).
 
-Future plans
-  High priority:   performance (better use of the GPU and CPU); mouse input (direct camera
-                   control); launcher options in the in-game menu (Insert).
-  Medium priority: FSR 4; ultrawide (21:9); debug menu, cheats and patches (e.g. unlock
-                   every chapter); fixes for bugs reported on specific hardware.
+Coming next
+  Ultrawide (21:9) support; upscaling quality modes (Quality / Balanced / Performance).
+  Later: FSR 4; in-game menu in Spanish; debug menu, cheats and patches; native Linux version.
 
 Support
   The port is and will stay free. If you want to support it (optional): the "Support with
   PayPal" button in the launcher, or https://www.paypal.com/paypalme/SantiagoLescano577
 
 Reporting bugs
-  https://github.com/lesca-191204/killzone-shadowfall-pc/issues
+  Ports Discord: https://discord.gg/UYFcV5rbDw
+  or https://github.com/lesca-191204/killzone-shadowfall-pc/issues
   Say what happened, in which chapter or place, your GPU, CPU and driver version, and attach
   the logs folder of that session (Logs button in the launcher).
 
@@ -108,6 +122,9 @@ Credits
 
 
 [ESPAÑOL]
+
+  Discord de los Ports (reportar problemas, proponer mejoras y enterarte antes de los nuevos
+  ports): https://discord.gg/UYFcV5rbDw
 
 Qué es
   Un port no oficial que ejecuta Killzone Shadow Fall (PS4) en Windows. El código del juego
@@ -165,13 +182,25 @@ Rendimiento (nuevo en 0.2.5)
   antes; contanos en un issue si eso lo solucionó.
 
 Controles
-  - Mando: Xbox, DualShock 4, DualSense y otros compatibles con SDL.
-  - Teclado y mouse: WASD moverse, mouse cámara, click izquierdo dispara, click derecho apunta.
-    Todo se cambia en la pestaña Controles (sensibilidad, eje Y). Alt izquierdo libera el cursor.
-  - Pestaña Controles: zona muerta de sticks (sticks gastados que se mueven solos) y volumen
-    del altavoz del mando (lo que la PS4 suena en el mando, acá por tus parlantes; 0% = apagado).
-  - Touchpad (dron OWL) sin touchpad: mantené Suprimir y arrastrá el mouse.
-  - Insert: menú del port durante el juego (también R3 + L2 en el mando).
+  - DRON OWL CON TECLADO Y MOUSE: mantené Suprimir y mové el mouse (tu dedo sobre el
+    touchpad: deslizá para elegir la orden del OWL).
+  - Teclado y mouse (estilo shooter, cualquier tecla se cambia en la pestaña Controles):
+      WASD moverse, mouse cámara, click izquierdo disparar, click derecho apuntar,
+      Espacio saltar (X), C agacharse (Círculo), R recargar/usar (Cuadrado), Q arma
+      (Triángulo), 1 L1, 3 R1, Shift izquierdo correr (L3), F cuerpo a cuerpo (R3),
+      flechas cruceta, Enter Options, Tab / Retroceso click del touchpad izquierdo / derecho.
+      Alt izquierdo libera el cursor.
+  - Mouse directo (1:1): el mouse gira la cámara directamente, sin stick emulado. Se recomienda
+    sensibilidad cerca de 1; "Giros rápidos" (x6) sube el límite de giro del juego mientras
+    movés el mouse. Por diseño del juego, caminando gira más lento que corriendo.
+  - Mando: Xbox, DualShock 4, DualSense y otros compatibles con SDL (botones remapeables, zona
+    muerta de sticks, vibración, volumen del altavoz del mando).
+  - Insert (R3 + L2 en el mando): el menú dentro del juego. Casi todas las opciones del launcher
+    se cambian ahí mientras jugás (mouse, FOV, mando, pantalla, VSync, nitidez, FSR / DLSS,
+    generación de frames, nitidez de texturas, límite de FPS, overlay de rendimiento); las pocas
+    que necesitan reinicio tienen un botón "Apply and restart". "Exit game" cierra el juego.
+  - Mantener Share / View / Select un segundo: menú rápido (Continuar / Ajustes / Salir).
+  - FOV: de 80% a 150% en el launcher (pestaña Juego) o en vivo en el menú del juego.
   - F12: captura de pantalla.
 
 Dónde quedan tus cosas (carpeta user\)
@@ -190,22 +219,23 @@ Problemas conocidos
   - Primera partida: algunos efectos pueden aparecer unos cuadros tarde mientras se compila su shader.
   - Más de 60 FPS (Gráficos, experimental): con un monitor de 60 Hz desactivá VSync, si no se
     queda en 60.
-  - El mouse se traduce a stick derecho: fluido, pero no 1 a 1 como un shooter de PC.
+  - Mouse: caminando sin correr, la cámara gira a la velocidad (más lenta) del propio juego.
+  - Por ahora el menú dentro del juego está en inglés.
   - La caché de shaders puede ocupar varios GB.
   - Multijugador: solo sin conexión (Botzone).
 
-Planes futuros
-  Prioridad alta:  rendimiento (mejor uso de GPU y CPU); input del mouse (control directo de
-                   la cámara); opciones del launcher en el menú del juego (Insert).
-  Prioridad media: FSR 4; ultrawide (21:9); menú debug, trucos y parches (p. ej. desbloquear
-                   todos los capítulos); arreglos de errores reportados en hardware específico.
+Próximamente
+  Soporte ultrawide (21:9); calidades de reescalado (Calidad / Equilibrado / Rendimiento).
+  Más adelante: FSR 4; menú del juego en español; menú debug, trucos y parches; versión nativa
+  para Linux.
 
 Apoyar el proyecto
   El port es y seguirá siendo gratuito. Si querés apoyarlo (opcional): el botón "Apoyar con
   PayPal" del launcher, o https://www.paypal.com/paypalme/SantiagoLescano577
 
 Reportar errores
-  https://github.com/lesca-191204/killzone-shadowfall-pc/issues
+  Discord de los Ports: https://discord.gg/UYFcV5rbDw
+  o https://github.com/lesca-191204/killzone-shadowfall-pc/issues
   Contá qué pasó, en qué capítulo o lugar, tu GPU, CPU y versión del driver, y adjuntá la
   carpeta de logs de esa partida (botón Logs en el launcher).
 

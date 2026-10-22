@@ -79,6 +79,20 @@ struct Values {
     /// gow3 (iss_pc mip_lod_bias): extra texture LOD bias of every draw, -3..3 in steps of 1/8:
     /// negative is sharper at a distance (more shimmer), positive blurrier (a little less GPU).
     std::atomic<float> mip_lod_bias{0.0f};
+    /// Killzone controls, live (in-game menu Controls tab and the launcher; runtime_pad.c and
+    /// runtime_audio.c read them through gow3gpu_input_settings / gow3gpu_pad_speaker_percent).
+    std::atomic<float> mouse_sens{1.0f};      ///< mouse look sensitivity, 0.2..4
+    std::atomic<int> mouse_turn_boost{6};     ///< "fast turns": turn speed factor while the mouse moves, 1..12
+    std::atomic<bool> mouse_invert{false};
+    std::atomic<int> fov{100};                ///< horizontal FOV percent, 80..150 (src/probe.c FOV hook)
+    std::atomic<int> pad_dead_zone{0};        ///< extra stick dead zone percent, 0..30
+    std::atomic<int> pad_speaker{100};        ///< controller speaker sounds percent
+    std::atomic<bool> quick_menu{true};       ///< hold Select/Back/Share: quick menu (Resume / Exit)
+    std::atomic<bool> quick_menu_hint{true};  ///< startup reminder of that shortcut
+    /// Set when the in-game menu changed the upscaler or frame generation: the launcher adopts
+    /// gow3.ini's upscaler/frame_gen into its own settings next time and clears it.
+    std::atomic<bool> upscaling_from_menu{false};
+    int startup_frame_gen = 0;
     // Startup: run.py turns them into patches and environment variables; "Apply and restart".
     std::atomic<int> render_resolution{0};
     std::atomic<int> engine_fps{120};

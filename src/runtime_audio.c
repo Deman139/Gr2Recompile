@@ -8,6 +8,7 @@
  * ports only follow the clock. */
 #define _GNU_SOURCE
 #include "runtime.h"
+#include "gpu/gow3gpu.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -116,18 +117,13 @@ static ABI int32_t audio_init(void) {
     pthread_mutex_unlock(&table_lock);
     return r;
 }
-/* Controller speaker sounds (port type 4) play on the main output; GOW3_PAD_SPEAKER_VOLUME
- * (0..100, launcher Audio) scales them, 0 mutes them while the port keeps its timing. */
+/* Controller speaker sounds (port type 4) play on the main output; the controller speaker setting
+ * (0..100, launcher Controls and in-game menu, live) scales them, 0 mutes them while the port
+ * keeps its timing. */
 static float pad_speaker_gain(void) {
-    static float gain=-1.0f;
-    if (gain<0.0f) {
-        const char *v=getenv("GOW3_PAD_SPEAKER_VOLUME");
-        int percent=v && *v ? atoi(v) : 100;
-        percent=percent<0 ? 0 : percent>100 ? 100 : percent;
-        gain=(float)percent/100.0f;
-        if (percent!=100) printf("Runtime: controller speaker sounds at %d%%\n",percent);
-    }
-    return gain;
+    int percent=gow3gpu_pad_speaker_percent();
+    percent=percent<0 ? 0 : percent>100 ? 100 : percent;
+    return (float)percent/100.0f;
 }
 static ABI int32_t audio_open(int32_t user, int32_t type, int32_t index, uint32_t length, uint32_t freq, uint32_t param) {
     (void)user; (void)index;
@@ -201,6 +197,7 @@ static int32_t output_port(int32_t handle, const void *data, int pace) {
         /* Apply per-channel volume and map PS4 8ch (L R C LFE SL SR BL BR) to SDL 7.1 order. */
         unsigned char converted[2048*8*4];
         static const int remap[8]={0,1,2,3,6,7,4,5};
+        if (p->type==4) p->extra_gain=pad_speaker_gain(); /* live: launcher or in-game menu */
         for (size_t f=0;f<(size_t)p->frames;++f) for (int c=0;c<p->channels;++c) {
             int target=p->channels==8 && !p->std_layout ? remap[c] : c;
             size_t from=f*(size_t)p->channels+(size_t)c, to=f*(size_t)p->channels+(size_t)target;

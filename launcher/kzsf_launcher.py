@@ -40,7 +40,7 @@ FROZEN = getattr(sys, 'frozen', False)
 PORT_DIR = Path(sys.executable).resolve().parent if FROZEN else Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PORT_DIR / 'scripts'))
 
-VERSION = '0.2.5'
+VERSION = '0.3.0'
 TITLE_ID = 'CUSA00190'
 # Other releases of the game players run (their languages), accepted untested: the port was built and
 # tested on CUSA00190. Every one must be at version 01.81.
@@ -72,6 +72,9 @@ MARK = '#2f8bff'  # "Lesca": marks this build as ours
 DONATE_BG = '#0070ba'     # PayPal blue
 DONATE_HOVER = '#1a8ad6'
 DONATE_URL = 'https://www.paypal.com/paypalme/SantiagoLescano577'
+DISCORD_BG = '#5865f2'    # Discord blurple
+DISCORD_HOVER = '#7983f5'
+DISCORD_URL = 'https://discord.gg/UYFcV5rbDw'
 UI_FONT = 'Segoe UI'
 
 
@@ -99,6 +102,9 @@ TEXTS = {
         'bad_update': 'La carpeta de actualización no es {want} versión {ver_want} (es {id} {ver}).',
         'ready': 'Listo: {title} · {id} · versión {ver}',
         'ready_update': 'Listo: {title} · {id} · versión {ver} (con actualización)',
+        'fov': 'Campo de visión (FOV)',
+        'fov_help': 'Porcentaje del campo de visión original del juego (100% = como en PS4). '
+                    'También agranda el zoom al apuntar en la misma proporción.',
         'tools': 'Carpetas y mantenimiento',
         'open_saves': 'Partidas guardadas', 'open_shots': 'Capturas', 'open_logs': 'Logs',
         'clear_cache': 'Borrar caché',
@@ -134,19 +140,25 @@ TEXTS = {
         'graphics_note': 'Durante el juego, Insert abre el menú del port (también con el mando: R3 + L2).',
         'keyboard': 'Teclado', 'controller': 'Mando',
         'press_key': 'Pulsá una tecla…', 'reset_defaults': 'Valores por defecto',
-        'controls_help': 'Click en una tecla y apretá otra tecla, un botón del mouse o la rueda (Esc cancela). Movimiento: WASD. Cámara: flechas.\n'
+        'controls_help': 'Click en una tecla y apretá otra tecla, un botón del mouse o la rueda (Esc cancela). Movimiento: WASD. Cámara: mouse. Cruceta: flechas.\n'
                          'Touchpad (dron OWL): mantené Suprimir y arrastrá el mouse. Tab / Retroceso: click izquierdo / '
                          'derecho del touchpad.',
         'controller_help': 'Botón del mando que hace de cada botón de PS4. Los gatillos y sticks no se cambian.',
         'vibration': 'Vibración',
         'dead_zone': 'Zona muerta de sticks', 'pad_speaker': 'Altavoz del mando',
+        'quick_menu': 'Mantener Select/Share: menú rápido', 'quick_menu_hint': 'Consejos al iniciar',
+        'quick_menu_help': 'Mantenerlo apretado ~1 segundo abre Continuar / Ajustes / Salir del juego desde el '
+                           'mando; un toque corto sigue funcionando como siempre (touchpad). Consejos: al empezar, '
+                           'un aviso breve de cómo usar el dron OWL con teclado (Supr + mouse) y del menú rápido.',
         'pad_extra_help': 'Zona muerta: subila si la cámara o el personaje se mueven solos (stick gastado). '
                           'Altavoz del mando: sonidos que la PS4 manda al parlante del mando; acá suenan '
                           'por tus parlantes (0% = apagado).',
         'mouse': 'Mouse', 'mouse_look': 'Apuntar con el mouse',
-        'mouse_look_help': 'El mouse mueve la cámara; click izquierdo dispara (R2), derecho apunta (L2). '
-                           'Alt izquierdo libera el cursor.',
-        'mouse_sens': 'Sensibilidad', 'mouse_invert': 'Invertir eje Y',
+        'mouse_look_help': 'El mouse mueve la cámara 1:1, sin la zona muerta ni el tope de un stick '
+                           '(sensibilidad recomendada: alrededor de 1); click izquierdo dispara (R2), derecho '
+                           'apunta (L2). Giros rápidos sube el límite de velocidad de giro del juego mientras '
+                           'movés el mouse (x6 por defecto). Alt izquierdo libera el cursor.',
+        'mouse_sens': 'Sensibilidad', 'mouse_invert': 'Invertir eje Y', 'mouse_turn': 'Giros rápidos',
         'advanced_help': 'Solo si algo se ve mal o el juego no funciona bien. Si tenés dudas, dejalo como está.',
         'async_shaders': 'Compilar shaders nuevos en segundo plano',
         'async_help': 'Menos tirones en zonas nuevas; un objeto puede aparecer un instante después.',
@@ -163,6 +175,12 @@ TEXTS = {
                            'DLSS: lo mismo con NVIDIA DLSS (GeForce RTX; en otras placas usa FSR 3.1). Clásico: '
                            'el juego mismo renderiza a esa resolución; más exigente, y pueden aparecer parpadeos '
                            'de luz, una sombra que sigue a la cámara y videos con zoom.',
+        'upscale_quality': 'Calidad de FSR / DLSS',
+        'uq_native': 'Nativa (máxima calidad)', 'uq_quality': 'Calidad', 'uq_balanced': 'Equilibrado',
+        'uq_performance': 'Rendimiento', 'uq_ultra': 'Ultra rendimiento',
+        'upscale_quality_help': 'Con FSR o DLSS (Avanzado → Método de resolución) o con generación de frames: '
+                                'el juego renderiza a menor resolución y FSR / DLSS reconstruyen la imagen. '
+                                'Más FPS, imagen algo más suave. Nativa: el juego a 1080p como hasta ahora.',
         'perf_heading': 'Rendimiento',
         'draw_pipe': 'Dibujo en paralelo (2 hilos de GPU)',
         'nowait_writes': 'Copias del juego sin esperar a la GPU',
@@ -197,6 +215,7 @@ TEXTS = {
         'fix_folder': 'Primero elegí una carpeta del juego válida (pestaña Juego).',
         'footer_hint': 'Port nativo para Windows · usa tu propio dump',
         'donate': 'Apoyar con PayPal',
+        'discord_join': 'Ports Discord',
     },
     'en': {
         'tab_game': 'Game', 'tab_graphics': 'Graphics', 'tab_controls': 'Controls', 'tab_advanced': 'Advanced',
@@ -218,6 +237,9 @@ TEXTS = {
         'bad_update': 'The update folder is not {want} version {ver_want} (it is {id} {ver}).',
         'ready': 'Ready: {title} · {id} · version {ver}',
         'ready_update': 'Ready: {title} · {id} · version {ver} (with update)',
+        'fov': 'Field of view (FOV)',
+        'fov_help': "Percent of the game's original field of view (100% = as on PS4). "
+                    'Aiming zoom widens in the same proportion.',
         'tools': 'Folders and maintenance',
         'open_saves': 'Saved games', 'open_shots': 'Screenshots', 'open_logs': 'Logs',
         'clear_cache': 'Clear cache',
@@ -252,19 +274,25 @@ TEXTS = {
         'graphics_note': 'In game, Insert opens the port menu (on a controller: R3 + L2).',
         'keyboard': 'Keyboard', 'controller': 'Controller',
         'press_key': 'Press a key…', 'reset_defaults': 'Defaults',
-        'controls_help': 'Click a key, then press a key, a mouse button or the wheel (Esc cancels). Move: WASD. Camera: arrow keys.\n'
+        'controls_help': 'Click a key, then press a key, a mouse button or the wheel (Esc cancels). Move: WASD. Camera: mouse. D-pad: arrow keys.\n'
                          'Touchpad (OWL drone): hold Delete and drag the mouse. Tab / Backspace: left / right '
                          'touchpad click.',
         'controller_help': 'The controller button that acts as each PS4 button. Triggers and sticks are fixed.',
         'vibration': 'Vibration',
         'dead_zone': 'Stick dead zone', 'pad_speaker': 'Controller speaker',
+        'quick_menu': 'Hold Select/Share: quick menu', 'quick_menu_hint': 'Tips at startup',
+        'quick_menu_help': 'Holding it about a second opens Resume / Settings / Exit game from the controller; '
+                           'a short press still works as usual (touchpad). Tips: a short note at startup on '
+                           'using the OWL drone with the keyboard (Delete + mouse) and the quick menu.',
         'pad_extra_help': 'Dead zone: raise it if the camera or character moves on its own (worn stick). '
                           'Controller speaker: sounds the PS4 sends to the controller speaker; here they '
                           'play on your speakers (0% = off).',
         'mouse': 'Mouse', 'mouse_look': 'Aim with the mouse',
-        'mouse_look_help': 'The mouse moves the camera; left click fires (R2), right click aims (L2). '
+        'mouse_look_help': "The mouse moves the camera 1:1, without a stick's dead zone or limit (recommended "
+                           'sensitivity: about 1); left click fires (R2), right click aims (L2). Fast turns '
+                           "raises the game's turn speed limit while the mouse moves (x6 by default). "
                            'Left Alt frees the cursor.',
-        'mouse_sens': 'Sensitivity', 'mouse_invert': 'Invert Y axis',
+        'mouse_sens': 'Sensitivity', 'mouse_invert': 'Invert Y axis', 'mouse_turn': 'Fast turns',
         'advanced_help': 'Only if something looks wrong or the game misbehaves. When in doubt, leave it as it is.',
         'async_shaders': 'Compile new shaders in the background',
         'async_help': 'Fewer stutters in new areas; an object may appear a moment later.',
@@ -272,6 +300,12 @@ TEXTS = {
         'stale_help': 'More FPS. Turn it off if lighting or objects look wrong.',
         'deferred_readback': 'Deferred GPU readbacks',
         'deferred_help': 'Fewer waits. Turn it off if textures or shadows look wrong.',
+        'upscale_quality': 'FSR / DLSS quality',
+        'uq_native': 'Native (best quality)', 'uq_quality': 'Quality', 'uq_balanced': 'Balanced',
+        'uq_performance': 'Performance', 'uq_ultra': 'Ultra performance',
+        'upscale_quality_help': 'With FSR or DLSS (Advanced → Resolution method) or frame generation: the game '
+                                'renders at a lower resolution and FSR / DLSS rebuild the picture. More FPS, a '
+                                'slightly softer image. Native: the game at 1080p as before.',
         'res_method': 'Resolution method',
         'res_method_upscale': 'AMD FSR 3.1 (recommended)',
         'res_method_dlss': 'NVIDIA DLSS (RTX only)',
@@ -315,6 +349,7 @@ TEXTS = {
         'fix_folder': 'Choose a valid game folder first (Game tab).',
         'footer_hint': 'Native Windows port · uses your own dump',
         'donate': 'Support with PayPal',
+        'discord_join': 'Ports Discord',
     },
 }
 LANG = 'es'
@@ -433,19 +468,31 @@ GRAPHICS_DEFAULTS = {
 }
 LAUNCHER_DEFAULTS = {'game_dir': '', 'update_dir': '', 'language': '', 'window_size': '1920x1080',
                      'key_map': {}, 'pad_map': {}, 'mouse_look': True, 'mouse_sens': 1.0,
-                     'mouse_invert': False, 'check_updates': True, 'smart_pending': True,
+                     'mouse_invert': False, 'mouse_turn_boost': 6, 'check_updates': True,
+                     'smart_pending': True,
                      'draw_pipe': True, 'nowait_writes': True,
                      'res_method': 'upscale', 'discord_rpc': True, 'pad_dead_zone': 0,
-                     'pad_speaker': 100}
+                     'pad_speaker': 100, 'fov': 100, 'quick_menu': True, 'quick_menu_hint': True}
 # Discord Rich Presence: the application "Killzone Shadow Fall" (its name is what Discord shows) and the
 # key of its large image asset. Empty ID: no presence.
 DISCORD_ID = '1562348304153706608'
 DISCORD_IMAGE = 'logo'
 DISCORD_DETAILS = 'PC Port by Lesca'
 RES_METHODS = ('upscale', 'dlss', 'patch')
+# FSR / DLSS quality modes: the game's render size per output (resolution patches of that name in
+# patches/Killzone_Shadow_Fall.xml, tools/make_kzsf_res_patches.py). The usual 67 / 58 / 50 / 33 %
+# per axis, never above the game's own 1080p (larger patches bring lighting artifacts).
+UPSCALE_QUALITIES = ('native', 'quality', 'balanced', 'performance', 'ultra')
+UPSCALE_RENDER = {
+    '1920x1080': {'quality': '1280x720', 'balanced': '1120x630', 'performance': '960x540', 'ultra': '640x360'},
+    '2560x1440': {'quality': '1708x960', 'balanced': '1488x836', 'performance': '1280x720', 'ultra': '852x480'},
+    '3200x1800': {'quality': '1920x1080', 'balanced': '1856x1044', 'performance': '1600x900', 'ultra': '1066x600'},
+    '3840x2160': {'quality': '1920x1080', 'balanced': '1920x1080', 'performance': '1920x1080', 'ultra': '1280x720'},
+}
 # Frame generation (GOW3_FRAME_GEN): FSR 3.1 on any GPU; DLSS Frame Generation for RTX 40/50
 # (the port falls back to FSR 3.1 until it is supported).
 FRAME_GENS = ('off', 'fsr3', 'dlss')
+RESTART_CODE = 75  # the game's exit code for "Apply and restart" (src/probe.c runtime_restart)
 # Render resolutions the port draws itself (GOW3_OUTPUT_RES) with the new method; 720p keeps the patch.
 PORT_OUTPUTS = {'1440p': '2560x1440', '1800p': '3200x1800', '4K': '3840x2160'}
 WINDOW_SIZES = ('1280x720', '1600x900', '1920x1080', '2560x1440', '3840x2160')
@@ -461,14 +508,15 @@ FRAMES_QUEUED = ('1', '2', '0')
 
 # PS4 button, label, default key (SDL scancode name) and default controller button (SDL name).
 BUTTONS = (
-    ('cross', '✕', 'Space', 'south'), ('circle', '○', 'Left Shift', 'east'),
-    ('square', '□', 'E', 'west'), ('triangle', '△', 'Q', 'north'),
+    ('cross', '✕', 'Space', 'south'), ('circle', '○', 'C', 'east'),
+    ('square', '□', 'R', 'west'), ('triangle', '△', 'Q', 'north'),
     ('l1', 'L1', '1', 'leftshoulder'), ('r1', 'R1', '3', 'rightshoulder'),
-    ('l2', 'L2', 'R', ''), ('r2', 'R2', 'F', ''),
-    ('l3', 'L3', 'Z', 'leftstick'), ('r3', 'R3', 'C', 'rightstick'),
+    ('l2', 'L2', 'Mouse Right', ''), ('r2', 'R2', 'Mouse Left', ''),  # mouse look's own (runtime_pad.c)
+    ('l3', 'L3', 'Left Shift', 'leftstick'), ('r3', 'R3', 'F', 'rightstick'),
     ('options', 'OPTIONS', 'Return', 'start'),
     ('touchpad_left', 'Touch ←', 'Tab', ''), ('touchpad_right', 'Touch →', 'Backspace', 'back'),
-    ('up', '↑', 'I', 'dpup'), ('down', '↓', 'K', 'dpdown'), ('left', '←', 'J', 'dpleft'), ('right', '→', 'L', 'dpright'),
+    ('up', '↑', 'Up', 'dpup'), ('down', '↓', 'Down', 'dpdown'), ('left', '←', 'Left', 'dpleft'),
+    ('right', '→', 'Right', 'dpright'),
 )
 # Controller buttons a PS4 button can take: SDL name and the label shown (Xbox / PlayStation).
 PAD_BUTTONS = (
@@ -481,7 +529,7 @@ PAD_BUTTONS = (
 )
 # Keys the game itself or the port already uses: not offered for buttons.
 TK_MOUSE = {1: 'Mouse Left', 2: 'Mouse Middle', 3: 'Mouse Right', 4: 'Mouse 4', 5: 'Mouse 5'}
-RESERVED_KEYS = {'W', 'A', 'S', 'D', 'Up', 'Down', 'Left', 'Right', 'Insert', 'Delete', 'F9', 'F11', 'F12', 'Escape'}
+RESERVED_KEYS = {'W', 'A', 'S', 'D', 'Insert', 'Delete', 'F9', 'F11', 'F12', 'Escape'}
 # Tk keysyms that differ from SDL scancode names.
 TK_TO_SDL = {
     'space': 'Space', 'Shift_L': 'Left Shift', 'Shift_R': 'Right Shift', 'Control_L': 'Left Ctrl',
@@ -500,6 +548,25 @@ for _digit, _name in enumerate(('KP_Insert', 'KP_End', 'KP_Down', 'KP_Next', 'KP
     TK_TO_SDL[f'KP_{_digit}'] = f'Keypad {_digit}'
 
 
+FOV_MIN, FOV_MAX = 80, 150
+
+
+def fov_percent(value):
+    """The FOV setting rounded to the patches' 5% steps, within FOV_MIN..FOV_MAX (100 if unset)."""
+    try:
+        return max(FOV_MIN, min(FOV_MAX, int(round(float(value) / 5) * 5)))
+    except (TypeError, ValueError):
+        return 100
+
+
+def turn_boost(value):
+    """The fast-turn factor of direct mouse look (1..12, 6 if unset)."""
+    try:
+        return max(1, min(12, int(round(float(value)))))
+    except (TypeError, ValueError):
+        return 6
+
+
 def sdl_key_name(keysym):
     """The SDL scancode name of a Tk keysym, or None when the port cannot read that key."""
     if keysym in TK_TO_SDL:
@@ -511,6 +578,26 @@ def sdl_key_name(keysym):
     return None
 
 
+# Controls the in-game menu (Insert, quick menu) also changes: kept in gow3.ini as well, which the
+# game reads live. On load gow3.ini wins (it may hold a change made in game); every save writes
+# both. key: (type, gow3.ini text of a value).
+SHARED_SETTINGS = {
+    'mouse_sens': (float, lambda v: f'{float(v):.1f}'),
+    'mouse_turn_boost': (int, lambda v: str(int(v))),
+    'mouse_invert': (bool, lambda v: '1' if v else '0'),
+    'fov': (int, lambda v: str(int(v))),
+    'pad_dead_zone': (int, lambda v: str(int(v))),
+    'pad_speaker': (int, lambda v: str(int(v))),
+    'quick_menu': (bool, lambda v: '1' if v else '0'),
+    'quick_menu_hint': (bool, lambda v: '1' if v else '0'),
+}
+
+
+def write_launcher_file(settings):
+    USER_DIR.mkdir(parents=True, exist_ok=True)
+    LAUNCHER_FILE.write_text(json.dumps(settings, indent=2, ensure_ascii=False) + '\n', encoding='utf-8')
+
+
 def load_launcher():
     try:
         data = json.loads(LAUNCHER_FILE.read_text(encoding='utf-8'))
@@ -520,12 +607,33 @@ def load_launcher():
     for key in ('key_map', 'pad_map'):
         if not isinstance(settings[key], dict):
             settings[key] = {}
+    from graphics_options import read_ini, write_keys
+    ini = read_ini(SETTINGS_FILE)
+    for key, (kind, _) in SHARED_SETTINGS.items():
+        if key in ini:
+            try:
+                settings[key] = ini[key] not in ('0', '') if kind is bool else kind(float(ini[key]))
+            except ValueError:
+                pass
+    # Upscaler / frame generation chosen in the in-game menu (gow3_overlay.cpp UpscalingSection).
+    if ini.get('upscaling_from_menu') == '1':
+        if ini.get('frame_gen') in FRAME_GENS:
+            settings['frame_gen'] = ini['frame_gen']
+        if ini.get('upscaler') in ('fsr3', 'dlss') and settings.get('res_method') != 'patch':
+            settings['res_method'] = 'dlss' if ini['upscaler'] == 'dlss' else 'upscale'
+        write_keys(SETTINGS_FILE, {'upscaling_from_menu': '0'})
+        write_launcher_file(settings)
     return settings
 
 
 def save_launcher(settings):
-    USER_DIR.mkdir(parents=True, exist_ok=True)
-    LAUNCHER_FILE.write_text(json.dumps(settings, indent=2, ensure_ascii=False) + '\n', encoding='utf-8')
+    write_launcher_file(settings)
+    from graphics_options import write_keys
+    if not SETTINGS_FILE.exists():
+        SETTINGS_FILE.write_text('# Killzone Shadow Fall (PC port) settings: launcher and in-game menu (Insert)\n',
+                                 encoding='utf-8')
+    write_keys(SETTINGS_FILE, {key: text(settings[key]) for key, (_, text) in SHARED_SETTINGS.items()
+                               if key in settings})
 
 
 def load_graphics():
@@ -709,6 +817,12 @@ class Launcher:
         donate.bind('<Button-1>', lambda e: webbrowser.open(DONATE_URL))
         donate.bind('<Enter>', lambda e: donate.configure(bg=DONATE_HOVER))
         donate.bind('<Leave>', lambda e: donate.configure(bg=DONATE_BG))
+        discord = tk.Label(footer, text=tr('discord_join'), fg='white', bg=DISCORD_BG,
+                           font=self.font(9, 'bold'), padx=self.px(10), pady=self.px(3), cursor='hand2')
+        discord.pack(side='left', padx=(self.px(8), 0))
+        discord.bind('<Button-1>', lambda e: webbrowser.open(DISCORD_URL))
+        discord.bind('<Enter>', lambda e: discord.configure(bg=DISCORD_HOVER))
+        discord.bind('<Leave>', lambda e: discord.configure(bg=DISCORD_BG))
         self.play_button = tk.Label(footer, text=tr('play'), fg=BG, bg=ACCENT, font=self.font(13, 'bold'),
                                     padx=self.px(46), pady=self.px(10), cursor='hand2')
         self.play_button.pack(side='right')
@@ -902,6 +1016,7 @@ class Launcher:
                                     justify='left', wraplength=self.px(820))
         self.game_status.pack(fill='x', pady=(self.px(10), 0))
 
+        self.fov_section(parent)
         self.heading(parent, tr('tools'), pady=(22, 8))
         tools = tk.Frame(parent, bg=PANEL)
         tools.pack(fill='x')
@@ -913,6 +1028,29 @@ class Launcher:
         self.cache_note = self.note(parent, '')
         self.refresh_cache_size()
         self.refresh_game()
+
+    def fov_section(self, parent):
+        tk = self.tk
+        self.heading(parent, tr('fov'), pady=(22, 8))
+        row = tk.Frame(parent, bg=PANEL)
+        row.pack(fill='x')
+        var = tk.IntVar(value=fov_percent(self.settings.get('fov')))
+        value_label = tk.Label(row, text=f'{var.get()}%', bg=PANEL, fg=MUTED, font=self.font(9), width=5)
+
+        def moved(value):
+            # The game's patches come in steps of 5% (patches/Killzone_Shadow_Fall.xml "FOV - N%").
+            value = fov_percent(float(value))
+            var.set(value)
+            value_label.configure(text=f'{value}%')
+            if value != self.settings.get('fov'):
+                self.settings['fov'] = value
+                save_launcher(self.settings)
+        self.ttk.Scale(row, from_=FOV_MIN, to=FOV_MAX, variable=var, command=moved,
+                       length=self.px(260)).pack(side='left')
+        value_label.pack(side='left', padx=self.px(10))
+        self.button(row, '100%', lambda: moved(100)).pack(side='left')
+        self.images['fov_var'] = var
+        self.note(parent, tr('fov_help'))
 
     def refresh_cache_size(self):
         def measure():
@@ -1113,6 +1251,24 @@ class Launcher:
             sliders.append(var)
         self.images['pad_extra_vars'] = sliders
         self.note(parent, tr('pad_extra_help'))
+        self.quick_menu_section(parent)
+
+    def quick_menu_section(self, parent):
+        tk = self.tk
+        row = tk.Frame(parent, bg=PANEL)
+        row.pack(fill='x', pady=(self.px(8), 0))
+        quick = tk.BooleanVar(value=bool(self.settings.get('quick_menu', True)))
+        hint = tk.BooleanVar(value=bool(self.settings.get('quick_menu_hint', True)))
+
+        def changed():
+            self.settings['quick_menu'] = quick.get()
+            self.settings['quick_menu_hint'] = hint.get()
+            save_launcher(self.settings)
+        self.ttk.Checkbutton(row, text=tr('quick_menu'), variable=quick, command=changed).pack(side='left')
+        self.ttk.Checkbutton(row, text=tr('quick_menu_hint'), variable=hint, command=changed).pack(
+            side='left', padx=(self.px(24), 0))
+        self.images['quick_menu_vars'] = (quick, hint)
+        self.note(parent, tr('quick_menu_help'))
 
     def mouse_section(self, parent):
         tk = self.tk
@@ -1143,7 +1299,28 @@ class Launcher:
         self.ttk.Checkbutton(row, text=tr('mouse_invert'), variable=invert, command=changed).pack(
             side='left', padx=(self.px(18), 0))
         self.images['mouse_vars'] = (look, invert, sens)
+        self.mouse_turn_section(parent)
         self.note(parent, tr('mouse_look_help'))
+
+    def mouse_turn_section(self, parent):
+        tk = self.tk
+        row = tk.Frame(parent, bg=PANEL)
+        row.pack(fill='x', pady=(self.px(8), 0))
+        tk.Label(row, text=tr('mouse_turn'), bg=PANEL, fg=TEXT, font=self.font(10)).pack(side='left')
+        boost = tk.IntVar(value=turn_boost(self.settings.get('mouse_turn_boost')))
+        boost_label = tk.Label(row, text=f'x{boost.get()}', bg=PANEL, fg=MUTED, font=self.font(9), width=4)
+
+        def moved(value):
+            value = turn_boost(value)
+            boost.set(value)
+            boost_label.configure(text=f'x{value}')
+            if value != self.settings.get('mouse_turn_boost'):
+                self.settings['mouse_turn_boost'] = value
+                save_launcher(self.settings)
+        self.ttk.Scale(row, from_=1, to=12, variable=boost, command=moved, length=self.px(160)).pack(
+            side='left', padx=self.px(8))
+        boost_label.pack(side='left')
+        self.images['mouse_turn_var'] = boost
 
     def capture_key(self, name):
         if self.capturing:
@@ -1206,7 +1383,8 @@ class Launcher:
 
     def reset_controls(self):
         self.settings.update(key_map={}, pad_map={}, mouse_look=True, mouse_sens=1.0, mouse_invert=False,
-                             pad_dead_zone=0, pad_speaker=100)
+                             mouse_turn_boost=6, pad_dead_zone=0, pad_speaker=100, quick_menu=True,
+                             quick_menu_hint=True)
         save_launcher(self.settings)
         self.set_graphic('vibration', '100')
         self.show_tab('controls')
@@ -1292,9 +1470,11 @@ class Launcher:
         self.graphics = dict(GRAPHICS_DEFAULTS)
         save_graphics(self.graphics)
         self.settings.update(window_size='1920x1080', key_map={}, pad_map={}, mouse_look=True, mouse_sens=1.0,
-                             mouse_invert=False, smart_pending=True, draw_pipe=True, nowait_writes=True,
+                             mouse_invert=False, mouse_turn_boost=6, smart_pending=True, draw_pipe=True,
+                             nowait_writes=True,
                              res_method='upscale', frame_gen='off',
-                             discord_rpc=True, pad_dead_zone=0, pad_speaker=100)
+                             discord_rpc=True, pad_dead_zone=0, pad_speaker=100, fov=100,
+                             quick_menu=True, quick_menu_hint=True)
         save_launcher(self.settings)
         self.show_tab('advanced')
 
@@ -1395,6 +1575,7 @@ class Launcher:
             self.show_tab('game')
             return
         save_graphics(self.graphics)
+        save_launcher(self.settings)  # the controls the game reads from gow3.ini (SHARED_SETTINGS)
         run_dir = LOGS_DIR / time.strftime('%Y-%m-%d_%H-%M-%S')
         run_dir.mkdir(parents=True, exist_ok=True)
         prune_logs()
@@ -1409,11 +1590,11 @@ class Launcher:
             'GOW3_KEY_MAP': map_spec(self.settings['key_map'], 0),
             'GOW3_PAD_MAP': map_spec(self.settings['pad_map'], 1),
             'PYTHONIOENCODING': 'utf-8',
+            # Sensitivity, fast turns, invert Y, FOV, dead zone, controller speaker and the quick
+            # menu: the game reads them from gow3.ini (SHARED_SETTINGS), live.
             'GOW3_MOUSE_LOOK': '1' if self.settings.get('mouse_look', True) else '0',
-            'GOW3_MOUSE_SENS': str(self.settings.get('mouse_sens', 1.0)),
-            'GOW3_MOUSE_INVERT_Y': '1' if self.settings.get('mouse_invert') else '0',
-            'GOW3_PAD_DEAD_ZONE': str(int(self.settings.get('pad_dead_zone', 0)) / 100),
-            'GOW3_PAD_SPEAKER_VOLUME': str(int(self.settings.get('pad_speaker', 100))),
+            # An "Apply and restart" in the game ends it with code 75: game_ended starts it again.
+            'GOW3_LAUNCHER_RESTART': '1',
             'GOW3_DISCORD': '1' if DISCORD_ID and self.settings.get('discord_rpc', True) else '0',
             'GOW3_DISCORD_ID': DISCORD_ID,
             'GOW3_DISCORD_DETAILS': DISCORD_DETAILS,
@@ -1439,9 +1620,17 @@ class Launcher:
         frame_gen = self.settings.get('frame_gen') if self.settings.get('frame_gen') in FRAME_GENS else 'off'
         # Frame generation at 1080p: FSR / DLSS as anti-aliasing at the game's own size (GOW3_NATIVE_AA),
         # the path frame generation takes its depth, motion and picture without UI from.
-        native_aa = frame_gen != 'off' and self.graphics['render_resolution'] == 'native'
+        # Quality modes stay hidden until the game's UI and videos follow them (the resolution patch
+        # shrinks those too): GOW3_UPSCALE_QUALITY=<mode> for tests only.
+        quality = os.environ.get('GOW3_UPSCALE_QUALITY', 'native')
+        quality = quality if quality in UPSCALE_QUALITIES else 'native'
+        native_aa = self.graphics['render_resolution'] == 'native' and (
+            frame_gen != 'off' or (quality != 'native' and method != 'patch'))
         if native_aa:
             output = '1920x1080'
+        # Quality modes: the game renders smaller (its resolution patch, run.py) and FSR / DLSS
+        # reach the output (GOW3_RENDER_RES: the upscaler's startup-patched path).
+        render = UPSCALE_RENDER.get(output or '', {}).get(quality, '1920x1080')
         if output and (method != 'patch' or native_aa):
             # DLSS falls back to FSR 3.1 by itself when the card or the DLLs cannot run it.
             env.update({'GOW3_OUTPUT_RES': output, 'GOW3_UPSCALER': 'dlss' if method == 'dlss' else 'fsr3',
@@ -1452,11 +1641,15 @@ class Launcher:
                 env['GOW3_NATIVE_AA'] = '1'
             else:
                 env.pop('GOW3_NATIVE_AA', None)
+            if render != '1920x1080':
+                env['GOW3_RENDER_RES'] = render
+            else:
+                env.pop('GOW3_RENDER_RES', None)
         else:
             # The classic resolution patch and 720p have no port-side frame path: no frame generation.
             env['GOW3_OUTPUT_RES'] = '1920x1080'
             env['GOW3_FRAME_GEN'] = 'off'
-            for key in ('GOW3_UPSCALER', 'GOW3_SCENE_NATIVE', 'GOW3_JITTER', 'GOW3_NATIVE_AA'):
+            for key in ('GOW3_UPSCALER', 'GOW3_SCENE_NATIVE', 'GOW3_JITTER', 'GOW3_NATIVE_AA', 'GOW3_RENDER_RES'):
                 env.pop(key, None)
         if self.graphics['fps_limit'] in EXPERIMENTAL_FPS:
             env['GOW3_VBLANK_HZ'] = '0'
@@ -1491,6 +1684,13 @@ class Launcher:
         self.process = None
         self.status.configure(text='', fg=MUTED)
         self.update_play_state()
+        if code == RESTART_CODE:
+            # "Apply and restart" in the game: the options it changed (gow3.ini) are read again.
+            self.settings = load_launcher()
+            self.graphics = load_graphics()
+            self.build()
+            self.play()
+            return
         if getattr(self, 'cache_note', None) is not None and self.cache_note.winfo_exists():
             self.refresh_cache_size()
         # 0: closed normally; 1 with an empty error log: the window was closed by the player.

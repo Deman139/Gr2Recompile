@@ -132,6 +132,7 @@ void Runtime::TickFrame() {
 void Runtime::CopyBuffer(const VideoCore::Buffer* src, const VideoCore::Buffer* dst,
                          std::span<const vk::BufferCopy> copies) {
     scheduler.EndRendering();
+    const TransferMark mark{*this, "buffer copy"};
 
     // gow3: many regions (HLE copy shaders) are tracked as one bounding range per buffer:
     // conservative for barriers, and two tree lookups instead of two per region.
@@ -182,6 +183,7 @@ void Runtime::CopyBuffer(const VideoCore::Buffer* src, const VideoCore::Buffer* 
 
 void Runtime::FillBuffer(const VideoCore::Buffer* dst, u64 offset, u64 size, u32 value) {
     scheduler.EndRendering();
+    const TransferMark mark{*this, "buffer fill"};
 
     if (IsBufferAccessed(dst, offset, size, true)) {
         FlushBarriers();
@@ -236,6 +238,17 @@ Runtime::TransferMark::TransferMark(Runtime& runtime, const char* what,
         return fmt::format("{} {} {}x{}", what, vk::to_string(info.pixel_format),
                            info.size.width, info.size.height);
     });
+}
+
+Runtime::TransferMark::TransferMark(Runtime& runtime, const char* what) {
+    profiler = GpuProfiler::Get();
+    if (!profiler || !profiler->Records(&runtime.scheduler)) {
+        profiler = nullptr;
+        return;
+    }
+    resume = profiler->Current();
+    profiler->Mark((u64(reinterpret_cast<uintptr_t>(what)) << 20) ^ 0xB0F5ull,
+                   [what] { return std::string{what}; });
 }
 
 Runtime::TransferMark::~TransferMark() {

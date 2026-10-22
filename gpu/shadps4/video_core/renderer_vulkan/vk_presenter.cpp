@@ -617,6 +617,74 @@ static void DumpRaw(const Instance& instance, Scheduler& scheduler, vk::CommandB
 /// through an RGBA render target, and the port's own display blit must write the same bytes.
 std::atomic<bool> g_gow3_display_bgra{true};
 
+/// gow3: GOW3_GPU_PROFILE=1: GPU time of the presenter's frame generation work (the picture
+/// without UI, then the generation), which the GPU profiler's scheduler does not record.
+/// Results are read eight frames later without waiting; printed every 5 s.
+class FgTimer {
+public:
+    static FgTimer* Get(const Instance& instance) {
+        static const bool on = [] {
+            const char* v = std::getenv("GOW3_GPU_PROFILE");
+            return v && v[0] == '1';
+        }();
+        if (!on) {
+            return nullptr;
+        }
+        static FgTimer timer{instance};
+        return &timer;
+    }
+    /// Stamp 0 before the picture without UI, 1 before the generation, 2 after it.
+    void Stamp(vk::CommandBuffer cmdbuf, u32 index) {
+        cmdbuf.writeTimestamp2(vk::PipelineStageFlagBits2::eAllCommands, *pool,
+                               slot * Stamps + index);
+        written[slot] |= 1u << index;
+    }
+    void EndFrame() {
+        slot = (slot + 1) % Slots;
+        if (written[slot] == 0b111) {
+            std::array<u64, Stamps> t{};
+            if (device.getQueryPoolResults(*pool, slot * Stamps, Stamps, sizeof(t), t.data(),
+                                           sizeof(u64), vk::QueryResultFlagBits::e64) ==
+                vk::Result::eSuccess) {
+                hudless_ms += double(t[1] - t[0]) * period_ns / 1e6;
+                generate_ms += double(t[2] - t[1]) * period_ns / 1e6;
+                ++frames;
+            }
+        }
+        if (written[slot]) {
+            device.resetQueryPool(*pool, slot * Stamps, Stamps);
+        }
+        written[slot] = 0;
+        const auto now = std::chrono::steady_clock::now();
+        if (now - window >= std::chrono::seconds(5) && frames) {
+            std::printf("Frame generation profile: picture without UI %.3f ms, generation %.3f ms "
+                        "per game frame over %llu frames\n",
+                        hudless_ms / frames, generate_ms / frames,
+                        static_cast<unsigned long long>(frames));
+            hudless_ms = generate_ms = 0;
+            frames = 0;
+            window = now;
+        }
+    }
+
+private:
+    explicit FgTimer(const Instance& instance) : device{instance.GetDevice()} {
+        period_ns = instance.GetPhysicalDevice().getProperties().limits.timestampPeriod;
+        pool = Check<"create timestamp query pool">(device.createQueryPoolUnique(
+            {.queryType = vk::QueryType::eTimestamp, .queryCount = Slots * Stamps}));
+        device.resetQueryPool(*pool, 0, Slots * Stamps);
+    }
+    static constexpr u32 Slots = 8, Stamps = 3;
+    vk::Device device;
+    vk::UniqueQueryPool pool;
+    double period_ns = 1.0;
+    u32 slot = 0;
+    std::array<u32, Slots> written{};
+    double hudless_ms = 0, generate_ms = 0;
+    u64 frames = 0;
+    std::chrono::steady_clock::time_point window = std::chrono::steady_clock::now();
+};
+
 Frame* Presenter::PrepareFrame(const Libraries::VideoOut::BufferAttributeGroup& attribute,
                                VAddr cpu_address) {
     g_gow3_display_bgra.store(attribute.attrib.pixel_format ==
@@ -751,6 +819,10 @@ Frame* Presenter::PrepareFrame(const Libraries::VideoOut::BufferAttributeGroup& 
     if (frame_generator->Wanted() && !frame->is_hdr && !fast_game) {
         // The capture (depth, motion, picture without UI) of the frame in this display buffer.
         frame_generator->Select(upscaled ? cpu_address : 0);
+        auto* fg_timer = FgTimer::Get(instance);
+        if (fg_timer) {
+            fg_timer->Stamp(cmdbuf, 0);
+        }
         EnsureGenerated(frame, frame_generator->GeneratedCount());
         // The picture before the UI, composed like the frame (equal outside the UI).
         vk::Image hudless{};
@@ -780,6 +852,9 @@ Frame* Presenter::PrepareFrame(const Libraries::VideoOut::BufferAttributeGroup& 
             hudless = hudless_frame.image;
             hudless_view = hudless_frame.image_view;
         }
+        if (fg_timer) {
+            fg_timer->Stamp(cmdbuf, 1);
+        }
         if (frame->generated[0].image) {
             std::array<FrameGenerator::Output, FrameGenerator::MaxGenerated> outputs{};
             for (u32 i = 0; i < outputs.size(); ++i) {
@@ -790,6 +865,10 @@ Frame* Presenter::PrepareFrame(const Libraries::VideoOut::BufferAttributeGroup& 
                 vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eTransferDst |
                     vk::ImageUsageFlagBits::eTransferSrc | vk::ImageUsageFlagBits::eSampled,
                 hudless, hudless_view, frame->width, frame->height, outputs);
+        }
+        if (fg_timer) {
+            fg_timer->Stamp(cmdbuf, 2);
+            fg_timer->EndFrame();
         }
     }
     if (frame_dump) {
