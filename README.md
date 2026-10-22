@@ -22,7 +22,7 @@ and it keeps improving with every report.
 > project is not affiliated with Sony Interactive Entertainment or Guerrilla Games. Killzone is a
 > trademark of Sony Interactive Entertainment.
 
-<!-- Screenshot: the launcher (Game tab) -->
+<p align="center"><img src="docs/images/launcher.png" alt="The launcher" width="820"></p>
 
 ## 📥 Download and play
 
@@ -95,7 +95,9 @@ A **FOV slider from 80% to 150%** of the original (100% = as on PS4). Set it in 
 (*Game* tab) or change it **live while playing** in the in-game menu (*Controls* tab): the view
 widens at once. Aiming zoom scales in the same proportion.
 
-<!-- Screenshot: FOV 100% vs 130% -->
+| FOV 100% (PS4) | FOV 150% |
+|---|---|
+| ![FOV 100%](docs/images/fov-100.jpg) | ![FOV 150%](docs/images/fov-150.jpg) |
 
 ### ⚙️ In-game menu (overlay)
 
@@ -103,7 +105,7 @@ Press **Insert** (or **R3 + L2**) at any time. Almost every launcher option is n
 apply at once**, without closing the game. Settings are saved automatically and the launcher shows
 the same values.
 
-<!-- Screenshot: in-game menu, Controls tab -->
+<p align="center"><img src="docs/images/ingame-menu-controls.png" alt="In-game menu, Controls tab" width="560"></p>
 
 | Tab | Option | When it applies |
 |---|---|---|
@@ -236,6 +238,8 @@ campaña completa, y mejora con cada reporte.
 > Este proyecto no está afiliado a Sony Interactive Entertainment ni a Guerrilla Games. Killzone es
 > una marca de Sony Interactive Entertainment.
 
+<p align="center"><img src="docs/images/launcher.png" alt="El launcher" width="820"></p>
+
 ## 📥 Descargar y jugar
 
 1. Bajá el zip de la última versión en **[Releases](../../releases/latest)** y descomprimilo donde
@@ -310,10 +314,16 @@ Un **slider de FOV de 80% a 150%** del original (100% = como en PS4). Se ajusta 
 (pestaña *Juego*) o **en vivo mientras jugás** en el menú dentro del juego (pestaña *Controls*): la
 vista se abre al instante. El zoom al apuntar se escala en la misma proporción.
 
+| FOV 100% (PS4) | FOV 150% |
+|---|---|
+| ![FOV 100%](docs/images/fov-100.jpg) | ![FOV 150%](docs/images/fov-150.jpg) |
+
 ### ⚙️ Menú dentro del juego (overlay)
 
 Apretá **Insert** (o **R3 + L2**) cuando quieras. Ahí está casi todo lo del launcher, y **la mayoría
 se aplica al instante**, sin cerrar el juego. Se guarda solo, y el launcher muestra los mismos valores.
+
+<p align="center"><img src="docs/images/ingame-menu-controls.png" alt="Menú dentro del juego, pestaña Controls" width="560"></p>
 
 | Pestaña | Opción | Cuándo se aplica |
 |---|---|---|
