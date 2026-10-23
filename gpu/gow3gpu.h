@@ -51,6 +51,7 @@ typedef struct {
     int mouse_invert;       /* invert the mouse's Y axis */
     float pad_dead_zone;    /* extra stick dead zone, 0..0.3 */
     int quick_menu;         /* hold Select/Back/Share: quick menu */
+    int prompt_style;       /* button prompts: 0 last device used, 1 keyboard/mouse, 2 PS4 */
 } Gow3InputSettings;
 void gow3gpu_input_settings(Gow3InputSettings *out);
 /* Controller speaker sounds, 0..100 percent (live). */

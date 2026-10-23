@@ -498,6 +498,13 @@ void ControlsTab() {
         ImGui::EndTable();
     }
     ImGui::SeparatorText("Keyboard and mouse");
+    if (BeginRows("##prompts")) {
+        static const char* const prompt_labels[] = {"Last device used", "Keyboard and mouse", "PS4"};
+        ChoiceRow("Button prompts", s.prompt_style, prompt_labels, nullptr, 3,
+                  "Gameplay button icons: the keys bound to them (Controls in the launcher) or the PS4 "
+                  "buttons. Sticks and the touchpad keep their PS4 icons.");
+        ImGui::EndTable();
+    }
     ImGui::TextDisabled("OWL drone: hold Delete and move the mouse (a finger on the touchpad).");
     ImGui::TextDisabled("Keys can be changed in the launcher (Controls).");
 }
@@ -581,15 +588,16 @@ void ImageTab() {
         ImGui::SeparatorText("Textures");
         if (BeginRows("##texture_live")) {
             // The launcher's steps (MIP_BIASES), so both show the same value.
-            static constexpr float biases[] = {-1.0f, -0.5f, 0.0f, 0.5f, 1.0f};
-            static const char* const labels[] = {"Sharper (-1.0)", "Sharp (-0.5)", "Game default (0)", "Soft (+0.5)",
-                                                 "Softer (+1.0)"};
+            static constexpr float biases[] = {-2.0f, -1.0f, -0.5f, 0.0f, 0.5f, 1.0f, 2.0f};
+            static const char* const labels[] = {"Sharpest (-2.0)", "Sharper (-1.0)", "Sharp (-0.5)",
+                                                 "Game default (0)", "Soft (+0.5)", "Softer (+1.0)",
+                                                 "Softest (+2.0)"};
             int current = 0;
-            for (int i = 1; i < 5; ++i) {
+            for (int i = 1; i < 7; ++i) {
                 if (std::abs(biases[i] - s.mip_lod_bias) < std::abs(biases[current] - s.mip_lod_bias)) current = i;
             }
             Row("Texture sharpness (LOD bias)");
-            if (ImGui::Combo("##value", &current, labels, 5)) {
+            if (ImGui::Combo("##value", &current, labels, 7)) {
                 Store(s.mip_lod_bias, biases[current], true);
             }
             Help("Sharper: crisper textures at a distance, a little more shimmer. Softer: smoother.");
@@ -670,11 +678,20 @@ void PerformanceTab() {
             const char* env = std::getenv("GOW3_OUTPUT_RES");
             return env && *env && std::strcmp(env, "1920x1080") != 0 ? env : nullptr;
         }();
-        if (port_output) {
-            char text[96];
-            int w = 0, h = 0;
-            std::sscanf(port_output, "%dx%d", &w, &h);
-            std::snprintf(text, sizeof(text), "%d x %d (port; change it in the launcher)", w, h);
+        // Upscaler quality modes: the 3D scene at GOW3_RENDER_RES (src/scene_res_hook.h).
+        static const char* const scene_size = [] {
+            const char* env = std::getenv("GOW3_RENDER_RES");
+            return env && *env && std::strcmp(env, "1920x1080") != 0 ? env : nullptr;
+        }();
+        if (port_output || scene_size) {
+            char text[128];
+            int w = 0, h = 0, sw = 0, sh = 0;
+            std::sscanf(port_output ? port_output : "1920x1080", "%dx%d", &w, &h);
+            if (scene_size && std::sscanf(scene_size, "%dx%d", &sw, &sh) == 2) {
+                std::snprintf(text, sizeof(text), "%d x %d scene, %d x %d output (launcher)", sw, sh, w, h);
+            } else {
+                std::snprintf(text, sizeof(text), "%d x %d (port; change it in the launcher)", w, h);
+            }
             InfoRow("Render resolution", text);
         } else {
         static const char* const resolution_labels[] = {"Native (1080p)", "480p", "720p", "1440p", "1800p", "4K"};

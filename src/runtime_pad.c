@@ -364,6 +364,65 @@ static uint32_t quick_menu_buttons(SDL_Gamepad *g, uint64_t now) {
     }
     return now<back_hold.tap_until ? ps : 0;
 }
+/* Button prompts (src/prompt_hook.h): the device last used, 1 keyboard/mouse, 2 gamepad (0 none
+ * yet: keyboard unless a gamepad is connected). */
+static int prompt_device;
+static int far_from_center(uint8_t x, uint8_t y) { return x<64 || x>192 || y<64 || y>192; }
+
+/* Whether gameplay prompts show the keyboard and mouse (the menu's Button prompts setting). */
+int runtime_pad_prompts_pc(void) {
+    if (input.prompt_style) return input.prompt_style==1;
+    const int device=__atomic_load_n(&prompt_device,__ATOMIC_RELAXED);
+    return device ? device==1 : !gamepad;
+}
+
+/* The key or mouse button bound to a prompt icon (the game's EIconType, not the pad bits): 1 and
+ * an upper-case label of up to 8 characters for a key, 2/3 for the left/right mouse button, 0
+ * when it keeps the PS4 icon (unbound, a stick axis, a label the art cannot draw). */
+int runtime_pad_prompt_binding(unsigned icon, char *label, size_t size) {
+    /* EIconType 9 Select (the touchpad on PS4), 10/11 the stick presses (Left_Analog/Right_Analog). */
+    static const uint32_t buttons[16]={BTN_TRIANGLE,BTN_CIRCLE,BTN_CROSS,BTN_SQUARE,
+        BTN_L2,BTN_R2,BTN_L1,BTN_R1,BTN_OPTIONS,BTN_TOUCHPAD,BTN_L3,BTN_R3,BTN_UP,BTN_RIGHT,BTN_DOWN,BTN_LEFT};
+    if (!label || size<9 || icon>=16 || !buttons[icon]) return 0;
+    label[0]=0;
+    load_button_maps();
+    int source=0;
+    for (size_t i=0;i<key_map.count && !source;++i) if (key_map.entries[i].ps==buttons[icon]) source=key_map.entries[i].source;
+    /* The keyboard reaches the touchpad as its clicks (Tab, Backspace by default). */
+    if (!source && buttons[icon]==BTN_TOUCHPAD)
+        for (size_t i=0;i<key_map.count && !source;++i) if (key_map.entries[i].ps==CLICK_LEFT) source=key_map.entries[i].source;
+    if (!source && buttons[icon]==BTN_TOUCHPAD)
+        for (size_t i=0;i<key_map.count && !source;++i) if (key_map.entries[i].ps==CLICK_RIGHT) source=key_map.entries[i].source;
+    if (source==(MOUSE_SOURCE|1)) return 2;
+    if (source==(MOUSE_SOURCE|2)) return 3;
+    static const struct { int source; const char *label; } mouse[]={
+        {MOUSE_SOURCE|4,"MMB"}, {MOUSE_SOURCE|8,"M4"}, {MOUSE_SOURCE|16,"M5"},
+        {WHEEL_UP_SOURCE,"WHEEL"}, {WHEEL_DOWN_SOURCE,"WHEEL"}};
+    const char *name=NULL;
+    for (size_t i=0;i<sizeof(mouse)/sizeof(*mouse);++i) if (source==mouse[i].source) name=mouse[i].label;
+    if (!name && source>0 && source<SDL_SCANCODE_COUNT) name=SDL_GetScancodeName((SDL_Scancode)source);
+    if (!name || !*name) return 0;
+    static const struct { const char *name, *label; } short_names[]={
+        {"Left Ctrl","CTRL"}, {"Right Ctrl","CTRL"}, {"Left Shift","SHIFT"}, {"Right Shift","SHIFT"},
+        {"Left Alt","ALT"}, {"Right Alt","ALT"}, {"Left GUI","WIN"}, {"Right GUI","WIN"},
+        {"Return","ENTER"}, {"Keypad Enter","ENTER"}, {"Space","SPACE"}, {"Backspace","BKSP"},
+        {"PageUp","PGUP"}, {"PageDown","PGDN"}, {"CapsLock","CAPS"}, {"Escape","ESC"},
+        {"Up","UP"}, {"Down","DOWN"}, {"Left","LEFT"}, {"Right","RIGHT"}, {"Delete","DEL"}, {"Insert","INS"},
+    };
+    for (size_t i=0;i<sizeof(short_names)/sizeof(*short_names);++i)
+        if (!SDL_strcasecmp(name,short_names[i].name)) { name=short_names[i].label; break; }
+    const size_t n=strlen(name);
+    if (n>8) return 0;
+    for (size_t i=0;i<n;++i) {
+        char c=name[i];
+        if (c>='a' && c<='z') c=(char)(c-'a'+'A');
+        if (!((c>='A' && c<='Z') || (c>='0' && c<='9') || c=='-' || c=='.')) { label[0]=0; return 0; }
+        label[i]=c;
+    }
+    label[n]=0;
+    return 1;
+}
+
 static void sample_host(PadData *d) {
     memset(d,0,sizeof(*d));
     d->left_x=d->left_y=d->right_x=d->right_y=128;
@@ -394,6 +453,9 @@ static void sample_host(PadData *d) {
         if (d->r2>30) d->buttons|=BTN_R2;
         if (mapped & BTN_L2) d->l2=255;
         if (mapped & BTN_R2) d->r2=255;
+        if (d->buttons || d->l2>30 || d->r2>30 || far_from_center(d->left_x,d->left_y) ||
+            far_from_center(d->right_x,d->right_y))
+            __atomic_store_n(&prompt_device,2,__ATOMIC_RELAXED);
         if (SDL_GetNumGamepadTouchpads(g)>0) {
             const int fingers=SDL_GetNumGamepadTouchpadFingers(g,0);
             for (int finger=0;finger<fingers && d->touch_count<2;++finger) {
@@ -437,8 +499,14 @@ static void sample_host(PadData *d) {
     const int captured=mouse_cfg.look && gow3gpu_mouse_sample(&mdx,&mdy,&mbuttons,&wheel);
     if (wheel>0) wheel_until_us[0]=now+60000;
     if (wheel<0) wheel_until_us[1]=now+60000;
+    int host_used=mdx!=0.0f || mdy!=0.0f || k[SDL_SCANCODE_W] || k[SDL_SCANCODE_A] || k[SDL_SCANCODE_S] ||
+                  k[SDL_SCANCODE_D];
     for (size_t i=0;i<key_map.count;++i)
-        if (source_down(key_map.entries[i].source,k,captured ? mbuttons : 0,now)) d->buttons|=key_map.entries[i].ps;
+        if (source_down(key_map.entries[i].source,k,captured ? mbuttons : 0,now)) {
+            d->buttons|=key_map.entries[i].ps;
+            host_used=1;
+        }
+    if (host_used) __atomic_store_n(&prompt_device,1,__ATOMIC_RELAXED);
     if (captured) {
         float dt=mouse_last_us ? (float)(now-mouse_last_us)*1e-6f : 1.0f/60.0f;
         if (dt<1.0f/1000.0f) dt=1.0f/1000.0f;

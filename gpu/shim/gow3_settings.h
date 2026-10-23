@@ -87,6 +87,7 @@ struct Values {
     std::atomic<int> fov{100};                ///< horizontal FOV percent, 80..150 (src/probe.c FOV hook)
     std::atomic<int> pad_dead_zone{0};        ///< extra stick dead zone percent, 0..30
     std::atomic<int> pad_speaker{100};        ///< controller speaker sounds percent
+    std::atomic<int> prompt_style{0};         ///< button prompts: 0 auto, 1 keyboard/mouse, 2 PS4
     std::atomic<bool> quick_menu{true};       ///< hold Select/Back/Share: quick menu (Resume / Exit)
     std::atomic<bool> quick_menu_hint{true};  ///< startup reminder of that shortcut
     /// Set when the in-game menu changed the upscaler or frame generation: the launcher adopts

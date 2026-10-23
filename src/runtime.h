@@ -101,6 +101,12 @@ uintptr_t runtime_pad_resolve(const char *name);
 void runtime_pad_report(void);
 /* probe --gamepad: prints one "Gamepad:" line for the first pad found (returns 1) or none (0). */
 int runtime_pad_describe(void);
+/* Button prompts (src/prompt_hook.h): keyboard/mouse icons wanted now; key bound to a prompt icon. */
+int runtime_pad_prompts_pc(void);
+int runtime_pad_prompt_binding(unsigned icon, char *label, size_t size);
+/* Guest flexible memory (CPU and GPU read/write) for pixels the loader hands to the game; NULL
+ * when the pool is full. size: whole pages. */
+void *runtime_memory_map_host_pixels(uint64_t size);
 uintptr_t runtime_rtc_resolve(const char *name);
 /* A module linked into the image that the game loads itself (link_modules.py --dynamic). */
 typedef struct { char nid[16]; uint64_t address; } RuntimeDynamicExport;

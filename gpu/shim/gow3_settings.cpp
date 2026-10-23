@@ -143,6 +143,8 @@ void Set(Values& v, const std::string& key, const std::string& value) {
         v.pad_dead_zone = std::clamp(i, 0, 30);
     } else if (key == "pad_speaker") {
         v.pad_speaker = value.empty() ? 100 : std::clamp(i, 0, 100);
+    } else if (key == "prompt_style") {
+        v.prompt_style = std::clamp(i, 0, 2);
     } else if (key == "quick_menu") {
         v.quick_menu = i != 0;
     } else if (key == "quick_menu_hint") {
@@ -235,6 +237,7 @@ void Load() {
         {"GOW3_MOUSE_SENS", "mouse_sens"},            {"GOW3_MOUSE_DIRECT_SPEED", "mouse_turn_boost"},
         {"GOW3_MOUSE_INVERT_Y", "mouse_invert"},      {"GOW3_FOV", "fov"},
         {"GOW3_PAD_SPEAKER_VOLUME", "pad_speaker"},   {"GOW3_QUICK_MENU", "quick_menu"},
+        {"GOW3_PROMPT_STYLE", "prompt_style"},
         {"GOW3_QUICK_MENU_HINT", "quick_menu_hint"},
         {"GOW3_MOTION_BLUR", "motion_blur"},          {"GOW3_DEPTH_OF_FIELD", "depth_of_field"},
         {"GOW3_BLOOM", "bloom"},                      {"GOW3_FILM_GRAIN", "film_grain"},
@@ -381,9 +384,9 @@ void Save() {
                  v.vibration.load(), v.mip_lod_bias.load());
     std::fprintf(file,
                  "mouse_sens=%.1f\nmouse_turn_boost=%d\nmouse_invert=%d\nfov=%d\npad_dead_zone=%d\n"
-                 "pad_speaker=%d\nquick_menu=%d\nquick_menu_hint=%d\nupscaling_from_menu=%d\n",
+                 "pad_speaker=%d\nprompt_style=%d\nquick_menu=%d\nquick_menu_hint=%d\nupscaling_from_menu=%d\n",
                  v.mouse_sens.load(), v.mouse_turn_boost.load(), int(v.mouse_invert.load()), v.fov.load(),
-                 v.pad_dead_zone.load(), v.pad_speaker.load(), int(v.quick_menu.load()),
+                 v.pad_dead_zone.load(), v.pad_speaker.load(), v.prompt_style.load(), int(v.quick_menu.load()),
                  int(v.quick_menu_hint.load()), int(v.upscaling_from_menu.load()));
     std::fprintf(file, "motion_blur=%d\ndepth_of_field=%d\nbloom=%d\nfilm_grain=%d\ncamera_shake=%d\n",
                  int(v.motion_blur.load()), int(v.depth_of_field.load()), int(v.bloom.load()),

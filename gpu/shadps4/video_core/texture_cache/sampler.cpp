@@ -15,11 +15,13 @@ Sampler::Sampler(const Vulkan::Instance& instance, const AmdGpu::Sampler& sample
     const bool game_anisotropy = AmdGpu::IsAnisoFilter(sampler.xy_mag_filter) ||
                                  AmdGpu::IsAnisoFilter(sampler.xy_min_filter);
     // gow3: the menu's anisotropic filtering, on filtered and mipmapped textures (not on
-    // point-sampled lookups, unmipmapped render targets or depth compares).
+    // point-sampled lookups, unmipmapped render targets or depth compares). MaxLod > 0 from
+    // pearlxcore's port: samplers clamped to mip 0 (render targets read with a mip filter) skip it.
     const int forced = Gow3Settings::Get().startup_anisotropy;
     const bool force_anisotropy = forced > 1 && !is_depth &&
                                   sampler.xy_min_filter != AmdGpu::Filter::Point &&
-                                  sampler.mip_filter != AmdGpu::MipFilter::None;
+                                  sampler.mip_filter != AmdGpu::MipFilter::None &&
+                                  sampler.MaxLod() > 0;
     const bool anisotropy_enable =
         instance.IsAnisotropicFilteringSupported() && (game_anisotropy || force_anisotropy);
     const float requested = std::max(game_anisotropy ? sampler.MaxAniso() : 1.0f,

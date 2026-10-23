@@ -16,6 +16,8 @@
 #include "mouse_hook.h"
 #include "damage_hook.h"
 #include "postfx_hook.h"
+#include "scene_res_hook.h"
+#include "prompt_hook.h"
 #include "gpu/gow3gpu.h"
 #if !defined(__x86_64__) || !defined(__GNUC__)
 #error This prototype requires x86-64 GCC or Clang (including MinGW).
@@ -71,6 +73,16 @@ static void *allocate(size_t size) {
     if (p == MAP_FAILED) fail("mmap failed");
 #endif
     return p;
+}
+/* Pages for the hooks' stubs and live cells, reserved right after the image (its rel32 jumps and
+ * operands must reach them). Separate low mappings could land over 2 GB away once threads had
+ * taken their stacks from the low region, and every hook then stayed off. */
+enum { HOOK_PAGES = 32 };
+static unsigned char *hook_pages;
+static unsigned hook_pages_used;
+static void *hook_page(void) {
+    if (hook_pages && hook_pages_used < HOOK_PAGES) return hook_pages + (size_t)hook_pages_used++ * page_size;
+    return allocate(page_size);
 }
 static void protect(void *p, size_t size, unsigned flags) {
 #ifdef _WIN32
@@ -441,7 +453,7 @@ static void install_cheats(Segment *segments, uint64_t count, uint64_t size) {
             printf("Cheats: %s unavailable (code not found in this eboot.bin)\n", names[id]);
             continue;
         }
-        unsigned char *stubs = allocate(page_size);
+        unsigned char *stubs = hook_page();
         int32_t relative[GOW3_CHEAT_HOOK_COUNT] = {0};
         for (unsigned i = 0; i < GOW3_CHEAT_HOOK_COUNT; ++i) {
             const Gow3CheatHook *hook = &gow3_cheat_hooks[i];
@@ -479,7 +491,7 @@ static void install_actor_watch(Segment *segments, uint64_t count, uint64_t size
         printf("Health display: unavailable (code not found in this eboot.bin)\n");
         return;
     }
-    unsigned char *stub = allocate(page_size);
+    unsigned char *stub = hook_page();
     const int64_t delta = (int64_t)(uintptr_t)stub - (int64_t)(uintptr_t)(image + at + 5);
     if (delta < INT32_MIN || delta > INT32_MAX) {
         printf("Health display: unavailable (hook outside relative-jump range)\n");
@@ -507,7 +519,7 @@ static void install_orb_multiplier(Segment *segments, uint64_t count, uint64_t s
     }
     /* SysV call sites: preserve the receiver across the helper, then tail-call the original
      * setter. Its cap and upgrade notifications remain in the game's own code. */
-    unsigned char *stub = allocate(page_size);
+    unsigned char *stub = hook_page();
     uintptr_t helper = (uintptr_t)gow3_orbs_gain, setter = (uintptr_t)(image + setter_at);
     unsigned char code[26];
     gow3_orb_build_stub(code, helper, setter);
@@ -549,7 +561,7 @@ static void install_mouse_look(Segment *segments, uint64_t count, uint64_t size)
         printf("Mouse look: direct mode unavailable (code not found in this eboot.bin)\n");
         return;
     }
-    unsigned char *stub = allocate(page_size);
+    unsigned char *stub = hook_page();
     gow3_mouse_build_stub(stub, (uintptr_t)gow3_mouse_look_adjust, (uintptr_t)(image + at + GOW3_MOUSE_HOOK_LENGTH));
     /* Optional: without it the mouse still turns, through the game's turn acceleration. */
     const uint64_t limits = gow3_signature_find(image, size, &gow3_mouse_limits_site);
@@ -579,7 +591,7 @@ static void install_fov(Segment *segments, uint64_t count, uint64_t size) {
         printf("FOV: unavailable (camera code not found in this eboot.bin)\n");
         return;
     }
-    float *cell = allocate(page_size);
+    float *cell = hook_page();
     *cell = 0.017453292f;
     const int64_t delta = (int64_t)(uintptr_t)cell - (int64_t)(uintptr_t)(image + at + GOW3_FOV_DISP_OFFSET + 4);
     if (delta < INT32_MIN || delta > INT32_MAX) {
@@ -623,9 +635,9 @@ static void install_post_effects(Segment *segments, uint64_t count, uint64_t siz
         printf("Camera shake: switch unavailable (camera code not found in this eboot.bin)\n");
         return;
     }
-    int *cell = allocate(page_size);
+    int *cell = hook_page();
     *cell = 1;
-    unsigned char *stub = allocate(page_size);
+    unsigned char *stub = hook_page();
     if (!gow3_shake_build_stub(stub, (uintptr_t)stub, (uintptr_t)cell,
                                (uintptr_t)(image + at + GOW3_SHAKE_HOOK_LENGTH))) {
         printf("Camera shake: switch unavailable (stub outside relative range)\n");
@@ -640,6 +652,323 @@ static void install_post_effects(Segment *segments, uint64_t count, uint64_t siz
     printf("Camera shake: live setting ready (camera at image+0x%" PRIx64 ")\n", at);
 }
 
+/* Upscaler quality modes (src/scene_res_hook.h): GOW3_RENDER_RES=WxH below 1080p renders the 3D
+ * scene at that size while the display, UI and movies stay 1920x1080; the GPU side upscales the
+ * scene to the output before the UI is composed. Every site is checked before any is written. */
+static void install_scene_resolution(Segment *segments, uint64_t count, uint64_t size) {
+    const char *res = getenv("GOW3_RENDER_RES");
+    unsigned width = 0, height = 0;
+    if (!res || !*res || sscanf(res, "%ux%u", &width, &height) != 2) return;
+    if (width < 320 || height < 180 || width > 1920 || height > 1080 || (width == 1920 && height == 1080)) {
+        printf("Scene resolution: %s ignored (only sizes below 1920x1080)\n", res);
+        return;
+    }
+    uint64_t at[GOW3_SCENE_SIZE_SITES];
+    for (unsigned i = 0; i < GOW3_SCENE_SIZE_SITES; ++i) {
+        at[i] = gow3_signature_find(image, size, &gow3_scene_size_sites[i].site);
+        if (at[i] == UINT64_MAX || !mapped(segments, count, at[i], 12)) {
+            printf("Scene resolution: unavailable (%s size code not found in this eboot.bin)\n",
+                   gow3_scene_size_sites[i].name);
+            return;
+        }
+    }
+    const uint64_t rect = gow3_signature_find(image, size, &gow3_scene_rect_site);
+    if (rect == UINT64_MAX || !mapped(segments, count, rect, GOW3_SCENE_RECT_HOOK_LENGTH)) {
+        printf("Scene resolution: unavailable (view copy code not found in this eboot.bin)\n");
+        return;
+    }
+    unsigned char *stub = hook_page();
+    if (!gow3_scene_rect_build_stub(stub, (uintptr_t)stub, (uintptr_t)(image + rect), width, height)) {
+        printf("Scene resolution: unavailable (stub outside relative range)\n");
+        return;
+    }
+    protect(stub, page_size, 5);
+    if (!install_jump(rect, GOW3_SCENE_RECT_HOOK_LENGTH, stub)) {
+        printf("Scene resolution: unavailable (hook outside relative-jump range)\n");
+        return;
+    }
+    for (unsigned i = 0; i < GOW3_SCENE_SIZE_SITES; ++i)
+        gow3_scene_size_write(image + at[i], gow3_scene_size_sites[i].width_first, width, height);
+    printf("Scene resolution: 3D scene %ux%u, display and UI 1920x1080 (views at image+0x%" PRIx64 ")\n",
+           width, height, rect);
+}
+
+/* Native PC button prompts (src/prompt_hook.h): one PC atlas per distinct game atlas, a slot
+ * claimed by the atlas texture's address (state 1 preparing, 2 ready, 3 refused). */
+static Gow3PromptAtlas prompt_atlases[GOW3_PROMPT_ATLASES];
+static uint64_t prompt_sources[GOW3_PROMPT_ATLASES];
+static int prompt_states[GOW3_PROMPT_ATLASES];
+static int prompt_any_ready;
+static unsigned prompt_draws;
+/* Rich-text ImageMaps (the menu legends), a slot claimed by the map's address like the atlases. */
+static Gow3PromptMenu prompt_menus[GOW3_PROMPT_MENUS];
+static uint64_t prompt_menu_maps[GOW3_PROMPT_MENUS];
+static int prompt_menu_states[GOW3_PROMPT_MENUS];
+static unsigned prompt_text_images;
+static unsigned prompt_sheet_draws;
+static unsigned prompt_widget_draws;
+
+static int prompt_read(uintptr_t address, void *out, size_t size) {
+    if (address < 0x10000 || address > UINTPTR_MAX - size) return 0;
+#ifdef _WIN32
+    SIZE_T got = 0;
+    return ReadProcessMemory(GetCurrentProcess(), (const void *)address, out, size, &got) && got == size;
+#else
+    extern uint64_t runtime_memory_clamp(uintptr_t, uint64_t);
+    if (runtime_memory_clamp(address, size) != size) return 0;
+    memcpy(out, (const void *)address, size);
+    return 1;
+#endif
+}
+
+/* A game texture of our pixels, built as the generated font texture creator 0x31a540 does but
+ * RGBA8888 (format 15) over guest pixels the texture does not own. Kept until exit. */
+static uint64_t prompt_create(const uint32_t *pixels, unsigned width, unsigned height) {
+    typedef void *(ABI *NativeNew)(size_t);
+    typedef void (ABI *NativeCtor)(void *);
+    typedef uint64_t (ABI *NativeTexture)(void *, uint32_t, uint32_t, const uint32_t *, uint32_t, uint32_t,
+                                         uint16_t, uint32_t, uint32_t, uint32_t, uint64_t, uint64_t, uint32_t, char);
+    const size_t bytes = (size_t)width * height * 4;
+    uint32_t *data = runtime_memory_map_host_pixels(bytes);
+    if (!data || ((uintptr_t)data & 255)) {
+        printf("Button prompts: no memory for the atlas; PS4 icons kept\n");
+        return 0;
+    }
+    memcpy(data, pixels, bytes);
+    void *texture = ((NativeNew)(image + GOW3_PROMPT_NEW))(0xc0);
+    if (!texture) return 0;
+    ((NativeCtor)(image + GOW3_PROMPT_CTOR))(texture);
+    const uint32_t description[3] = {width, height, 15};
+    if (!((NativeTexture)(image + GOW3_PROMPT_TEXTURE_INIT))(texture, 0, 1, description, 0, 0, 1, 0, 0, 2,
+                                                            (uintptr_t)data, 256, 0, 0))
+        return 0;
+    /* The game's own record of it: size, pitch, and a T# over our pixels (linear or 2D tiled). */
+    const unsigned char *object = texture;
+    uint32_t dims[2], pitch;
+    uint64_t srd[2];
+    memcpy(dims, object + 0x18, 8);
+    memcpy(&pitch, object + 0x8c, 4);
+    memcpy(srd, object + 0x90, 16);
+    const unsigned tile = (unsigned)(srd[1] >> 52) & 31;
+    if (dims[0] != width || dims[1] != height ||
+        pitch != width * 4 || ((srd[0] & UINT64_C(0x3fffffffff)) << 8) != (uintptr_t)data ||
+        ((srd[0] >> 52) & 63) != 10 || (srd[1] & 0x3fff) != width - 1 ||
+        ((srd[1] >> 14) & 0x3fff) != height - 1 || (tile != 8 && tile != 31)) {
+        printf("Button prompts: the game refused the atlas (pitch %u, tile %u); PS4 icons kept\n", pitch, tile);
+        return 0;
+    }
+    return (uintptr_t)texture;
+}
+
+/* The icon lookups' entry (rdi: the glyph collection, which the lookup itself reads). A new
+ * atlas is prepared here, on the game's thread, before any of its icons is drawn. */
+static ABI void prompt_lookup(uintptr_t collection, uint64_t unused1, uint64_t unused2) {
+    (void)unused1; (void)unused2;
+    if (!collection || *(const int32_t *)(collection + 0x18) != GOW3_PROMPT_GLYPHS) return;
+    const uint64_t source = *(const uint64_t *)(collection + 0x50);
+    if (!source) return;
+    unsigned slot = GOW3_PROMPT_ATLASES;
+    for (unsigned i = 0; i < GOW3_PROMPT_ATLASES; ++i) {
+        uint64_t expected = 0;
+        if (__atomic_compare_exchange_n(&prompt_sources[i], &expected, source, 0, __ATOMIC_ACQ_REL,
+                                        __ATOMIC_ACQUIRE)) { slot = i; break; }
+        if (expected == source) return; /* known (or being prepared by another thread) */
+    }
+    if (slot == GOW3_PROMPT_ATLASES) return;
+    __atomic_store_n(&prompt_states[slot], 1, __ATOMIC_RELEASE);
+    Gow3PromptAtlas *atlas = &prompt_atlases[slot];
+    const int ready = gow3_prompt_prepare(atlas, (uintptr_t)image, collection, prompt_read,
+                                          runtime_pad_prompt_binding, prompt_create);
+    __atomic_store_n(&prompt_states[slot], ready ? 2 : 3, __ATOMIC_RELEASE);
+    if (ready) __atomic_store_n(&prompt_any_ready, 1, __ATOMIC_RELEASE);
+    printf("Button prompts: atlas %u %s (icons with keys %04x, %u glyphs)\n", slot,
+           ready ? "keyboard and mouse copy ready" : "not recognized, PS4 icons kept", atlas->supported,
+           atlas->glyphs);
+    fflush(stdout);
+}
+
+/* Rich-text images left as they are, logged once each (texture and rect), to name new ones. */
+static uint64_t prompt_diag_seen[64];
+static int prompt_diag_new(uint64_t key) {
+    for (unsigned i = 0; i < 64; ++i) {
+        uint64_t expected = 0;
+        if (__atomic_compare_exchange_n(&prompt_diag_seen[i], &expected, key, 0, __ATOMIC_ACQ_REL, __ATOMIC_ACQUIRE))
+            return 1;
+        if (expected == key) return 0;
+    }
+    return 0;
+}
+static int prompt_menu_swap(Gow3PromptMenu *menu, uintptr_t command, uint64_t size, uintptr_t uv) {
+    for (unsigned s = 0; s < menu->sheets; ++s)
+        if (menu->sheet[s].glyphs && gow3_prompt_swap(&menu->sheet[s], command, size, uv)) return 1;
+    return 0;
+}
+
+/* Before each UI quad draw (rdi command, rdx size, rcx UV quad). */
+static ABI void prompt_draw(uintptr_t command, uint64_t size, uintptr_t uv) {
+    if (!__atomic_load_n(&prompt_any_ready, __ATOMIC_ACQUIRE) || !runtime_pad_prompts_pc()) return;
+    for (unsigned i = 0; i < GOW3_PROMPT_ATLASES; ++i) {
+        if (__atomic_load_n(&prompt_states[i], __ATOMIC_ACQUIRE) != 2 ||
+            !gow3_prompt_swap(&prompt_atlases[i], command, size, uv)) continue;
+        if (__atomic_add_fetch(&prompt_draws, 1, __ATOMIC_RELAXED) == 1) {
+            printf("Button prompts: first keyboard icon drawn\n");
+            fflush(stdout);
+        }
+        return;
+    }
+    for (unsigned i = 0; i < GOW3_PROMPT_MENUS; ++i) {
+        if (__atomic_load_n(&prompt_menu_states[i], __ATOMIC_ACQUIRE) != 2 ||
+            !prompt_menu_swap(&prompt_menus[i], command, size, uv)) continue;
+        if (__atomic_add_fetch(&prompt_sheet_draws, 1, __ATOMIC_RELAXED) == 1) {
+            printf("Button prompts: first keyboard icon drawn from a button sheet (menu widgets)\n");
+            fflush(stdout);
+        }
+        return;
+    }
+}
+
+/* A rich-text inline image about to be added (rdi the text builder, *texture and *rect its r8
+ * and r9, see src/prompt_hook.h): atlas glyphs and ImageMap buttons with a key are added from our
+ * textures instead. Runs while text is laid out, so a device switch shows on the next layout. */
+static ABI void prompt_text_image(uintptr_t builder, uint64_t *texture, uint64_t *rect) {
+    if (!*texture || !*rect || !runtime_pad_prompts_pc()) return;
+    if (__atomic_load_n(&prompt_any_ready, __ATOMIC_ACQUIRE)) {
+        int32_t glyph[4];
+        uint64_t render = 0;
+        if (!prompt_read(*rect, glyph, sizeof(glyph)) || !prompt_read(*texture + 0x18, &render, 8)) return;
+        for (unsigned i = 0; i < GOW3_PROMPT_ATLASES; ++i) {
+            if (__atomic_load_n(&prompt_states[i], __ATOMIC_ACQUIRE) != 2) continue;
+            Gow3PromptAtlas *pc = &prompt_atlases[i];
+            if (!gow3_prompt_text_texture(pc, render, glyph)) continue;
+            /* The first resource seen lends its header (written once, before it is handed out). */
+            if (!__atomic_load_n(&pc->resource[3], __ATOMIC_ACQUIRE)) {
+                if (!prompt_read(*texture, pc->resource, 0x18)) return;
+                __atomic_store_n(&pc->resource[3], pc->holder[0], __ATOMIC_RELEASE);
+            }
+            *texture = (uintptr_t)pc->resource;
+            goto swapped;
+        }
+    }
+    /* The ImageMap of the builder's current style. */
+    int32_t depth = 0;
+    uint64_t styles = 0, style = 0, map = 0;
+    if (!prompt_read(builder + 0x30, &depth, 4) || depth <= 0 || !prompt_read(builder + 0x38, &styles, 8) ||
+        !prompt_read(styles + (uint64_t)(depth - 1) * 8, &style, 8) || !prompt_read(style + 0x30, &map, 8) || !map)
+        return;
+    unsigned slot = GOW3_PROMPT_MENUS;
+    for (unsigned i = 0; i < GOW3_PROMPT_MENUS && slot == GOW3_PROMPT_MENUS; ++i) {
+        uint64_t expected = 0;
+        if (__atomic_compare_exchange_n(&prompt_menu_maps[i], &expected, map, 0, __ATOMIC_ACQ_REL,
+                                        __ATOMIC_ACQUIRE)) {
+            __atomic_store_n(&prompt_menu_states[i], 1, __ATOMIC_RELEASE);
+            const int ready = gow3_prompt_prepare_menu(&prompt_menus[i], map, prompt_read,
+                                                       runtime_pad_prompt_binding, prompt_create);
+            __atomic_store_n(&prompt_menu_states[i], ready ? 2 : 3, __ATOMIC_RELEASE);
+            if (ready) __atomic_store_n(&prompt_any_ready, 1, __ATOMIC_RELEASE);
+            printf("Button prompts: text images %u %s (%u buttons with keys in %u sheets; other images: %s)\n", i,
+                   ready ? "keyboard and mouse copy ready" : "without buttons, kept", prompt_menus[i].images,
+                   prompt_menus[i].sheets, prompt_menus[i].others);
+            if (ready) printf("Button prompts: text images %u buttons: %s\n", i, prompt_menus[i].buttons);
+            fflush(stdout);
+            slot = i;
+        } else if (expected == map) {
+            slot = i;
+        }
+    }
+    if (slot == GOW3_PROMPT_MENUS || __atomic_load_n(&prompt_menu_states[slot], __ATOMIC_ACQUIRE) != 2) return;
+    int32_t r[4] = {0, 0, 0, 0};
+    uint64_t render = 0;
+    if (!prompt_read(*rect, r, sizeof(r)) || !prompt_read(*texture + 0x18, &render, 8)) return;
+    const uint64_t key = gow3_prompt_menu_image(&prompt_menus[slot], render, r);
+    if (!key) {
+        uint32_t dims[2] = {0, 0};
+        prompt_read(render + 0x18, dims, sizeof(dims));
+        if (prompt_diag_new(render ^ ((uint64_t)(uint32_t)r[0] << 40) ^ ((uint64_t)(uint32_t)r[1] << 52))) {
+            printf("Button prompts: text image kept: texture %llx %ux%u rect %d,%d-%d,%d map %llx slot %u\n",
+                   (unsigned long long)render, dims[0], dims[1], r[0], r[1], r[2], r[3], (unsigned long long)map, slot);
+            fflush(stdout);
+        }
+        return;
+    }
+    *texture = key;
+swapped:
+    if (__atomic_add_fetch(&prompt_text_images, 1, __ATOMIC_RELAXED) == 1) {
+        printf("Button prompts: first keyboard icon in rich text (menus)\n");
+        fflush(stdout);
+    }
+}
+
+/* A TextureWidget about to draw (rdi; see src/prompt_hook.h): one cut from a button sheet points
+ * at the sheet's copy while every element is a button with a key and the prompts are PC. */
+static ABI void prompt_texture_widget(uintptr_t widget, uint64_t unused1, uint64_t unused2) {
+    (void)unused1; (void)unused2;
+    if (!__atomic_load_n(&prompt_any_ready, __ATOMIC_ACQUIRE)) return;
+    uint64_t *bound = (uint64_t *)(widget + 0x340);
+    const uint64_t render = *bound;
+    if (!render) return;
+    for (unsigned i = 0; i < GOW3_PROMPT_MENUS; ++i) {
+        if (__atomic_load_n(&prompt_menu_states[i], __ATOMIC_ACQUIRE) != 2) continue;
+        Gow3PromptMenu *menu = &prompt_menus[i];
+        for (unsigned s = 0; s < menu->sheets; ++s) {
+            const Gow3PromptAtlas *sheet = &menu->sheet[s];
+            if (!sheet->glyphs || (render != sheet->original_texture && render != sheet->holder[0])) continue;
+            uint32_t dims[2] = {0, 0};
+            const uint64_t resource = *(const uint64_t *)(widget + 0x328);
+            const int pc = runtime_pad_prompts_pc() && resource &&
+                           prompt_read(sheet->original_texture + 0x18, dims, sizeof(dims)) &&
+                           gow3_prompt_widget_art(sheet, dims[0], dims[1], resource, prompt_read);
+            *bound = pc ? sheet->holder[0] : sheet->original_texture;
+            if (pc && __atomic_add_fetch(&prompt_widget_draws, 1, __ATOMIC_RELAXED) == 1) {
+                printf("Button prompts: first keyboard icon in a texture widget (menu tabs)\n");
+                fflush(stdout);
+            }
+            return;
+        }
+    }
+}
+
+static void install_prompts(Segment *segments, uint64_t count, uint64_t size) {
+    int found = mapped(segments, count, GOW3_PROMPT_DRAW, 27) && gow3_prompt_code_match(image, size);
+    for (unsigned i = 0; i < GOW3_PROMPT_LOOKUPS; ++i)
+        found = found && mapped(segments, count, gow3_prompt_lookups[i].address, gow3_prompt_lookups[i].replay);
+    found = found && mapped(segments, count, GOW3_PROMPT_TEXT_IMAGE, GOW3_PROMPT_ENTRY_LENGTH) &&
+            mapped(segments, count, GOW3_PROMPT_TEXTURE_WIDGET, GOW3_PROMPT_ENTRY_LENGTH);
+    if (!found) {
+        printf("Button prompts: PC icons unavailable (code not found in this eboot.bin)\n");
+        return;
+    }
+    unsigned char *stubs = hook_page();
+    gow3_prompt_build_stub(stubs, (uintptr_t)prompt_draw, image + GOW3_PROMPT_DRAW, GOW3_PROMPT_ENTRY_LENGTH,
+                           (uintptr_t)(image + GOW3_PROMPT_DRAW + GOW3_PROMPT_ENTRY_LENGTH));
+    for (unsigned i = 0; i < GOW3_PROMPT_LOOKUPS; ++i) {
+        const uint32_t at = gow3_prompt_lookups[i].address;
+        const unsigned replay = gow3_prompt_lookups[i].replay;
+        gow3_prompt_build_stub(stubs + 256 * (i + 1), (uintptr_t)prompt_lookup, image + at, replay,
+                               (uintptr_t)(image + at + replay));
+    }
+    unsigned char *text_stub = stubs + 256 * (GOW3_PROMPT_LOOKUPS + 1);
+    gow3_prompt_build_text_stub(text_stub, (uintptr_t)prompt_text_image, image + GOW3_PROMPT_TEXT_IMAGE,
+                                GOW3_PROMPT_ENTRY_LENGTH,
+                                (uintptr_t)(image + GOW3_PROMPT_TEXT_IMAGE + GOW3_PROMPT_ENTRY_LENGTH));
+    unsigned char *widget_stub = stubs + 256 * (GOW3_PROMPT_LOOKUPS + 2);
+    gow3_prompt_build_stub(widget_stub, (uintptr_t)prompt_texture_widget, image + GOW3_PROMPT_TEXTURE_WIDGET,
+                           GOW3_PROMPT_ENTRY_LENGTH,
+                           (uintptr_t)(image + GOW3_PROMPT_TEXTURE_WIDGET + GOW3_PROMPT_ENTRY_LENGTH));
+    protect(stubs, page_size, 5);
+    int installed = 1;
+    for (unsigned i = 0; i < GOW3_PROMPT_LOOKUPS && installed; ++i)
+        installed = install_jump(gow3_prompt_lookups[i].address, gow3_prompt_lookups[i].replay, stubs + 256 * (i + 1));
+    if (!installed || !install_jump(GOW3_PROMPT_DRAW, GOW3_PROMPT_ENTRY_LENGTH, stubs) ||
+        !install_jump(GOW3_PROMPT_TEXT_IMAGE, GOW3_PROMPT_ENTRY_LENGTH, text_stub) ||
+        !install_jump(GOW3_PROMPT_TEXTURE_WIDGET, GOW3_PROMPT_ENTRY_LENGTH, widget_stub)) {
+        printf("Button prompts: PC icons unavailable (hook outside relative-jump range)\n");
+        return;
+    }
+    printf("Button prompts: PC icons ready (%u icon lookups, UI quad draw at image+0x%x, rich-text images at "
+           "image+0x%x, texture widgets at image+0x%x)\n", GOW3_PROMPT_LOOKUPS, GOW3_PROMPT_DRAW,
+           GOW3_PROMPT_TEXT_IMAGE, GOW3_PROMPT_TEXTURE_WIDGET);
+}
+
 /* Damage dealt/taken and green/blue/gold orb multipliers (src/damage_hook.h, src/orb_hook.h):
  * the stubs read the menu's floats directly, so changes apply on the next hit or pickup. */
 static void install_stat_multipliers(Segment *segments, uint64_t count, uint64_t size) {
@@ -649,7 +978,7 @@ static void install_stat_multipliers(Segment *segments, uint64_t count, uint64_t
                  gow3_damage_signature_match(image + damage_at, size - damage_at);
     int pickup = pickup_at != UINT64_MAX && mapped(segments, count, pickup_at, GOW3_ORB_PICKUP_LENGTH) &&
                  gow3_orb_pickup_signature_match(image + pickup_at, size - pickup_at);
-    unsigned char *stubs = damage || pickup ? allocate(page_size) : NULL;
+    unsigned char *stubs = damage || pickup ? hook_page() : NULL;
     if (damage) {
         gow3_damage_build_stub(stubs, gow3_damage_multiplier(1), gow3_damage_multiplier(0),
                                (uintptr_t)(image + damage_at + GOW3_DAMAGE_HOOK_LENGTH));
@@ -1013,9 +1342,10 @@ int main(int argc, char **argv) {
     size_t stub_area = isa_table ? round_page(isa_stub_area_size(isa_table)) : 0;
     /* PS4 TSC trampolines (tsc_patch.c) follow the ISA stubs in the same mapping. */
     size_t tsc_area = !cpu_only && runtime_tsc_calibrate() ? TSC_PATCH_AREA : 0;
-    image = allocate(round_page(size) + stub_area + tsc_area);
+    image = allocate(round_page(size) + stub_area + tsc_area + HOOK_PAGES * page_size);
     unsigned char *stubs = image + round_page(size);
     unsigned char *tsc_trampolines = stubs + stub_area;
+    hook_pages = tsc_trampolines + tsc_area;
     if (fread(image, 1, size, f) != size || fgetc(f) != EOF) fail("incorrect memory image size");
     fclose(f);
     if (isa_table && isa_table_matches(isa_table, image, size)) {
@@ -1097,6 +1427,8 @@ int main(int argc, char **argv) {
     install_mouse_look(segments, ns, size);
     if (gpu_enabled) install_fov(segments, ns, size);
     if (gpu_enabled) install_post_effects(segments, ns, size);
+    if (gpu_enabled) install_scene_resolution(segments, ns, size);
+    if (gpu_enabled) install_prompts(segments, ns, size);
 #ifdef _WIN32
     printf("Guest TCB loads redirected to the TEB TLS slot: %" PRIu64 "\n", patch_tcb_loads(segments, ns));
 #endif

@@ -374,6 +374,7 @@ extern "C" void gow3gpu_input_settings(Gow3InputSettings* out) {
     out->mouse_invert = s.mouse_invert.load(std::memory_order_relaxed) ? 1 : 0;
     out->pad_dead_zone = float(s.pad_dead_zone.load(std::memory_order_relaxed)) / 100.0f;
     out->quick_menu = s.quick_menu.load(std::memory_order_relaxed) ? 1 : 0;
+    out->prompt_style = s.prompt_style.load(std::memory_order_relaxed);
 }
 
 extern "C" int gow3gpu_pad_speaker_percent(void) {

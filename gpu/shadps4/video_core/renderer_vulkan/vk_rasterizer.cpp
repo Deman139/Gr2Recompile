@@ -1826,14 +1826,17 @@ bool Rasterizer::BindResources(const Pipeline* pipeline) {
     // gow3: G-buffer passes sample material textures for a scene rendered below the output
     // size; the temporal upscaler restores the detail of the output's mip level (FSR guide:
     // log2(render / output)). Shadows, post-processing and UI keep the guest's bias.
-    // The launcher's texture LOD bias (mip_lod_bias, iss_pc) adds to every draw: textures without
-    // mips (UI, full-screen passes) are unaffected. Steps of 1/8 keep the sampler count low.
-    sampler_lod_bias = pipeline->IsCompute()
-                           ? 0.0f
-                           : std::round(Gow3Settings::Get().mip_lod_bias.load() * 8.0f) / 8.0f;
-    if (!pipeline->IsCompute() && !Gow3Toggle::Disabled(Gow3Toggle::SceneMipBias) &&
+    // The launcher's texture LOD bias (mip_lod_bias, iss_pc) adds to the G-buffer material draws
+    // only (pearlxcore's port): bloom/DOF mip chains, particles and UI keep the game's sampling.
+    // Steps of 1/8 keep the sampler count low.
+    const bool material_draw =
+        !pipeline->IsCompute() &&
         std::popcount(static_cast<const GraphicsPipeline*>(pipeline)->GetGraphicsKey().mrt_mask &
-                      0xff) >= 5) {
+                      0xff) >= 5;
+    sampler_lod_bias = material_draw
+                           ? std::round(Gow3Settings::Get().mip_lod_bias.load() * 8.0f) / 8.0f
+                           : 0.0f;
+    if (material_draw && !Gow3Toggle::Disabled(Gow3Toggle::SceneMipBias)) {
         sampler_lod_bias += upscaler->SceneMipBias();
         static float reported = 0.0f;
         if (sampler_lod_bias != reported) {
@@ -2833,7 +2836,10 @@ void Rasterizer::BindSamplers(const Shader::Info& stage, const PreparedStage* pr
         auto ssharp =
             prepared ? prepared->sampler_sharps[sampler_index] : sampler.GetSharp(stage);
         const auto vk_sampler = texture_cache.GetSampler(
-            ssharp, Regs().ta_bc_base, sampler.is_depth, sampler.is_depth ? 0.0f : sampler_lod_bias);
+            ssharp, Regs().ta_bc_base, sampler.is_depth,
+            !sampler.is_depth && ssharp.mip_filter != AmdGpu::MipFilter::None && ssharp.MaxLod() > 0
+                ? sampler_lod_bias
+                : 0.0f);
         image_infos.emplace_back(vk_sampler, VK_NULL_HANDLE, vk::ImageLayout::eGeneral);
         auto& set_write = set_writes[write_index++];
         set_write.dstSet = VK_NULL_HANDLE;

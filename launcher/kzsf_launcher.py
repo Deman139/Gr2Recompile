@@ -40,7 +40,7 @@ FROZEN = getattr(sys, 'frozen', False)
 PORT_DIR = Path(sys.executable).resolve().parent if FROZEN else Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PORT_DIR / 'scripts'))
 
-VERSION = '0.3.0'
+VERSION = '0.4.0'
 TITLE_ID = 'CUSA00190'
 # Other releases of the game players run (their languages), accepted untested: the port was built and
 # tested on CUSA00190. Every one must be at version 01.81.
@@ -157,6 +157,10 @@ TEXTS = {
         'pad_extra_help': 'Zona muerta: subila si la cámara o el personaje se mueven solos (stick gastado). '
                           'Altavoz del mando: sonidos que la PS4 manda al parlante del mando; acá suenan '
                           'por tus parlantes (0% = apagado).',
+        'prompt_style': 'Íconos de botones en el juego',
+        'prompt_styles': ['Último dispositivo usado', 'Teclado y mouse', 'PS4'],
+        'prompt_style_help': 'Los avisos del juego muestran la tecla asignada (o el mouse) en vez del botón de PS4. '
+                             'Los sticks y el touchpad siguen con el ícono de PS4.',
         'mouse': 'Mouse', 'mouse_look': 'Apuntar con el mouse',
         'mouse_look_help': 'El mouse mueve la cámara 1:1, sin la zona muerta ni el tope de un stick '
                            '(sensibilidad recomendada: alrededor de 1); click izquierdo dispara (R2), derecho '
@@ -183,8 +187,9 @@ TEXTS = {
         'uq_native': 'Nativa (máxima calidad)', 'uq_quality': 'Calidad', 'uq_balanced': 'Equilibrado',
         'uq_performance': 'Rendimiento', 'uq_ultra': 'Ultra rendimiento',
         'upscale_quality_help': 'Con FSR o DLSS (Avanzado → Método de resolución) o con generación de frames: '
-                                'el juego renderiza a menor resolución y FSR / DLSS reconstruyen la imagen. '
-                                'Más FPS, imagen algo más suave. Nativa: el juego a 1080p como hasta ahora.',
+                                'la escena 3D se renderiza más chica y FSR / DLSS la reconstruyen; HUD, menús y '
+                                'videos siguen nítidos. Da FPS si tu placa de video es el límite (GPU modesta, '
+                                '1440p/4K); si el límite es el procesador no suma. Nativa: escena a 1080p.',
         'perf_heading': 'Rendimiento',
         'draw_pipe': 'Dibujo en paralelo (2 hilos de GPU)',
         'nowait_writes': 'Copias del juego sin esperar a la GPU',
@@ -299,6 +304,10 @@ TEXTS = {
         'pad_extra_help': 'Dead zone: raise it if the camera or character moves on its own (worn stick). '
                           'Controller speaker: sounds the PS4 sends to the controller speaker; here they '
                           'play on your speakers (0% = off).',
+        'prompt_style': 'In-game button icons',
+        'prompt_styles': ['Last device used', 'Keyboard and mouse', 'PS4'],
+        'prompt_style_help': 'Game prompts show the bound key (or the mouse) instead of the PS4 button. '
+                             'Sticks and the touchpad keep their PS4 icons.',
         'mouse': 'Mouse', 'mouse_look': 'Aim with the mouse',
         'mouse_look_help': "The mouse moves the camera 1:1, without a stick's dead zone or limit (recommended "
                            'sensitivity: about 1); left click fires (R2), right click aims (L2). Fast turns '
@@ -315,9 +324,10 @@ TEXTS = {
         'upscale_quality': 'FSR / DLSS quality',
         'uq_native': 'Native (best quality)', 'uq_quality': 'Quality', 'uq_balanced': 'Balanced',
         'uq_performance': 'Performance', 'uq_ultra': 'Ultra performance',
-        'upscale_quality_help': 'With FSR or DLSS (Advanced → Resolution method) or frame generation: the game '
-                                'renders at a lower resolution and FSR / DLSS rebuild the picture. More FPS, a '
-                                'slightly softer image. Native: the game at 1080p as before.',
+        'upscale_quality_help': 'With FSR or DLSS (Advanced → Resolution method) or frame generation: the 3D '
+                                'scene renders smaller and FSR / DLSS rebuild it; HUD, menus and videos stay sharp. '
+                                'More FPS when your graphics card is the limit (modest GPU, 1440p/4K); no gain '
+                                'when the CPU is. Native: the scene at 1080p.',
         'res_method': 'Resolution method',
         'res_method_upscale': 'AMD FSR 3.1 (recommended)',
         'res_method_dlss': 'NVIDIA DLSS (RTX only)',
@@ -489,7 +499,8 @@ LAUNCHER_DEFAULTS = {'game_dir': '', 'update_dir': '', 'language': '', 'window_s
                      'smart_pending': True, 'precompile': True,
                      'draw_pipe': True, 'nowait_writes': True,
                      'res_method': 'upscale', 'discord_rpc': True, 'pad_dead_zone': 0,
-                     'pad_speaker': 100, 'fov': 100, 'quick_menu': True, 'quick_menu_hint': True}
+                     'pad_speaker': 100, 'fov': 100, 'quick_menu': True, 'quick_menu_hint': True,
+                     'prompt_style': 0, 'upscale_quality': 'native'}
 # Discord Rich Presence: the application "Killzone Shadow Fall" (its name is what Discord shows) and the
 # key of its large image asset. Empty ID: no presence.
 DISCORD_ID = '1562348304153706608'
@@ -520,7 +531,7 @@ FPS_LIMITS = ('30', '60', '144', '240', '0')
 EXPERIMENTAL_FPS = ('144', '240', '0')
 RENDER_RESOLUTIONS = ('720p', 'native', '1440p', '1800p', '4K')  # patches/Killzone_Shadow_Fall.xml
 ANISOTROPY = ('0', '2', '4', '8', '16')
-MIP_BIASES = ('-1.0', '-0.5', '0', '0.5', '1.0')
+MIP_BIASES = ('-2.0', '-1.0', '-0.5', '0', '0.5', '1.0', '2.0')
 FRAMES_QUEUED = ('1', '2', '0')
 
 # PS4 button, label, default key (SDL scancode name) and default controller button (SDL name).
@@ -607,6 +618,7 @@ SHARED_SETTINGS = {
     'pad_speaker': (int, lambda v: str(int(v))),
     'quick_menu': (bool, lambda v: '1' if v else '0'),
     'quick_menu_hint': (bool, lambda v: '1' if v else '0'),
+    'prompt_style': (int, lambda v: str(int(v))),
 }
 
 
@@ -885,8 +897,35 @@ class Launcher:
                             bg=PANEL if name == key else BG)
         for child in self.body.winfo_children():
             child.destroy()
-        frame = self.tk.Frame(self.body, bg=PANEL)
+        # The tab scrolls when the window is too small for it (bar and mouse wheel only then).
+        canvas = self.tk.Canvas(self.body, bg=PANEL, highlightthickness=0, bd=0)
+        bar = self.tk.Scrollbar(self.body, orient='vertical', command=canvas.yview)
+        canvas.configure(yscrollcommand=bar.set)
+        canvas.pack(side='left', fill='both', expand=True)
+        holder = self.tk.Frame(canvas, bg=PANEL)
+        window = canvas.create_window(0, 0, window=holder, anchor='nw')
+        frame = self.tk.Frame(holder, bg=PANEL)
         frame.pack(fill='both', expand=True, padx=self.px(24), pady=self.px(18))
+
+        def fits():
+            return holder.winfo_reqheight() <= canvas.winfo_height()
+
+        def layout(_event=None):
+            canvas.itemconfigure(window, width=canvas.winfo_width())
+            canvas.configure(scrollregion=(0, 0, canvas.winfo_width(), holder.winfo_reqheight()))
+            if fits():
+                bar.pack_forget()
+                canvas.yview_moveto(0)
+            elif not bar.winfo_ismapped():
+                bar.pack(side='right', fill='y', before=canvas)
+
+        def wheel(event):
+            if not fits():
+                canvas.yview_scroll(int(-event.delta / 120) or (-1 if event.delta > 0 else 1), 'units')
+        holder.bind('<Configure>', layout)
+        canvas.bind('<Configure>', layout)
+        canvas.bind('<Enter>', lambda _e: canvas.bind_all('<MouseWheel>', wheel))
+        canvas.bind('<Leave>', lambda _e: canvas.unbind_all('<MouseWheel>'))
         dict((k, f) for k, _, f in self.tabs)[key](frame)
 
     def set_language(self, code):
@@ -1173,11 +1212,21 @@ class Launcher:
         self.choice(parent, tr('frame_gen'), FRAME_GENS,
                     [tr('frame_gen_off'), tr('frame_gen_fsr3'), tr('frame_gen_dlss')],
                     frame_gen, set_frame_gen, tr('frame_gen_help'))
+        quality = self.settings.get('upscale_quality')
+        quality = quality if quality in UPSCALE_QUALITIES else 'native'
+
+        def set_quality(value):
+            self.settings['upscale_quality'] = value
+            save_launcher(self.settings)
+        self.choice(parent, tr('upscale_quality'), UPSCALE_QUALITIES,
+                    [tr('uq_native'), tr('uq_quality'), tr('uq_balanced'), tr('uq_performance'), tr('uq_ultra')],
+                    quality, set_quality, tr('upscale_quality_help'))
         self.choice(parent, tr('anisotropy'), ANISOTROPY, [tr('aniso_game'), '2x', '4x', '8x', '16x'],
                     self.graphics['anisotropy'], lambda v: self.set_graphic('anisotropy', v))
         self.choice(parent, tr('mip_bias'), MIP_BIASES,
-                    [f"-1 ({tr('mip_sharper')})", f"-0.5 ({tr('mip_sharper')})", tr('mip_game'),
-                     f"+0.5 ({tr('mip_softer')})", f"+1 ({tr('mip_softer')})"],
+                    [f"-2 ({tr('mip_sharper')})", f"-1 ({tr('mip_sharper')})", f"-0.5 ({tr('mip_sharper')})",
+                     tr('mip_game'), f"+0.5 ({tr('mip_softer')})", f"+1 ({tr('mip_softer')})",
+                     f"+2 ({tr('mip_softer')})"],
                     self.graphics['mip_lod_bias'], lambda v: self.set_graphic('mip_lod_bias', v),
                     tr('mip_bias_help'))
         self.tk.Frame(parent, bg=PANEL, height=self.px(8)).pack()
@@ -1239,6 +1288,8 @@ class Launcher:
             combo.grid(row=r, column=col + 2, sticky='w', padx=(self.px(6), 0), pady=self.px(1))
             combo.bind('<<ComboboxSelected>>', lambda e, n=name, c=combo: self.set_pad(n, values[c.current()]))
         self.mouse_section(parent)
+        self.choice(parent, tr('prompt_style'), [0, 1, 2], tr('prompt_styles'),
+                    int(self.settings.get('prompt_style', 0)), self.prompt_style_changed, tr('prompt_style_help'))
         bottom = tk.Frame(parent, bg=PANEL)
         bottom.pack(fill='x', pady=(self.px(8), 0))
         tk.Label(bottom, text=tr('vibration'), bg=PANEL, fg=TEXT, font=self.font(10)).pack(side='left')
@@ -1288,6 +1339,10 @@ class Launcher:
         self.images['pad_extra_vars'] = sliders
         self.note(parent, tr('pad_extra_help'))
         self.quick_menu_section(parent)
+
+    def prompt_style_changed(self, value):
+        self.settings['prompt_style'] = value
+        save_launcher(self.settings)
 
     def quick_menu_section(self, parent):
         tk = self.tk
@@ -1670,16 +1725,16 @@ class Launcher:
         frame_gen = self.settings.get('frame_gen') if self.settings.get('frame_gen') in FRAME_GENS else 'off'
         # Frame generation at 1080p: FSR / DLSS as anti-aliasing at the game's own size (GOW3_NATIVE_AA),
         # the path frame generation takes its depth, motion and picture without UI from.
-        # Quality modes stay hidden until the game's UI and videos follow them (the resolution patch
-        # shrinks those too): GOW3_UPSCALE_QUALITY=<mode> for tests only.
-        quality = os.environ.get('GOW3_UPSCALE_QUALITY', 'native')
+        # Quality modes (Graphics tab; GOW3_UPSCALE_QUALITY=<mode> overrides it for tests): the 3D
+        # scene renders smaller (src/scene_res_hook.h), the UI and videos stay at the output size.
+        quality = os.environ.get('GOW3_UPSCALE_QUALITY') or self.settings.get('upscale_quality', 'native')
         quality = quality if quality in UPSCALE_QUALITIES else 'native'
         native_aa = self.graphics['render_resolution'] == 'native' and (
             frame_gen != 'off' or (quality != 'native' and method != 'patch'))
         if native_aa:
             output = '1920x1080'
-        # Quality modes: the game renders smaller (its resolution patch, run.py) and FSR / DLSS
-        # reach the output (GOW3_RENDER_RES: the upscaler's startup-patched path).
+        # Quality modes: the scene renders smaller (GOW3_RENDER_RES, read by the loader) and FSR / DLSS
+        # reach the output.
         render = UPSCALE_RENDER.get(output or '', {}).get(quality, '1920x1080')
         if output and (method != 'patch' or native_aa):
             # DLSS falls back to FSR 3.1 by itself when the card or the DLLs cannot run it.

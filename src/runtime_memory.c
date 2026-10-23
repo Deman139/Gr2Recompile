@@ -557,6 +557,11 @@ static ABI int32_t map_flexible_named(void **inout, uint64_t size, int prot, int
     (void)name; return map_flexible(inout,size,prot,flags);
 }
 static ABI int32_t release_flexible(void *address, uint64_t size) { return direct_unmap(address,size); }
+void *runtime_memory_map_host_pixels(uint64_t size) {
+    void *out=NULL;
+    if (!size || size%PAGE || map_flexible(&out,size,0x33,0)) return NULL;
+    return out;
+}
 /* POSIX mmap as libc uses it: anonymous memory from the flexible pool. File mappings fail with
  * ENODEV (no guest file descriptor can be mapped). */
 static ABI void *posix_mmap(void *address, uint64_t size, int prot, int flags, int fd, int64_t offset) {

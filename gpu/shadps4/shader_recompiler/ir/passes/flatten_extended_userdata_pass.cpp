@@ -5,6 +5,7 @@
 #include <unordered_map>
 #include <boost/container/flat_map.hpp>
 #include <queue>
+#include <string_view>
 #include <xbyak/xbyak.h>
 #include <xbyak/xbyak_util.h>
 #include "common/arch.h"
@@ -28,20 +29,33 @@
 
 using namespace Xbyak::util;
 
-static Xbyak::CodeGenerator g_srt_codegen(32_MB);
+static Xbyak::CodeGenerator g_srt_codegen(64_MB);
 static const u8* g_srt_codegen_start = nullptr;
 // gow3: the shader compiler and the background cache warm-up append walkers from different
 // threads.
 static std::mutex g_srt_codegen_mutex;
+// gow3: identical walkers share one copy. Every cached pipeline used to append its own walker,
+// so a large cache filled the buffer ("code is too big") and valid records were dropped.
+// Keys view the codegen buffer itself, which never moves or shrinks below them.
+static std::unordered_map<std::string_view, Shader::PFN_SrtWalker> g_srt_walkers;
+
+static Shader::PFN_SrtWalker DedupWalker(const u8* code, size_t size) {
+    const std::string_view bytes{reinterpret_cast<const char*>(code), size};
+    const auto [it, inserted] = g_srt_walkers.try_emplace(bytes, (Shader::PFN_SrtWalker)code);
+    if (!inserted) {
+        g_srt_codegen.setSize(code - g_srt_codegen.getCode());
+    }
+    return it->second;
+}
 
 namespace Shader {
 
 PFN_SrtWalker RegisterWalkerCode(const u8* ptr, size_t size) {
     std::scoped_lock lock{g_srt_codegen_mutex};
-    const auto func_addr = (PFN_SrtWalker)g_srt_codegen.getCurr();
+    const auto* code = g_srt_codegen.getCurr();
     g_srt_codegen.db(ptr, size);
     g_srt_codegen.ready();
-    return func_addr;
+    return DedupWalker(code, size);
 }
 
 } // namespace Shader
@@ -668,6 +682,9 @@ static void GenerateSrtProgram(Info& info, PassInfo& pass_info) {
 
     info.srt_info.walker_func_size =
         c.getCurr() - reinterpret_cast<const u8*>(info.srt_info.walker_func);
+    info.srt_info.walker_func =
+        DedupWalker(reinterpret_cast<const u8*>(info.srt_info.walker_func),
+                    info.srt_info.walker_func_size);
 
     if (EmulatorSettings.IsDumpShaders()) {
         DumpSrtProgram(info, reinterpret_cast<const u8*>(info.srt_info.walker_func),
