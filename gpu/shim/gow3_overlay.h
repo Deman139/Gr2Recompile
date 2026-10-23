@@ -30,6 +30,8 @@ void UpdateTextInput(SDL_Window* window);
 
 /// Start-up loading screen (pipeline cache warm-up): `total` 0 shows no count.
 void SetLoading(bool active, u32 done, u32 total);
+/// What the loading screen is doing now (a string literal); null: the default title.
+void SetLoadingStage(const char* stage);
 /// Background cache warm-up: a small corner note while the game runs; `total` 0 hides it.
 void SetBackgroundLoading(u32 done, u32 total);
 

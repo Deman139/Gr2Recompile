@@ -264,6 +264,13 @@ bool DataBase::ConcurrentReads() const {
 
 void DataBase::ForEachBlob(BlobType type, const std::function<void(std::vector<u8>&& data)>& func,
                            const std::function<bool()>& stop) {
+    ForEachNamedBlob(
+        type, [&](std::string_view, std::vector<u8>&& data) { func(std::move(data)); }, stop);
+}
+
+void DataBase::ForEachNamedBlob(
+    BlobType type, const std::function<void(std::string_view name, std::vector<u8>&& data)>& func,
+    const std::function<bool()>& stop) {
     const auto& ext = GetBlobFileExtension(type);
     if (EmulatorSettings.IsPipelineCacheArchived()) {
         const auto num_files = mz_zip_reader_get_num_files(&zip_ar);
@@ -276,7 +283,8 @@ void DataBase::ForEachBlob(BlobType type, const std::function<void(std::vector<u
                 mz_zip_reader_file_stat(&zip_ar, index, &stat);
                 std::vector<u8> data(stat.m_uncomp_size);
                 mz_zip_reader_extract_to_mem(&zip_ar, index, data.data(), data.size(), 0);
-                func(std::move(data));
+                const std::string_view name{file_name.data()};
+                func(name.substr(0, name.size() - ext.size() - 1), std::move(data));
             }
         }
     } else {
@@ -290,7 +298,7 @@ void DataBase::ForEachBlob(BlobType type, const std::function<void(std::vector<u
                 if (file.IsOpen()) {
                     std::vector<u8> data(file.GetSize());
                     file.Read(data);
-                    func(std::move(data));
+                    func(file_name.path().stem().string(), std::move(data));
                 }
             }
         }
@@ -318,6 +326,14 @@ void DataBase::ForEachBlobName(BlobType type,
     for (const auto& entry : std::filesystem::directory_iterator{cache_path, error}) {
         visit(entry.path().filename().string());
     }
+}
+
+void DataBase::Remove(BlobType type, std::string_view name) {
+    if (!opened || EmulatorSettings.IsPipelineCacheArchived()) {
+        return;
+    }
+    std::error_code ec;
+    std::filesystem::remove(cache_path / (std::string{name} + "." + GetBlobFileExtension(type)), ec);
 }
 
 void DataBase::Clear() {

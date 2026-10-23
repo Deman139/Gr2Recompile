@@ -138,7 +138,7 @@ public:
 
     /// Loads the pipelines of earlier sessions. gow3: called by the presenter once the window
     /// can show a loading screen; `progress(done, total)` follows the pipelines read.
-    void WarmUp(const std::function<void(u32 done, u32 total)>& progress = {});
+    void WarmUp(const std::function<void(u32 done, u32 total, const char* stage)>& progress = {});
     /// gow3: the same load on low-priority threads while the game runs; the GPU thread takes
     /// the results a few at a time (PumpWarmUp). False when it cannot (zip archive store).
     bool StartBackgroundWarmUp();

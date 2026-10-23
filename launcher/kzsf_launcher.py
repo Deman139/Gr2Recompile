@@ -194,6 +194,10 @@ TEXTS = {
         'smart_pending_help': 'Casi sin tirones la primera vez que jugás un nivel. Desactivalo si ves objetos, '
                               'luces o sombras que faltan o parpadean al entrar en zonas nuevas: el juego '
                               'espera cada shader (más tirones, imagen siempre completa).',
+        'precompile': 'Precompilar shaders al iniciar',
+        'precompile_help': 'Antes de jugar prepara todos los shaders de la caché (lo que ya jugaste): '
+                           'menos tirones al volver a esas zonas, pero el inicio tarda más y usa más memoria. '
+                           'No ayuda en zonas que nunca jugaste.',
         'frames_queued': 'Frames en cola', 'queued_1': '1 (menor latencia)', 'queued_2': '2', 'queued_0': 'Sin límite',
         'reset_all': 'Restaurar todas las opciones',
         'update_available': 'Nueva versión {version} disponible', 'update_now': 'Actualizar ahora',
@@ -332,6 +336,10 @@ TEXTS = {
         'smart_pending_help': 'Almost no stutter the first time you play a level. Turn it off if objects, lights '
                               'or shadows go missing or flicker when you reach new areas: the game then waits '
                               'for every shader (more stutter, always a complete picture).',
+        'precompile': 'Precompile shaders at startup',
+        'precompile_help': 'Prepares every shader in the cache (what you already played) before the game: '
+                           'less stutter when you return to those areas, but a longer start and more memory. '
+                           'It does not help in areas you never played.',
         'frames_queued': 'Frames queued', 'queued_1': '1 (lowest latency)', 'queued_2': '2', 'queued_0': 'Unlimited',
         'reset_all': 'Restore all options',
         'update_available': 'New version {version} available', 'update_now': 'Update now',
@@ -478,7 +486,7 @@ GRAPHICS_DEFAULTS = {
 LAUNCHER_DEFAULTS = {'game_dir': '', 'update_dir': '', 'language': '', 'window_size': '1920x1080',
                      'key_map': {}, 'pad_map': {}, 'mouse_look': True, 'mouse_sens': 1.0,
                      'mouse_invert': False, 'mouse_turn_boost': 6, 'check_updates': True,
-                     'smart_pending': True,
+                     'smart_pending': True, 'precompile': True,
                      'draw_pipe': True, 'nowait_writes': True,
                      'res_method': 'upscale', 'discord_rpc': True, 'pad_dead_zone': 0,
                      'pad_speaker': 100, 'fov': 100, 'quick_menu': True, 'quick_menu_hint': True}
@@ -1449,6 +1457,15 @@ class Launcher:
                              command=smart_changed).pack(anchor='w', pady=self.px(4))
         self.images.setdefault('vars', []).append(smart)
         self.note(parent, '      ' + tr('smart_pending_help'))
+        precompile = self.tk.BooleanVar(value=bool(self.settings.get('precompile', True)))
+
+        def precompile_changed():
+            self.settings['precompile'] = precompile.get()
+            save_launcher(self.settings)
+        self.ttk.Checkbutton(parent, text=tr('precompile'), variable=precompile,
+                             command=precompile_changed).pack(anchor='w', pady=self.px(4))
+        self.images.setdefault('vars', []).append(precompile)
+        self.note(parent, '      ' + tr('precompile_help'))
         self.perf_section(parent)
         self.tk.Frame(parent, bg=PANEL, height=self.px(8)).pack()
         method = self.settings.get('res_method') if self.settings.get('res_method') in RES_METHODS else 'upscale'
@@ -1498,7 +1515,8 @@ class Launcher:
         self.graphics = dict(GRAPHICS_DEFAULTS)
         save_graphics(self.graphics)
         self.settings.update(window_size='1920x1080', key_map={}, pad_map={}, mouse_look=True, mouse_sens=1.0,
-                             mouse_invert=False, mouse_turn_boost=6, smart_pending=True, draw_pipe=True,
+                             mouse_invert=False, mouse_turn_boost=6, smart_pending=True, precompile=True,
+                             draw_pipe=True,
                              nowait_writes=True,
                              res_method='upscale', frame_gen='off',
                              discord_rpc=True, pad_dead_zone=0, pad_speaker=100, fov=100,
@@ -1628,6 +1646,10 @@ class Launcher:
             'GOW3_DISCORD_DETAILS': DISCORD_DETAILS,
             'GOW3_DISCORD_IMAGE': DISCORD_IMAGE,
             'GOW3_SMART_PENDING': '1' if self.settings.get('smart_pending', True) else '0',
+            # Precompile: every cached pipeline built before the game, on all but two cores.
+            'GOW3_PRECOMPILE': os.environ.get(
+                'GOW3_PRECOMPILE', '1' if self.settings.get('precompile', True) else '0'),
+            'GOW3_PARALLEL_WARMUP': os.environ.get('GOW3_PARALLEL_WARMUP', '1'),
             # Performance (2026-10-21 measurements): the two-stage draw pipeline, and libc's copy
             # routine (0x3d99a2) writing next to a compute shader's output without a GPU readback.
             # A variable set before the launcher starts (test .bat files) wins.

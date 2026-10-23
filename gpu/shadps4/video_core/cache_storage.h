@@ -46,6 +46,13 @@ public:
     /// gow3: `stop` returning true ends the walk early (background warm-up at exit).
     void ForEachBlob(BlobType type, const std::function<void(std::vector<u8>&& data)>& func,
                      const std::function<bool()>& stop = {});
+    /// gow3: ForEachBlob that also passes each blob's name (no extension).
+    void ForEachNamedBlob(
+        BlobType type,
+        const std::function<void(std::string_view name, std::vector<u8>&& data)>& func,
+        const std::function<bool()>& stop = {});
+    /// gow3: deletes one blob (loose files only; the zip archive is left as it is).
+    void Remove(BlobType type, std::string_view name);
     /// gow3: blobs are plain files written beside and renamed into place, so other threads
     /// may read them while the IO thread saves (the zip archive cannot).
     [[nodiscard]] bool ConcurrentReads() const;

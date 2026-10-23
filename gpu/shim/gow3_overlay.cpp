@@ -81,6 +81,7 @@ std::chrono::steady_clock::time_point hint_start{};
 std::atomic<bool> hint_done{false};
 std::atomic<bool> loading{false};
 std::atomic<u32> loading_done{0}, loading_total{0};
+std::atomic<const char*> loading_stage{nullptr};
 std::atomic<u32> background_done{0}, background_total{0};
 // A short message in a corner (saved screenshot), shown until notice_until.
 std::mutex notice_mutex;
@@ -1116,6 +1117,9 @@ void LoadingScreen() {
     ImGui::SetWindowFontScale(1.6f);
     ImGui::TextUnformatted(total ? "Loading shader cache..." : "Preparing graphics...");
     ImGui::SetWindowFontScale(1.0f);
+    if (const char* stage = loading_stage) {
+        ImGui::TextUnformatted(stage);
+    }
     if (total) {
         char count[64];
         std::snprintf(count, sizeof(count), "%u / %u (%u%%)", done, total,
@@ -1507,6 +1511,13 @@ void SetLoading(bool active, u32 done, u32 total) {
     loading_done = done;
     loading_total = total;
     loading = active;
+    if (!active) {
+        loading_stage = nullptr;
+    }
+}
+
+void SetLoadingStage(const char* stage) {
+    loading_stage = stage;
 }
 
 bool Visible() {

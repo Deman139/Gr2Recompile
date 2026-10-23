@@ -330,8 +330,12 @@ Presenter::Presenter(Frontend::WindowSDL& window_, AmdGpu::Liverpool* liverpool_
                               EmulatorSettings.IsPipelineCacheEnabled();
     const bool capture_only = EmulatorSettingsImpl::Flag("GOW3_PIPELINE_BINARY_ISOLATED", false) &&
                               EmulatorSettingsImpl::Flag("GOW3_PIPELINE_CAPTURE_ONLY", false);
-    if (UseOnDemandPipelines(binary_cache, instance.GetPipelineBinaryGlobalKey().keySize != 0,
-                            capture_only)) {
+    // gow3: GOW3_PRECOMPILE (launcher option): build every cached pipeline before the game
+    // starts, even where the driver's pipeline binaries would restore them on demand.
+    const bool precompile = EmulatorSettingsImpl::Flag("GOW3_PRECOMPILE", false);
+    if (!precompile &&
+        UseOnDemandPipelines(binary_cache, instance.GetPipelineBinaryGlobalKey().keySize != 0,
+                             capture_only)) {
         rasterizer->GetPipelineCache().StartOnDemand();
         return;
     }
@@ -340,14 +344,18 @@ Presenter::Presenter(Frontend::WindowSDL& window_, AmdGpu::Liverpool* liverpool_
     // progress). Otherwise rebuilding them takes up to minutes before the first game frame:
     // show what is happening instead of a black window.
     const char* background_warmup = std::getenv("GOW3_BACKGROUND_WARMUP");
-    if ((!background_warmup || *background_warmup != '0') &&
+    if (!precompile && (!background_warmup || *background_warmup != '0') &&
         rasterizer->GetPipelineCache().StartBackgroundWarmUp()) {
         return;
     }
     Gow3Overlay::SetLoading(true, 0, 0);
     PresentLoadingFrame();
     auto last = std::chrono::steady_clock::now();
-    rasterizer->GetPipelineCache().WarmUp([&](u32 done, u32 total) {
+    if (precompile) {
+        std::printf("Pipeline startup: precompiling the cached pipelines before the game\n");
+    }
+    rasterizer->GetPipelineCache().WarmUp([&](u32 done, u32 total, const char* stage) {
+        Gow3Overlay::SetLoadingStage(stage);
         const auto now = std::chrono::steady_clock::now();
         if (now - last < std::chrono::milliseconds(250)) {
             return;
@@ -357,7 +365,11 @@ Presenter::Presenter(Frontend::WindowSDL& window_, AmdGpu::Liverpool* liverpool_
         PresentLoadingFrame();
     });
     Gow3Overlay::SetLoading(false, 0, 0);
-
+    // gow3: measuring the precompile alone: quit once it is done, before the game runs.
+    if (precompile && EmulatorSettingsImpl::Flag("GOW3_PRECOMPILE_EXIT", false)) {
+        std::fflush(stdout);
+        std::_Exit(0);
+    }
 }
 
 Presenter::~Presenter() {
