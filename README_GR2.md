@@ -62,6 +62,7 @@ your dump, as the script says).
 | `src/runtime_eventflag.c` | Kernel event flags |
 | `src/runtime_gr2.c` | Other kernel/libc functions; offline network, content and sharing services; photo JPEG and Audio3d unavailable for now |
 | `src/runtime_services.c` | PSN dialogs and services answering as signed out |
+| `vk_rasterizer.cpp` | Draws with adjacency (the comic outline geometry shader, mistranslated: black streaks) are skipped unless `GOW3_GS_OUTLINE=1`; found by [HayatoG/gr2_pc](https://github.com/HayatoG/gr2_pc) |
 | `tools/check_imports.py` | Offline check that every import the host must serve is implemented |
 
 Check the imports after changing the runtime:

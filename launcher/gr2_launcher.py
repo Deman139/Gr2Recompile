@@ -131,6 +131,9 @@ TEXTS = {
         'fsr1': 'Масштабирование FSR 1',
         'fsr1_help': 'Для экранов выше 1080p (1440p, 4K): чётче обычного растяжения. На 1080p ничего не меняет.',
         'sharpen': 'Повышение резкости (RCAS)', 'show_fps': 'Показывать FPS на экране',
+        'gs_outline': 'Комиксный контур персонажей (экспериментально)',
+        'gs_outline_help': 'Контур рисуется геометрическим шейдером, который порт пока переводит неверно: '
+                           'по всему кадру появляются чёрные линии. Выключено — линий нет, но без части контура.',
         'graphics_note': 'Во время игры F12 открывает меню порта (на геймпаде R3 + L2), F11 делает скриншот. '
                          'Игра на PS4 работает в 30 FPS, порт держит ту же частоту.',
         'keyboard': 'Клавиатура', 'controller': 'Геймпад',
@@ -227,6 +230,9 @@ TEXTS = {
         'fsr1': 'FSR 1 upscaling',
         'fsr1_help': 'For screens above 1080p (1440p, 4K): sharper than plain stretching. No change at 1080p.',
         'sharpen': 'Sharpening (RCAS)', 'show_fps': 'Show FPS on screen',
+        'gs_outline': 'Comic outline around characters (experimental)',
+        'gs_outline_help': 'The outline is drawn by a geometry shader the port still translates wrongly: '
+                           'black streaks across the frame. Off: no streaks, part of the outline is missing.',
         'graphics_note': 'In game, F12 opens the port menu (on a controller: R3 + L2) and F11 takes a screenshot. '
                          'The game runs at 30 FPS on PS4; the port keeps that rate.',
         'keyboard': 'Keyboard', 'controller': 'Controller',
@@ -420,7 +426,7 @@ LAUNCHER_DEFAULTS = {'game_dir': '', 'update_dir': '', 'modules_dir': '', 'langu
                      'window_size': '1920x1080', 'key_map': {}, 'pad_map': {}, 'mouse_look': True,
                      'mouse_sens': 1.0, 'mouse_invert': False, 'pad_dead_zone': 0, 'pad_speaker': 100,
                      'smart_pending': True, 'precompile': True, 'readback_max_kb': 2048, 'menu_key': 'F12',
-                     'banner_image': ''}
+                     'banner_image': '', 'gs_outline': False}
 BANNER_DIR = USER_DIR / 'banner'
 
 
@@ -610,6 +616,7 @@ def game_environment(settings, graphics, needs_update):
         'GOW3_MENU_KEY': menu_key,
         'GOW3_READBACK_MAX_KB': str(int(readback)) if readback else '0',
         'GOW3_SMART_PENDING': '1' if settings.get('smart_pending', True) else '0',
+        'GOW3_GS_OUTLINE': '1' if settings.get('gs_outline') else '0',
         'GOW3_PRECOMPILE': os.environ.get('GOW3_PRECOMPILE', '1' if settings.get('precompile', True) else '0'),
         # An "Apply and restart" in the game ends it with code 75: game_ended starts it again.
         'GOW3_LAUNCHER_RESTART': '1',
@@ -1185,6 +1192,7 @@ class Launcher:
         self.note(parent, '      ' + tr('fsr1_help'))
         self.check(parent, tr('sharpen'), 'rcas')
         self.check(parent, tr('show_fps'), 'show_fps')
+        self.setting_check(parent, tr('gs_outline'), 'gs_outline', tr('gs_outline_help'))
         self.tk.Frame(parent, bg=LINE, height=1).pack(fill='x', pady=self.px(14))
         self.note(parent, tr('graphics_note'))
 

@@ -1075,6 +1075,27 @@ bool Rasterizer::FilterDrawPasses() const {
     return !(mode == Mode::Disable && (depth_copy || stencil_copy));
 }
 
+// gr2: Gravity Rush 2's comic-style outline pass (a geometry shader reading triangles with
+// adjacency) is mistranslated and draws long black streaks across the frame. Draws with an
+// adjacency topology are dropped unless GOW3_GS_OUTLINE=1 (the launcher's "Comic outline",
+// experimental). Found by HayatoG/gr2_pc (docs/BUG_LINHAS_PRETAS.md, TLG_SKIP_ADJACENCY).
+static bool SkipAdjacencyDraw(const GraphicsPipeline* pipeline) {
+    static const bool draw_outline = [] {
+        const char* env = std::getenv("GOW3_GS_OUTLINE");
+        const bool on = env && *env == '1';
+        std::fprintf(stderr, "GPU: geometry-shader outline (adjacency draws) %s\n",
+                     on ? "drawn (GOW3_GS_OUTLINE=1)" : "skipped");
+        return on;
+    }();
+    if (draw_outline) {
+        return false;
+    }
+    const auto prim = pipeline->GetGraphicsKey().prim_type;
+    return prim == AmdGpu::PrimitiveType::AdjTriangleList ||
+           prim == AmdGpu::PrimitiveType::AdjTriangleStrip ||
+           prim == AmdGpu::PrimitiveType::AdjLineList || prim == AmdGpu::PrimitiveType::AdjLineStrip;
+}
+
 void Rasterizer::Draw(bool is_indexed, u32 index_offset, const PreparedDraw* prepared) {
     RENDERER_TRACE;
     Gow3Stats::draws.fetch_add(1, std::memory_order_relaxed);
@@ -1120,6 +1141,9 @@ void Rasterizer::Draw(bool is_indexed, u32 index_offset, const PreparedDraw* pre
                          int(pipeline_cache.CompilationPending()), PipelineFailLine(),
                          unsigned(Regs().stage_enable.raw));
         }
+        return;
+    }
+    if (SkipAdjacencyDraw(pipeline)) {
         return;
     }
     if (pipelined && FilterDrawPasses()) {
@@ -1410,7 +1434,7 @@ void Rasterizer::DrawIndirect(bool is_indexed, VAddr arg_address, u32 offset, u3
     const GraphicsPipeline* pipeline =  // as in Draw
         ResolvePending(pipeline_cache, pipeline_cache.GetGraphicsPipeline(params), Regs(),
                        [&] { return pipeline_cache.GetGraphicsPipeline(params); });
-    if (!pipeline) {
+    if (!pipeline || SkipAdjacencyDraw(pipeline)) {
         return;
     }
     const IndirectDraw indirect = {arg_address + offset, count_address, stride, max_count};
