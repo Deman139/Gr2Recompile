@@ -10,7 +10,7 @@
 #           shadPS4 uses as user/sys_modules. libSceNgs2.sprx is required (the game's audio);
 #           libSceJson2, libSceRtc, libSceFreeTypeOt, libSceFontFt and libSceFont are used when there.
 # GR2_PROFILE=1: sampling profiler report (where each thread spends its time, every 5 s) in
-#           user/logs/profile-<date>.txt, beside the log.
+#           user/logs/profile-<date>.txt, beside the log, and GPU frame statistics in the log.
 # Other GOW3_* variables (see run.py) pass through; arguments go to the game executable.
 set -euo pipefail
 cd -- "$(dirname -- "$0")"
@@ -39,6 +39,7 @@ log=user/logs/gr2-$stamp.log
 if [[ ${GR2_PROFILE:-} == 1 ]]; then
     export GOW3_PROFILE
     GOW3_PROFILE=$(to_native "$PWD/user/logs/profile-$stamp.txt")
+    export GOW3_FRAME_STATS=1
     echo "Profile: $GOW3_PROFILE"
 fi
 echo "Log: $PWD/$log"

@@ -308,13 +308,14 @@ def main():
         except (ImportError, OSError):
             pass
         # The temporal upscalers and motion vectors are not calibrated for this game yet: they stay
-        # off unless the launcher's experimental switch is on (then gow3.ini decides); linear
-        # image readbacks fix its corrupted textures.
+        # off unless the launcher's experimental switch is on (then gow3.ini decides). Linear image
+        # readbacks fixed Killzone's textures; Gravity Rush 2 runs without them, as in GR2fork
+        # (readbackLinearImages = false), and each one stalls the GPU (GOW3_READBACK_LINEAR=1 to test).
         if env.get('GOW3_EXPERIMENTAL_UPSCALER') != '1':
             # Above 1080p the port's output path needs the upscaler's machinery (scene proxies, UI
             # composition) enabled, with the temporal upscaler itself off.
             env.setdefault('GOW3_UPSCALER', 'none' if env['GOW3_OUTPUT_RES'] == '1920x1080' else 'off')
-        env.setdefault('GOW3_READBACK_LINEAR', '1')
+        env.setdefault('GOW3_READBACK_LINEAR', '0')
         if profile:
             names = selected_patches(profile[1], profile[2], env.get('GOW3_PATCHES', ''), env.get('GOW3_PATCHES_ONLY') == '1')
             # gow3.ini decides the resolution and frame rate patches (in-game menu, launcher).
