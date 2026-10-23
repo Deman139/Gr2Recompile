@@ -213,6 +213,14 @@ static void isa_context_regs(CONTEXT *c, IsaRegs *regs, int to_context) {
     for (int i=0;i<16;++i) { if (to_context) *g[i]=regs->gpr[i]; else regs->gpr[i]=*g[i]; }
     if (to_context) c->EFlags=(DWORD)regs->rflags; else regs->rflags=c->EFlags;
 }
+/* The GPU fault handler (page tracking, buffer and texture caches) needs more stack than a guest
+ * fiber context has room for below a faulting guest instruction: it runs on the thread's host
+ * call stack (runtime_hoststack_run) when the fault came from such a stack. */
+typedef struct { EXCEPTION_POINTERS *info; void *address; } GpuFault;
+static long gpu_fault(void *argument) {
+    GpuFault *fault=argument;
+    return gow3gpu_handle_fault(fault->info,fault->address);
+}
 static LONG CALLBACK vectored_fault(EXCEPTION_POINTERS *info) {
     const EXCEPTION_RECORD *record=info->ExceptionRecord;
     DWORD code=record->ExceptionCode;
@@ -229,7 +237,10 @@ static LONG CALLBACK vectored_fault(EXCEPTION_POINTERS *info) {
     }
     if (code==EXCEPTION_ACCESS_VIOLATION && record->NumberParameters>=2) {
         /* GPU page tracking (write-protected guest pages) is resolved first. */
-        if (gpu_enabled && gow3gpu_handle_fault(info,(void *)record->ExceptionInformation[1])) return EXCEPTION_CONTINUE_EXECUTION;
+        if (gpu_enabled) {
+            GpuFault fault={info,(void *)record->ExceptionInformation[1]};
+            if (runtime_hoststack_run(gpu_fault,&fault)) return EXCEPTION_CONTINUE_EXECUTION;
+        }
         if (runtime_fault_recover) {
             /* A speculative guest memory read (GPU draw preparation) faulted: the thread resumes
              * in gow3_longjmp, outside the exception dispatcher, back at its recovery point. */
@@ -1386,12 +1397,22 @@ int main(int argc, char **argv) {
         t[8] = 0x48; t[9] = 0xb8; memcpy(t + 10, &handler, 8);
         t[18] = 0xff; t[19] = 0xe0;
     }
+    /* Function imports the host serves are called through runtime_hoststack stubs (one per
+     * import), which move calls made on small guest stacks (fiber contexts) to a host stack. */
+    runtime_hoststack_init();
+    uintptr_t *host_stubs = calloc(import_count ? import_count : 1, sizeof(*host_stubs));
+    if (!host_stubs) fail("allocation failed");
     for (uint64_t i = 0; i < nr; ++i) {
         uintptr_t value = relocs[i].kind == 2 ? (uintptr_t)(data_traps + page_size * relocs[i].value + relocs[i].addend)
                         : relocs[i].kind == 1 ? (uintptr_t)(traps + 32 * relocs[i].value)
                         : (uintptr_t)image + relocs[i].value;
         if (relocs[i].kind) {
             uintptr_t resolved = runtime_resolve(names[relocs[i].value], relocs[i].kind == 2);
+            if (resolved && relocs[i].kind == 1 && !relocs[i].addend) {
+                uintptr_t *stub = &host_stubs[relocs[i].value];
+                if (!*stub) *stub = runtime_hoststack_wrap(resolved, names[relocs[i].value]);
+                resolved = *stub;
+            }
             if (resolved) value = resolved + relocs[i].addend;
             else if (native_libc && bindings[relocs[i].value]) {
                 uint64_t address=bindings[relocs[i].value];
@@ -1401,6 +1422,7 @@ int main(int argc, char **argv) {
         }
         memcpy(image + relocs[i].target, &value, 8);
     }
+    free(host_stubs);
     if (check_imports) {
         /* Lists every import the game would stop at, without running it (needs the GPU
          * library: without --cpu-only its symbols are registered above). */

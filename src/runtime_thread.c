@@ -104,6 +104,7 @@ static void attach(GuestThread *t) {
     t->tls_block=block; t->tcb=tcb;
     set_gs(tcb);
     current=t;
+    runtime_hoststack_attach();
 }
 static GuestThread *new_thread(void) {
     GuestThread *t=calloc(1,sizeof(*t));
@@ -295,8 +296,19 @@ static void *host_start(void *p) {
     set_host_name(t->name);
     set_host_priority(t->name,t->attr.prio);
     runtime_set_guest_fpu();
+#ifdef _WIN32
+    /* scePthreadExit may leave from guest code a host call stack runs (a callback of a host
+     * function): the TEB stack bounds are put back with the thread's own. */
+    unsigned char *teb=(unsigned char *)NtCurrentTeb();
+    uint64_t stack_bounds[3];
+    memcpy(&stack_bounds[0],teb+0x08,8); memcpy(&stack_bounds[1],teb+0x10,8); memcpy(&stack_bounds[2],teb+0x1478,8);
+#endif
     if (!exit_setjmp(t)) t->result=t->entry(t->argument);
+#ifdef _WIN32
+    else { memcpy(teb+0x08,&stack_bounds[0],8); memcpy(teb+0x10,&stack_bounds[1],8); memcpy(teb+0x1478,&stack_bounds[2],8); }
+#endif
     runtime_thread_keys_cleanup();
+    runtime_hoststack_detach();
     pthread_mutex_lock(&lock); t->finished=1; ++exited; pthread_mutex_unlock(&lock);
     return t->result;
 }

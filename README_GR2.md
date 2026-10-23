@@ -57,7 +57,8 @@ your dump, as the script says).
 |---|---|
 | `scripts/link_modules.py` | Links decrypted firmware modules (`--system-dir`, `--system`) and modules from the game root (`sysdata/libSceSecure.prx`); plain ELF input; empty TLS segments get no module ID |
 | `run.py` | Links `libc`, `Fios2`, `JobManager`, `NpToolkit`, `libSceSecure` and the firmware modules; `GOW3_NATIVE_LIBS` leaves those libraries to the native code |
-| `src/runtime_fiber.c` | `libSceFiber` (the game's job system), ported from shadPS4; fibers run on host stacks 512 KiB larger than the game's contexts (`GOW3_FIBER_STACK_KB`), as host code they call (FFmpeg, drivers) needs far more stack than the PS4 libraries |
+| `src/runtime_fiber.c` | `libSceFiber` (the game's job system), ported from shadPS4 |
+| `src/runtime_hoststack.c` | Host functions called from small guest stacks (fiber contexts) run on a per-thread host stack (`GOW3_HOST_STACK_KB`, default 1024): FFmpeg, the Vulkan driver and Windows need far more stack than the PS4 libraries and overwrote the game's heap |
 | `src/runtime_eventflag.c` | Kernel event flags |
 | `src/runtime_gr2.c` | Other kernel/libc functions; offline network, content and sharing services; photo JPEG and Audio3d unavailable for now |
 | `src/runtime_services.c` | PSN dialogs and services answering as signed out |

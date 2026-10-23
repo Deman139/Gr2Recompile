@@ -86,6 +86,7 @@ void runtime_report(void) {
     runtime_savedata_report();
     runtime_file_report();
     runtime_fiber_report();
+    runtime_hoststack_report();
     runtime_eventflag_report();
     runtime_audio3d_report();
     printf("Runtime: memory operations=%zu\n", (size_t)memory_calls);

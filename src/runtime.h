@@ -19,6 +19,14 @@ void runtime_restart(void);
 typedef void (ABI *GuestCallback)(void);
 void runtime_start(uint64_t capabilities);
 uintptr_t runtime_resolve(const char *name, int is_data);
+/* Host calls from guest code on small guest stacks (fiber contexts) move to a per-thread host
+ * stack (runtime_hoststack.c). */
+void runtime_hoststack_init(void);
+void runtime_hoststack_attach(void);
+void runtime_hoststack_detach(void);
+uintptr_t runtime_hoststack_wrap(uintptr_t function, const char *nid);
+long runtime_hoststack_run(long (*function)(void *), void *argument);
+void runtime_hoststack_report(void);
 void runtime_report(void);
 /* Called at the end of runtime_report (the loader adds its own counters). */
 void runtime_set_report_hook(void (*hook)(void));

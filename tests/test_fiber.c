@@ -10,12 +10,6 @@ uintptr_t runtime_lookup(const RuntimeExport *table, size_t count, const char *n
     (void)table; (void)count; (void)nid;
     return 0;
 }
-/* runtime_memory.c is not linked either: host stacks come from the C heap here. */
-void *runtime_low_map(size_t size, int prot) {
-    (void)prot;
-    uintptr_t p = (uintptr_t)malloc(size + 65536); /* never freed: a test */
-    return p ? (void *)((p + 65535) & ~(uintptr_t)65535) : NULL;
-}
 
 static Fiber fiber_a, fiber_b;
 static _Alignas(16) unsigned char stack_a[64 * 1024], stack_b[64 * 1024];
@@ -72,43 +66,7 @@ static void *run_migrant(void *arg) {
     return NULL;
 }
 
-/* A small guest context in the middle of "heap" memory: host code on the fiber needs far more
- * stack (FFmpeg, drivers). It runs on a host stack; the heap around the context stays intact. */
-static Fiber deep;
-static _Alignas(16) unsigned char heap[3 * 4096];
-static volatile uint64_t deep_sum;
-static void ABI entry_deep(uint64_t init, uint64_t run) {
-    (void)init; (void)run;
-    volatile unsigned char big[200 * 1024];
-    for (size_t i = 0; i < sizeof(big); i += 64) big[i] = (unsigned char)i;
-    uint64_t sum = 0;
-    for (size_t i = 0; i < sizeof(big); i += 64) sum += big[i];
-    deep_sum = sum;
-    unsigned char *here = (unsigned char *)&sum;
-    assert(!(here >= heap && here < heap + sizeof(heap)));
-    fiber_return_to_thread(1, NULL);
-    assert(!"not resumed");
-}
-static void test_deep_stack(void) {
-    if (!host_stack_extra()) return; /* GOW3_FIBER_STACK_KB=0: the guest context, as on the PS4 */
-    memset(heap, 0x5a, sizeof(heap));
-    unsigned char *context = heap + 4096;
-    assert(fiber_initialize(&deep, "deep", entry_deep, 0, context, 4096, NULL, SDK_350) == 0);
-    uint64_t returned = 0;
-    assert(fiber_run(&deep, 0, &returned) == 0 && returned == 1 && deep_sum);
-    for (size_t i = 0; i < 4096; ++i) assert(heap[i] == 0x5a && heap[2 * 4096 + i] == 0x5a);
-    assert(fiber_finalize(&deep) == 0);
-    /* Finalized: its host stack goes to the next fiber. */
-    pthread_mutex_lock(&host_stack_lock);
-    size_t before = host_stack_count;
-    pthread_mutex_unlock(&host_stack_lock);
-    assert(fiber_initialize(&deep, "deep again", entry_deep, 0, context, 4096, NULL, SDK_350) == 0);
-    assert(fiber_run(&deep, 0, &returned) == 0 && returned == 1);
-    assert(host_stack_count == before);
-}
-
 int main(void) {
-    test_deep_stack();
     assert(fiber_initialize(&migrant, "migrant", entry_migrant, 0, stack_m, sizeof(stack_m), NULL, SDK_350) == 0);
     pthread_t first, second;
     pthread_create(&first, NULL, run_migrant, (void *)(uintptr_t)10);
