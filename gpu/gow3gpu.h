@@ -59,6 +59,11 @@ int gow3gpu_pad_speaker_percent(void);
 void gow3gpu_quick_menu_open(void);
 /* The FOV hook's float (pi/180 times the FOV scale) that the menu rewrites when the FOV changes. */
 void gow3gpu_fov_register(float *cell);
+/* Post-processing effects turned off in the settings, read once at start (they apply on restart):
+ * bit 0 motion blur, 1 depth of field, 2 bloom, 3 film grain (src/postfx_hook.h). */
+unsigned gow3gpu_post_effects_off(void);
+/* The camera shake hook's int (nonzero: the game's shake, 0: none) that the menu rewrites. */
+void gow3gpu_camera_shake_register(int *cell);
 /* Number of symbols registered by the vendored libraries (diagnostics). */
 unsigned gow3gpu_symbol_count(void);
 #ifdef __cplusplus

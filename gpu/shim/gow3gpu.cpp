@@ -388,6 +388,16 @@ extern "C" void gow3gpu_fov_register(float* cell) {
     Gow3Overlay::SetFovCell(cell);
 }
 
+extern "C" unsigned gow3gpu_post_effects_off(void) {
+    const auto& s = Gow3Settings::Get();
+    return (s.startup_motion_blur ? 0u : 1u) | (s.startup_depth_of_field ? 0u : 2u) |
+           (s.startup_bloom ? 0u : 4u) | (s.startup_film_grain ? 0u : 8u);
+}
+
+extern "C" void gow3gpu_camera_shake_register(int* cell) {
+    Gow3Overlay::SetShakeCell(cell);
+}
+
 extern "C" int gow3gpu_overlay_captures_input(void) {
     return Gow3Overlay::CapturesInput() ? 1 : 0;
 }

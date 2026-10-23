@@ -92,6 +92,12 @@ struct Values {
     /// Set when the in-game menu changed the upscaler or frame generation: the launcher adopts
     /// gow3.ini's upscaler/frame_gen into its own settings next time and clears it.
     std::atomic<bool> upscaling_from_menu{false};
+    /// Killzone post-processing (src/postfx_hook.h): the game's own off path of each pass, set
+    /// in the image before it starts (startup_* are what this run applied). Camera shake is live.
+    std::atomic<bool> motion_blur{true}, depth_of_field{true}, bloom{true}, film_grain{true};
+    bool startup_motion_blur = true, startup_depth_of_field = true, startup_bloom = true,
+         startup_film_grain = true;
+    std::atomic<bool> camera_shake{true};
     int startup_frame_gen = 0;
     // Startup: run.py turns them into patches and environment variables; "Apply and restart".
     std::atomic<int> render_resolution{0};
@@ -152,6 +158,8 @@ int RenderPreset();
 bool ResolutionNeedsRestart();
 /// A startup graphics option differs from the one this launch started with.
 bool GraphicsNeedRestart();
+/// Killzone post-processing switches changed since start (they apply on restart).
+bool EffectsNeedRestart();
 /// Writes the file (menu changes).
 void Save();
 

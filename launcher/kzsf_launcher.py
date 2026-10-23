@@ -138,6 +138,10 @@ TEXTS = {
         'fsr1_help': 'Para pantallas de más de 1080p (1440p, 4K): imagen más nítida que el estirado normal. '
                      'A 1080p no cambia nada.',
         'graphics_note': 'Durante el juego, Insert abre el menú del port (también con el mando: R3 + L2).',
+        'effects': 'Efectos', 'effects_help': 'Se aplican al iniciar el juego; el temblor de cámara también cambia al instante desde el menú (Insert). El retroceso del arma se mantiene.',
+        'motion_blur': 'Desenfoque de movimiento', 'depth_of_field': 'Profundidad de campo',
+        'bloom': 'Bloom (brillo de las luces)', 'film_grain': 'Grano de película',
+        'camera_shake': 'Temblor de cámara', 'camera_shake_help': 'Explosiones, impactos. El retroceso del arma se mantiene.',
         'keyboard': 'Teclado', 'controller': 'Mando',
         'press_key': 'Pulsá una tecla…', 'reset_defaults': 'Valores por defecto',
         'controls_help': 'Click en una tecla y apretá otra tecla, un botón del mouse o la rueda (Esc cancela). Movimiento: WASD. Cámara: mouse. Cruceta: flechas.\n'
@@ -272,6 +276,10 @@ TEXTS = {
         'fsr1': 'FSR 1 upscaling',
         'fsr1_help': 'For screens above 1080p (1440p, 4K): sharper than plain stretching. No change at 1080p.',
         'graphics_note': 'In game, Insert opens the port menu (on a controller: R3 + L2).',
+        'effects': 'Effects', 'effects_help': 'Applied when the game starts; camera shake also changes at once from the in-game menu (Insert). Weapon recoil stays.',
+        'motion_blur': 'Motion blur', 'depth_of_field': 'Depth of field',
+        'bloom': 'Bloom (glow around lights)', 'film_grain': 'Film grain',
+        'camera_shake': 'Camera shake', 'camera_shake_help': 'Explosions, hits. Weapon recoil stays.',
         'keyboard': 'Keyboard', 'controller': 'Controller',
         'press_key': 'Press a key…', 'reset_defaults': 'Defaults',
         'controls_help': 'Click a key, then press a key, a mouse button or the wheel (Esc cancels). Move: WASD. Camera: mouse. D-pad: arrow keys.\n'
@@ -465,6 +473,7 @@ GRAPHICS_DEFAULTS = {
     'rcas': '0', 'fsr1': '0', 'mip_lod_bias': '0',
     'show_fps': '0', 'vibration': '100', 'async_shaders': '1', 'stale_readback': '1',
     'deferred_readback': '1', 'frames_queued': '1',
+    'motion_blur': '1', 'depth_of_field': '1', 'bloom': '1', 'film_grain': '1', 'camera_shake': '1',
 }
 LAUNCHER_DEFAULTS = {'game_dir': '', 'update_dir': '', 'language': '', 'window_size': '1920x1080',
                      'key_map': {}, 'pad_map': {}, 'mouse_look': True, 'mouse_sens': 1.0,
@@ -993,6 +1002,18 @@ class Launcher:
         self.images.setdefault('vars', []).append(var)
         return var
 
+    def inline_check(self, parent, label, key):
+        """A graphics checkbox packed beside the previous one (rows of short options)."""
+        var = self.tk.BooleanVar(value=self.graphics[key] == '1')
+
+        def changed():
+            self.graphics[key] = '1' if var.get() else '0'
+            save_graphics({key: self.graphics[key]})
+        self.ttk.Checkbutton(parent, text=label, variable=var, command=changed).pack(side='left',
+                                                                                    padx=(0, self.px(22)))
+        self.images.setdefault('vars', []).append(var)
+        return var
+
     def set_graphic(self, key, value):
         self.graphics[key] = value
         save_graphics({key: value})
@@ -1156,6 +1177,13 @@ class Launcher:
         self.check(parent, tr('fsr1'), 'fsr1', tr('fsr1_help'))
         self.check(parent, tr('sharpen'), 'rcas')
         self.check(parent, tr('show_fps'), 'show_fps')
+        self.heading(parent, tr('effects'), pady=(14, 2))
+        for keys in (('motion_blur', 'depth_of_field', 'camera_shake'), ('bloom', 'film_grain')):
+            row = self.tk.Frame(parent, bg=PANEL)
+            row.pack(fill='x', pady=self.px(2))
+            for key in keys:
+                self.inline_check(row, tr(key), key)
+        self.note(parent, tr('effects_help'))
         self.tk.Frame(parent, bg=LINE, height=1).pack(fill='x', pady=self.px(14))
         self.note(parent, tr('graphics_note'))
 

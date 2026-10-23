@@ -74,6 +74,8 @@ bool r3_down = false, l2_down = false;
 std::atomic<bool> quick_open{false};
 // The FOV hook's float (src/probe.c), rewritten when the FOV changes; null without the hook.
 std::atomic<float*> fov_cell{nullptr};
+// The camera shake hook's int (src/probe.c), kept equal to the setting; null without the hook.
+std::atomic<int*> shake_cell{nullptr};
 // Startup reminder of the quick menu: shown for a few seconds once the game runs.
 std::chrono::steady_clock::time_point hint_start{};
 std::atomic<bool> hint_done{false};
@@ -470,6 +472,12 @@ void ControlsTab() {
                        : "Unavailable: the game's camera code was not found in this eboot.bin.");
         ImGui::PopID();
         ImGui::EndDisabled();
+        const bool shake_ready = shake_cell.load() != nullptr;
+        ImGui::BeginDisabled(!shake_ready);
+        CheckRow("Camera shake", s.camera_shake,
+                 shake_ready ? "Shaking from explosions, hits and the like. Weapon recoil stays."
+                             : "Unavailable: the game's camera code was not found in this eboot.bin.");
+        ImGui::EndDisabled();
         ImGui::EndTable();
     }
     ImGui::SeparatorText("Controller");
@@ -585,6 +593,15 @@ void ImageTab() {
             }
             Help("Sharper: crisper textures at a distance, a little more shimmer. Softer: smoother.");
             ImGui::PopID();
+            ImGui::EndTable();
+        }
+        ImGui::SeparatorText("Effects (applied on restart)");
+        if (BeginRows("##effects")) {
+            CheckRow("Motion blur", s.motion_blur, "Blur of fast camera and object motion.");
+            CheckRow("Depth of field", s.depth_of_field,
+                     "Out-of-focus background when aiming and in cutscenes.");
+            CheckRow("Bloom", s.bloom, "Glow around bright lights.");
+            CheckRow("Film grain", s.film_grain, "The game's grain over the image.");
             ImGui::EndTable();
         }
     }
@@ -758,7 +775,9 @@ int RestartChanges() {
     const auto& s = Gow3Settings::Get();
     return (s.render_resolution != s.startup_render_resolution) + (s.engine_fps != s.startup_engine_fps) +
            (s.deferred_readback != s.startup_deferred_readback) + (s.stale_readback != s.startup_stale_readback) +
-           (s.anisotropy != s.startup_anisotropy) +
+           (s.anisotropy != s.startup_anisotropy) + (s.motion_blur != s.startup_motion_blur) +
+           (s.depth_of_field != s.startup_depth_of_field) + (s.bloom != s.startup_bloom) +
+           (s.film_grain != s.startup_film_grain) +
            // Frame generation turned on in a launch that started without it (UpscalingSection).
            (s.startup_frame_gen == Gow3Settings::FrameGenOff && s.frame_gen != Gow3Settings::FrameGenOff);
 }
@@ -1512,6 +1531,11 @@ void SetFovCell(float* cell) {
     ApplyFov();
 }
 
+void SetShakeCell(int* cell) {
+    *cell = Gow3Settings::Get().camera_shake.load() ? 1 : 0;
+    shake_cell = cell;
+}
+
 void BeginChoice(const std::string& title, const std::vector<std::string>& items,
                  std::vector<Gow3Png::Image> pictures, int focus) {
     std::scoped_lock lock{imgui_mutex};
@@ -1562,6 +1586,9 @@ void Render(vk::CommandBuffer cmdbuf, vk::ImageView view, vk::Extent2D extent) {
     if (fov_cell.load() && Gow3Settings::Get().fov.load() != applied_fov) {
         applied_fov = Gow3Settings::Get().fov.load();
         ApplyFov();
+    }
+    if (int* cell = shake_cell.load()) {
+        *cell = Gow3Settings::Get().camera_shake.load() ? 1 : 0;
     }
     if (!Visible()) {
         return;

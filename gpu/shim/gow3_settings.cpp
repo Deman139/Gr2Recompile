@@ -147,6 +147,16 @@ void Set(Values& v, const std::string& key, const std::string& value) {
         v.quick_menu = i != 0;
     } else if (key == "quick_menu_hint") {
         v.quick_menu_hint = i != 0;
+    } else if (key == "motion_blur") {
+        v.motion_blur = value.empty() || i != 0;
+    } else if (key == "depth_of_field") {
+        v.depth_of_field = value.empty() || i != 0;
+    } else if (key == "bloom") {
+        v.bloom = value.empty() || i != 0;
+    } else if (key == "film_grain") {
+        v.film_grain = value.empty() || i != 0;
+    } else if (key == "camera_shake") {
+        v.camera_shake = value.empty() || i != 0;
     } else if (key == "upscaling_from_menu") {
         v.upscaling_from_menu = i != 0;
     } else if (key == "restart_unconfirmed") {
@@ -226,6 +236,9 @@ void Load() {
         {"GOW3_MOUSE_INVERT_Y", "mouse_invert"},      {"GOW3_FOV", "fov"},
         {"GOW3_PAD_SPEAKER_VOLUME", "pad_speaker"},   {"GOW3_QUICK_MENU", "quick_menu"},
         {"GOW3_QUICK_MENU_HINT", "quick_menu_hint"},
+        {"GOW3_MOTION_BLUR", "motion_blur"},          {"GOW3_DEPTH_OF_FIELD", "depth_of_field"},
+        {"GOW3_BLOOM", "bloom"},                      {"GOW3_FILM_GRAIN", "film_grain"},
+        {"GOW3_CAMERA_SHAKE", "camera_shake"},
     };
     for (const auto& [env, key] : env_keys) {
         if (const char* value = std::getenv(env); value && value[0]) {
@@ -246,11 +259,21 @@ void Load() {
     v.startup_deferred_readback = v.deferred_readback;
     v.startup_stale_readback = v.stale_readback;
     v.startup_anisotropy = v.anisotropy;
+    v.startup_motion_blur = v.motion_blur;
+    v.startup_depth_of_field = v.depth_of_field;
+    v.startup_bloom = v.bloom;
+    v.startup_film_grain = v.film_grain;
+}
+
+bool EffectsNeedRestart() {
+    const auto& v = Get();
+    return v.motion_blur != v.startup_motion_blur || v.depth_of_field != v.startup_depth_of_field ||
+           v.bloom != v.startup_bloom || v.film_grain != v.startup_film_grain;
 }
 
 bool GraphicsNeedRestart() {
     const auto& v = Get();
-    return v.render_resolution != v.startup_render_resolution ||
+    return EffectsNeedRestart() || v.render_resolution != v.startup_render_resolution ||
            v.engine_fps != v.startup_engine_fps ||
            v.deferred_readback != v.startup_deferred_readback ||
            v.stale_readback != v.startup_stale_readback ||
@@ -362,6 +385,9 @@ void Save() {
                  v.mouse_sens.load(), v.mouse_turn_boost.load(), int(v.mouse_invert.load()), v.fov.load(),
                  v.pad_dead_zone.load(), v.pad_speaker.load(), int(v.quick_menu.load()),
                  int(v.quick_menu_hint.load()), int(v.upscaling_from_menu.load()));
+    std::fprintf(file, "motion_blur=%d\ndepth_of_field=%d\nbloom=%d\nfilm_grain=%d\ncamera_shake=%d\n",
+                 int(v.motion_blur.load()), int(v.depth_of_field.load()), int(v.bloom.load()),
+                 int(v.film_grain.load()), int(v.camera_shake.load()));
     std::fprintf(file, "frame_gen=%s\nframe_gen_multiplier=%d\n", FrameGenName(v.frame_gen),
                  v.frame_gen_multiplier.load());
     // Read by run.sh at start.

@@ -15,6 +15,7 @@
 #include "actor_hook.h"
 #include "mouse_hook.h"
 #include "damage_hook.h"
+#include "postfx_hook.h"
 #include "gpu/gow3gpu.h"
 #if !defined(__x86_64__) || !defined(__GNUC__)
 #error This prototype requires x86-64 GCC or Clang (including MinGW).
@@ -591,6 +592,54 @@ static void install_fov(Segment *segments, uint64_t count, uint64_t size) {
     printf("FOV: live setting ready (camera at image+0x%" PRIx64 ")\n", at);
 }
 
+/* Post-processing switches (src/postfx_hook.h): motion blur, depth of field, bloom and film
+ * grain turned off in the settings clear their bit of the game's feature mask (restart); camera
+ * shake is a stub reading an int the menu rewrites (live). */
+static void install_post_effects(Segment *segments, uint64_t count, uint64_t size) {
+    const unsigned off = gow3gpu_post_effects_off();
+    for (unsigned i = 0; i < GOW3_POSTFX_COUNT; ++i) {
+        const Gow3PostFx *fx = &gow3_postfx[i];
+        if (!(off & fx->bit)) continue;
+        const uint64_t at = gow3_signature_find(image, size, &fx->site);
+        const uint64_t mask = at == UINT64_MAX ? UINT64_MAX : gow3_postfx_mask(image, at);
+        uint32_t flags = 0;
+        if (mask == UINT64_MAX || mask + 4 > size || !mapped(segments, count, mask, 4)) {
+            printf("Effects: %s switch unavailable (code not found in this eboot.bin)\n", fx->name);
+            continue;
+        }
+        memcpy(&flags, image + mask, 4);
+        if (!gow3_postfx_mask_known(flags)) {
+            printf("Effects: %s switch unavailable (unknown feature mask %08x)\n", fx->name, flags);
+            continue;
+        }
+        const uint32_t after = flags & ~fx->bit;
+        memcpy(image + mask, &after, 4);
+        printf("Effects: %s off (feature mask %08x -> %08x)\n", fx->name, flags, after);
+    }
+
+    const uint64_t at = gow3_signature_find(image, size, &gow3_shake_site);
+    if (at == UINT64_MAX || !mapped(segments, count, at, GOW3_SHAKE_HOOK_LENGTH) ||
+        memcmp(image + at, gow3_shake_original, GOW3_SHAKE_HOOK_LENGTH)) {
+        printf("Camera shake: switch unavailable (camera code not found in this eboot.bin)\n");
+        return;
+    }
+    int *cell = allocate(page_size);
+    *cell = 1;
+    unsigned char *stub = allocate(page_size);
+    if (!gow3_shake_build_stub(stub, (uintptr_t)stub, (uintptr_t)cell,
+                               (uintptr_t)(image + at + GOW3_SHAKE_HOOK_LENGTH))) {
+        printf("Camera shake: switch unavailable (stub outside relative range)\n");
+        return;
+    }
+    protect(stub, page_size, 5);
+    if (!install_jump(at, GOW3_SHAKE_HOOK_LENGTH, stub)) {
+        printf("Camera shake: switch unavailable (hook outside relative-jump range)\n");
+        return;
+    }
+    gow3gpu_camera_shake_register(cell);
+    printf("Camera shake: live setting ready (camera at image+0x%" PRIx64 ")\n", at);
+}
+
 /* Damage dealt/taken and green/blue/gold orb multipliers (src/damage_hook.h, src/orb_hook.h):
  * the stubs read the menu's floats directly, so changes apply on the next hit or pickup. */
 static void install_stat_multipliers(Segment *segments, uint64_t count, uint64_t size) {
@@ -1047,6 +1096,7 @@ int main(int argc, char **argv) {
     if (gpu_enabled) install_stat_multipliers(segments, ns, size);
     install_mouse_look(segments, ns, size);
     if (gpu_enabled) install_fov(segments, ns, size);
+    if (gpu_enabled) install_post_effects(segments, ns, size);
 #ifdef _WIN32
     printf("Guest TCB loads redirected to the TEB TLS slot: %" PRIu64 "\n", patch_tcb_loads(segments, ns));
 #endif

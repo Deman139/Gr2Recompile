@@ -49,6 +49,8 @@ bool CapturesInput();
 void OpenQuickMenu();
 /// Loader (src/probe.c FOV hook): the float the FOV setting writes; set right away.
 void SetFovCell(float* cell);
+/// Loader (src/probe.c camera shake hook): the int the camera shake setting writes.
+void SetShakeCell(int* cell);
 
 /// Window thread: the game's text dialog (sceImeDialog). Shown as a box on screen until
 /// `active` is false; typing goes to the window (sdl_window), the box only displays it.
