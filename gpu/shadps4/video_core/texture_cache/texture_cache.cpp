@@ -1313,6 +1313,32 @@ ImageId TextureCache::FindImageFromRange(VAddr address, size_t size, bool ensure
     return {};
 }
 
+/// gow3: GOW3_READBACK_MAX_KB: linear images larger than this are not copied back to RAM.
+/// Gravity Rush 2 renders full-screen linear targets (1920x1080, up to 16 MiB) the CPU never
+/// reads, while the GPU waits for each copy before it reuses their memory as a buffer (12 FPS);
+/// the small linear images it does read back still go. 0 or unset: no limit (Killzone).
+bool TextureCache::ReadbackSizeAllowed(const Image& image) {
+    static const u64 limit = [] {
+        const char* env = std::getenv("GOW3_READBACK_MAX_KB");
+        const long kb = env ? std::strtol(env, nullptr, 10) : 0;
+        return kb > 0 ? u64(kb) * 1024 : u64{0};
+    }();
+    if (!limit) return true;
+    const u64 size = u64{image.info.pitch} * image.info.size.height * image.info.size.depth *
+                     image.info.resources.layers * (image.info.num_bits / 8);
+    if (size <= limit) return true;
+    static std::mutex logged_mutex;
+    static std::vector<VAddr> logged;
+    std::scoped_lock lock{logged_mutex};
+    if (logged.size() < 32 && std::ranges::find(logged, image.info.guest_address) == logged.end()) {
+        logged.push_back(image.info.guest_address);
+        std::printf("GPU: linear image 0x%llx %ux%u (%llu KiB) stays on the GPU (GOW3_READBACK_MAX_KB)\n",
+                    (unsigned long long)image.info.guest_address, image.info.size.width,
+                    image.info.size.height, (unsigned long long)(size >> 10));
+    }
+    return false;
+}
+
 ImageView& TextureCache::FindTexture(ImageId image_id, const ImageDesc& desc, ViewMemo* memo,
                                      bool refresh) {
     Image& image = slot_images[image_id];
@@ -1320,7 +1346,7 @@ ImageView& TextureCache::FindTexture(ImageId image_id, const ImageDesc& desc, Vi
     if (desc.type == BindingType::Storage) {
         image.flags |= ImageFlagBits::GpuModified;
         if (readback_linear_images && (!image.info.props.is_tiled || image.info.size.width <= 8) &&
-            image.info.guest_address != 0) {
+            image.info.guest_address != 0 && ReadbackSizeAllowed(image)) {
             std::unique_lock lk{download_images_mutex};
             download_images.emplace(image_id);
         }
@@ -1351,7 +1377,8 @@ ImageView& TextureCache::FindRenderTarget(ImageId image_id, const ImageDesc& des
     Image& image = slot_images[image_id];
     TraceImage("render target", image);
     image.flags |= ImageFlagBits::GpuModified;
-    if (readback_linear_images && (!image.info.props.is_tiled || image.info.size.width <= 8)) {
+    if (readback_linear_images && (!image.info.props.is_tiled || image.info.size.width <= 8) &&
+        ReadbackSizeAllowed(image)) {
         std::unique_lock lk{download_images_mutex};
         download_images.emplace(image_id);
     }

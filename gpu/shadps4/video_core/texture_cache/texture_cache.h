@@ -472,6 +472,7 @@ private:
     Common::LeastRecentlyUsedCache<ImageId, u64> lru_cache;
     Common::LeastRecentlyUsedCache<u64, u64> sampler_lru_cache;
     const bool readback_linear_images;
+    static bool ReadbackSizeAllowed(const Image& image);
     const bool deferred_readbacks = [] {
         const char* value = std::getenv("GOW3_DEFERRED_READBACK");
         return value && value[0] == '1';

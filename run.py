@@ -319,6 +319,9 @@ def main():
         env.setdefault('GOW3_READBACK_LINEAR', '1')
         env.setdefault('GOW3_READBACK_COPIES', '1024')
         env.setdefault('GOW3_READBACK_MB', '512')
+        # Its full-screen linear render targets (8-16 MiB) are never read by the CPU: they stay on
+        # the GPU, which otherwise waited for their copies every frame.
+        env.setdefault('GOW3_READBACK_MAX_KB', '2048')
         # The port's menu on F12 (the screenshot then on F11); GOW3_MENU_KEY=Insert for the old key.
         env.setdefault('GOW3_MENU_KEY', 'F12')
         if profile:
