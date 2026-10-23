@@ -33,6 +33,22 @@ GR2_SYS_MODULES=/d/ps4/sys_modules bash gr2.sh
 
 The console output is also saved in `user/logs/gr2-<date>.log`.
 
+## Launcher
+
+`launcher/gr2_launcher.py` (Russian and English): the game folder (with an optional 01.11 update
+folder), the system modules folder (found by itself in a shadPS4 install beside the game), port
+graphics options, keyboard / mouse / controller mapping, readback and shader options, and
+shortcuts to saves, screenshots, logs and the cache. From the source tree, in MSYS2 CLANG64:
+
+```bash
+pacman -S --needed mingw-w64-clang-x86_64-tk mingw-w64-clang-x86_64-python-pillow
+python launcher/gr2_launcher.py
+```
+
+A package players can run without MSYS2 or Python (`dist/Gravity Rush 2/Gravity Rush 2.exe`):
+`bash packaging/windows/package_gr2.sh` (needs a python.org Python; the icon is made once from
+your dump, as the script says).
+
 ## What differs from the Killzone port
 
 | Part | Change |
