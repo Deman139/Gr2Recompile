@@ -3,6 +3,7 @@
  * Build: cc -std=c11 -O2 -pthread -Isrc tests/test_fiber.c -o out/fiber-test */
 #include "../src/runtime_fiber.c"
 #include <assert.h>
+#include <pthread.h>
 
 /* runtime.c is not linked: the lookup is not used here. */
 uintptr_t runtime_lookup(const RuntimeExport *table, size_t count, const char *nid) {
@@ -40,7 +41,41 @@ static void ABI entry_b(uint64_t init, uint64_t run) {
     assert(!"B is not resumed in this test");
 }
 
+/* A fiber that returns to one thread and is run again by another (GR2's workers share fibers). */
+static Fiber migrant;
+static _Alignas(16) unsigned char stack_m[64 * 1024];
+static volatile int migrant_steps;
+static void ABI entry_migrant(uint64_t init, uint64_t run) {
+    (void)init;
+    assert(run == 10);
+    migrant_steps = 1;
+    uint64_t again = 0;
+    assert(fiber_return_to_thread(11, &again) == 0); /* resumed on the second thread */
+    assert(again == 12);
+    Fiber *self = NULL;
+    assert(fiber_get_self(&self) == 0 && self == &migrant);
+    migrant_steps = 2;
+    fiber_return_to_thread(13, NULL);
+    assert(!"not resumed");
+}
+static void *run_migrant(void *arg) {
+    uint64_t returned = 0;
+    uint64_t run = (uint64_t)(uintptr_t)arg;
+    assert(fiber_run(&migrant, run, &returned) == 0);
+    assert(returned == run + 1);
+    return NULL;
+}
+
 int main(void) {
+    assert(fiber_initialize(&migrant, "migrant", entry_migrant, 0, stack_m, sizeof(stack_m), NULL, SDK_350) == 0);
+    pthread_t first, second;
+    pthread_create(&first, NULL, run_migrant, (void *)(uintptr_t)10);
+    pthread_join(first, NULL);
+    assert(migrant_steps == 1);
+    pthread_create(&second, NULL, run_migrant, (void *)(uintptr_t)12);
+    pthread_join(second, NULL);
+    assert(migrant_steps == 2);
+
     assert(fiber_initialize(&fiber_a, "fiber A", entry_a, 0xA, stack_a, sizeof(stack_a), NULL, SDK_350) == 0);
     assert(fiber_initialize(&fiber_b, "fiber B", entry_b, 0xB, stack_b, sizeof(stack_b), NULL, SDK_350) == 0);
     Fiber *none;

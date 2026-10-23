@@ -165,6 +165,8 @@ def gr2_modules(env, game, data):
     modules = [m for m in env.get('GOW3_MODULES', ' '.join(GAME_MODULES)).split()
                if '/' not in m or (game / m).is_file()]
     native = ['libSceSecure'] if 'sysdata/libSceSecure.prx' in modules else []
+    # Modules from the game root are ones the game also loads itself (sceKernelLoadStartModule).
+    env['GOW3_STATIC_MODULES'] = ';'.join('/app0/' + m for m in modules if '/' in m)
     folder = Path(env.get('GOW3_SYS_MODULES', data / 'sys_modules'))
     wanted = env.get('GOW3_SYSTEM_MODULES', ' '.join(SYSTEM_MODULES)).split()
     found = [m for m in wanted if (folder / m).is_file()]

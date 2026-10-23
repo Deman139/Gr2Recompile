@@ -83,7 +83,7 @@ static __thread FiberContext *thread_fiber;
 static atomic_uint context_size_check;
 static atomic_ullong fibers_initialized, fiber_runs, fiber_switches;
 
-int32_t ABI runtime_fiber_setjmp(FiberContext *ctx) __asm__("runtime_fiber_setjmp");
+int32_t ABI __attribute__((returns_twice)) runtime_fiber_setjmp(FiberContext *ctx) __asm__("runtime_fiber_setjmp");
 void ABI runtime_fiber_longjmp(FiberContext *ctx) __asm__("runtime_fiber_longjmp");
 void ABI runtime_fiber_entry(FiberData *data, int set_fpu) __asm__("runtime_fiber_entry");
 void ABI runtime_fiber_force_quit(uint64_t value) __asm__("runtime_fiber_force_quit");
@@ -175,7 +175,17 @@ __asm__(
     "    call runtime_fiber_force_quit\n"
     "    ud2\n");
 
-static FiberContext *current_context(void) { return thread_fiber; }
+/* A fiber that left one thread can be resumed on another (Gravity Rush 2's worker threads share
+ * their fibers), so after any setjmp return the thread's TLS must be read again: never inlined,
+ * and the barrier keeps the compiler from reusing a TLS address computed on the old thread. */
+static __attribute__((noinline)) FiberContext *current_context(void) {
+    __asm__ volatile("" ::: "memory");
+    return thread_fiber;
+}
+static __attribute__((noinline)) void set_current_context(FiberContext *ctx) {
+    __asm__ volatile("" ::: "memory");
+    thread_fiber = ctx;
+}
 
 void ABI __attribute__((used)) runtime_fiber_force_quit(uint64_t value) {
     FiberContext *ctx = current_context();
@@ -328,7 +338,7 @@ static ABI int32_t fiber_run_impl(Fiber *fiber, void *addr_context, uint64_t siz
     if (!fiber) return FIBER_ERROR_NULL;
     if (((uintptr_t)fiber & 7) || ((uintptr_t)addr_context & 15)) return FIBER_ERROR_ALIGNMENT;
     if (!valid(fiber)) return FIBER_ERROR_INVALID;
-    if (thread_fiber) return FIBER_ERROR_PERMISSION;
+    if (current_context()) return FIBER_ERROR_PERMISSION;
     if (addr_context || size_context) {
         int32_t result = attach_context(fiber, addr_context, size_context);
         if (result < 0) return result;
@@ -341,12 +351,12 @@ static ABI int32_t fiber_run_impl(Fiber *fiber, void *addr_context, uint64_t siz
     FiberContext *volatile ctx = &ctx_storage;
     memset(ctx, 0, sizeof(*ctx));
     ctx->current_fiber = fiber;
-    thread_fiber = ctx;
+    set_current_context(ctx);
     if (!runtime_fiber_setjmp(ctx)) {
         if (fiber->addr_context) switch_to_fiber(fiber, arg_on_run_to, ctx);
         enter(fiber, arg_on_run_to, (void *)(ctx->rsp & ~(uint64_t)15), NULL);
     }
-    ctx = thread_fiber;
+    ctx = current_context();
     Fiber *cur = ctx->current_fiber;
     ctx->current_fiber = NULL;
     atomic_store(&cur->state, STATE_IDLE);
@@ -356,7 +366,7 @@ static ABI int32_t fiber_run_impl(Fiber *fiber, void *addr_context, uint64_t siz
         abort();
     }
     if (arg_on_return) *arg_on_return = ctx->arg_on_return;
-    thread_fiber = NULL;
+    set_current_context(NULL);
     return 0;
 }
 

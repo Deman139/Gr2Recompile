@@ -93,6 +93,24 @@ static Module *from_handle(int32_t handle) {
     return handle>=HANDLE_BASE && index<module_count ? &modules[index] : NULL;
 }
 
+/* GOW3_STATIC_MODULES ("/app0/sysdata/libSceSecure.prx;..."): modules the game loads itself that
+ * are linked into the image and already started at boot (run.py). Loading one succeeds with a
+ * handle of its own; its exports are bound to the game's imports, so no sceKernelDlsym. */
+#define STATIC_HANDLE_BASE 0x1000
+static int32_t static_module(const char *path) {
+    const char *list=getenv("GOW3_STATIC_MODULES");
+    if (!list || !path) return 0;
+    size_t n=strlen(path);
+    int32_t index=0;
+    for (const char *p=list;*p;++index) {
+        const char *end=strchr(p,';');
+        size_t len=end ? (size_t)(end-p) : strlen(p);
+        if (len==n && !strncmp(p,path,n)) return STATIC_HANDLE_BASE+index;
+        if (!end) break;
+        p=end+1;
+    }
+    return 0;
+}
 static ABI int32_t load_start_module(const char *path,uint64_t args,const void *argp,uint32_t flags,
                                      const void *options,int32_t *result) {
     (void)args; (void)argp; (void)options;
@@ -103,6 +121,12 @@ static ABI int32_t load_start_module(const char *path,uint64_t args,const void *
     if (m) ++m->loads;
     pthread_mutex_unlock(&lock);
     if (!m) {
+        int32_t linked=static_module(path);
+        if (linked) {
+            printf("Runtime: sceKernelLoadStartModule(%s) -> handle 0x%x (linked and started at boot)\n",path,linked);
+            if (result) *result=0;
+            return linked;
+        }
         printf("Runtime: sceKernelLoadStartModule(%s): not linked into the image (link_modules.py --dynamic)\n",path);
         return ERR(2); /* ENOENT */
     }
@@ -113,6 +137,7 @@ static ABI int32_t load_start_module(const char *path,uint64_t args,const void *
 static ABI int32_t stop_unload_module(int32_t handle,uint64_t args,const void *argp,uint32_t flags,
                                       const void *options,int32_t *result) {
     (void)args; (void)argp; (void)flags; (void)options;
+    if (handle>=STATIC_HANDLE_BASE && handle<STATIC_HANDLE_BASE+64) { if (result) *result=0; return 0; }
     pthread_mutex_lock(&lock);
     Module *m=from_handle(handle);
     int known=m && m->loads;
