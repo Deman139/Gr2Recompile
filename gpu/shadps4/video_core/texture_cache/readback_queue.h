@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <cstdlib>
 #include <cassert>
 #include <deque>
 #include <utility>
@@ -18,7 +19,26 @@ public:
         bool watched = true; ///< still protects its pages (see ReleaseOutside)
     };
     bool CanFit(std::uint64_t size) const {
-        return entries.size() < 64 && size <= MaxBytes && bytes <= MaxBytes - size;
+        return entries.size() < MaxCopies() && size <= MaxBytes() && bytes <= MaxBytes() - size;
+    }
+    /// gow3: copies that may be in flight before a new one waits for the GPU (a full drain).
+    /// Killzone stayed under 64 copies and 64 MiB a frame; Gravity Rush 2 copies far more linear
+    /// images, and every overflow drained the GPU. GOW3_READBACK_COPIES / GOW3_READBACK_MB.
+    static std::size_t MaxCopies() {
+        static const std::size_t value = [] {
+            const char* env = std::getenv("GOW3_READBACK_COPIES");
+            const long n = env ? std::strtol(env, nullptr, 10) : 0;
+            return n >= 16 && n <= 65536 ? std::size_t(n) : std::size_t{64};
+        }();
+        return value;
+    }
+    static std::uint64_t MaxBytes() {
+        static const std::uint64_t value = [] {
+            const char* env = std::getenv("GOW3_READBACK_MB");
+            const long n = env ? std::strtol(env, nullptr, 10) : 0;
+            return (n >= 16 && n <= 4096 ? std::uint64_t(n) : std::uint64_t{64}) << 20;
+        }();
+        return value;
     }
     void Push(std::uint64_t address, std::uint64_t size, std::uint64_t tick, Payload payload) {
         assert(CanFit(size));
@@ -76,7 +96,6 @@ private:
         const auto end = (entry.address + entry.size + 4095) & ~std::uint64_t{4095};
         return address < end && begin < address + size;
     }
-    static constexpr std::uint64_t MaxBytes = 64ull << 20;
     std::deque<Entry> entries;
     std::uint64_t bytes = 0;
 };

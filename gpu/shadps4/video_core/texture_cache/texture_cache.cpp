@@ -40,9 +40,12 @@ TextureCache::TextureCache(const Vulkan::Instance& instance_, Vulkan::Scheduler&
       tile_manager{instance, scheduler, runtime, buffer_cache.GetStreamBuffer()},
       readback_linear_images{EmulatorSettings.IsReadbackLinearImagesEnabled()} {
 
-    std::printf("GPU: deferred image readback %s (64 copies, 64 MiB pending limit)%s\n",
+    std::printf("GPU: deferred image readback %s (%zu copies, %llu MiB pending limit)%s; linear images %s\n",
                 deferred_readbacks ? "enabled" : "disabled",
-                stale_readbacks ? "; CPU reads use the previous frame's copy" : "");
+                ReadbackQueue<Vulkan::StagingBufferRef>::MaxCopies(),
+                (unsigned long long)(ReadbackQueue<Vulkan::StagingBufferRef>::MaxBytes() >> 20),
+                stale_readbacks ? "; CPU reads use the previous frame's copy" : "",
+                readback_linear_images ? "read back" : "not read back");
 
     u32 max_samplers = instance.GetMaxSamplerAllocationCount();
     trigger_gc_samplers = max_samplers * 3 / 4;

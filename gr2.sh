@@ -39,7 +39,7 @@ log=user/logs/gr2-$stamp.log
 if [[ ${GR2_PROFILE:-} == 1 ]]; then
     export GOW3_PROFILE
     GOW3_PROFILE=$(to_native "$PWD/user/logs/profile-$stamp.txt")
-    export GOW3_FRAME_STATS=1
+    export GOW3_FRAME_STATS=1 GOW3_PERF_DIAG=1
     echo "Profile: $GOW3_PROFILE"
 fi
 echo "Log: $PWD/$log"

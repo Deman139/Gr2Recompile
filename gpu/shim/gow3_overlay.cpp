@@ -105,6 +105,27 @@ std::vector<ImTextureData*> choice_textures, choice_retired;
 std::atomic<bool> choice_retiring{false};
 float base_scale = 1.0f;
 
+// gow3: keys of the settings menu and of the screenshot, by SDL key name ("Insert", "F12"):
+// GOW3_MENU_KEY, GOW3_SCREENSHOT_KEY. The screenshot moves to F11 when the menu takes F12.
+static SDL_Keycode KeyFromEnv(const char* name, SDL_Keycode fallback) {
+    const char* env = std::getenv(name);
+    if (!env || !*env) return fallback;
+    const SDL_Keycode key = SDL_GetKeyFromName(env);
+    return key == SDLK_UNKNOWN ? fallback : key;
+}
+static SDL_Keycode MenuKey() {
+    static const SDL_Keycode key = KeyFromEnv("GOW3_MENU_KEY", SDLK_INSERT);
+    return key;
+}
+static SDL_Keycode ScreenshotKey() {
+    static const SDL_Keycode key = KeyFromEnv("GOW3_SCREENSHOT_KEY", MenuKey() == SDLK_F12 ? SDLK_F11 : SDLK_F12);
+    return key;
+}
+const char* Gow3MenuKeyName() {
+    static const std::string name = SDL_GetKeyName(MenuKey());
+    return name.c_str();
+}
+
 // Present rate for the FPS counter.
 std::chrono::steady_clock::time_point last_present{};
 float frame_ms_avg = 0.0f;
@@ -867,7 +888,8 @@ void QuickHint() {
     const float alpha = t < HintSeconds - 1.0f ? 1.0f : HintSeconds - t;
     const char* lines[2];
     int count = 0;
-    lines[count++] = "OWL drone: hold Delete and move the mouse   |   Insert: settings";
+    static const std::string menu_hint = std::string("OWL drone: hold Delete and move the mouse   |   ") + Gow3MenuKeyName() + ": settings";
+    lines[count++] = menu_hint.c_str();
     if (Gow3Settings::Get().quick_menu.load() && SDL_HasGamepad()) {
         lines[count++] = PadText("Hold Share for the game menu", "Hold View for the game menu",
                                  "Hold - for the game menu");
@@ -902,7 +924,7 @@ void Menu() {
     // gow3: the game's own title (param.sfo), not a fixed one.
     static const std::string heading = [] {
         const std::string_view title = Common::ElfInfo::Instance().Title();
-        return std::string(title.empty() ? "God of War III" : title) + PadText("  (Insert / R3+L2)", "  (Insert / RS+LT)", "  (Insert / RS+ZL)");
+        return std::string(title.empty() ? "God of War III" : title) + (std::string("  (") + Gow3MenuKeyName() + PadText(" / R3+L2)", " / RS+LT)", " / RS+ZL)"));
     }();
     if (!ImGui::Begin(heading.c_str(), &keep_open, ImGuiWindowFlags_NoCollapse)) {
         ImGui::End();
@@ -1285,7 +1307,7 @@ void Init(const Vulkan::Instance& instance, vk::Format format, u32 image_count) 
     }
     overlay_instance = &instance;
     initialized = true;
-    std::printf("Overlay: menu ready (Insert or R3+L2)\n");
+    std::printf("Overlay: menu ready (%s or R3+L2)\n", Gow3MenuKeyName());
 }
 
 void UpdateTextInput(SDL_Window* window) {
@@ -1383,7 +1405,7 @@ bool HandleEvent(const SDL_Event& event) {
     }
     ImGuiIO& io = ImGui::GetIO();
     const bool is_open = menu_open || quick_open;
-    // Insert / R3+L2: the settings menu (from the quick menu too); Esc closes either.
+    // Menu key (Insert, GOW3_MENU_KEY) / R3+L2: the settings menu (from the quick menu too); Esc closes either.
     const auto toggle_menu = [] {
         if (quick_open) {
             SetQuickOpen(false);
@@ -1400,7 +1422,7 @@ bool HandleEvent(const SDL_Event& event) {
             const char* env = std::getenv("GOW3_FRAME_CAPTURE_KEY");
             return env && *env == '1';
         }();
-        if (event.key.key == SDLK_F12) {
+        if (event.key.key == ScreenshotKey()) {
             if (down && !event.key.repeat) {
                 VideoCore::RequestScreenshot(VideoCore::ScreenshotRequest::GameOnly);
             }
@@ -1411,8 +1433,8 @@ bool HandleEvent(const SDL_Event& event) {
             return true;
         }
         if (down && !event.key.repeat &&
-            (event.key.key == SDLK_INSERT || (is_open && event.key.key == SDLK_ESCAPE))) {
-            if (event.key.key == SDLK_INSERT) {
+            (event.key.key == MenuKey() || (is_open && event.key.key == SDLK_ESCAPE))) {
+            if (event.key.key == MenuKey()) {
                 toggle_menu();
             } else if (quick_open) {
                 SetQuickOpen(false);
