@@ -2,8 +2,18 @@
  * Ported from shadPS4's implementation (src/core/libraries/fiber, GPL-2.0-or-later, as used by
  * GR2fork): the same context layout, setjmp/longjmp and entry trampoline, with the fiber
  * context of the current thread kept in host TLS instead of the shadPS4 TCB. Everything runs
- * on the thread that called sceFiberRun; no host threads are created. */
+ * on the thread that called sceFiberRun; no host threads are created.
+ *
+ * A fiber with a context does not run on the guest's context memory but on a host stack that is
+ * larger by GOW3_FIBER_STACK_KB (default 512 KiB): host functions the fiber calls (FFmpeg for
+ * the AvPlayer cutscenes, the Vulkan driver, Windows) need far more stack than the PS4 system
+ * libraries, and on the game's small heap-allocated contexts they wrote over the game's heap
+ * (the "A heap error is detected" crashes at the first save and at cutscenes). The host stacks
+ * come from runtime_low_map (below 1 TiB, an unmapped gap under each one catches an overrun) and
+ * are pooled: sceFiberFinalize or a new sceFiberInitialize of the same OrbisFiber returns one.
+ * GOW3_FIBER_STACK_KB=0 runs fibers on the guest's context memory as on the PS4. */
 #include "runtime.h"
+#include <pthread.h>
 #include <stdatomic.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -78,6 +88,87 @@ typedef struct {
     uint8_t pad[48];
 } FiberInfo;
 _Static_assert(sizeof(FiberInfo) == 128, "OrbisFiberInfo size");
+
+/* ---- host stacks for fibers ---- */
+typedef struct {
+    unsigned char *base;
+    uint64_t size;
+    const Fiber *owner;
+} HostStack;
+static pthread_mutex_t host_stack_lock = PTHREAD_MUTEX_INITIALIZER;
+static HostStack *host_stacks;
+static size_t host_stack_count, host_stack_capacity;
+static uint64_t host_stack_bytes;
+
+static uint64_t host_stack_extra(void) {
+    static _Atomic int64_t extra = -1;
+    int64_t value = atomic_load(&extra);
+    if (value < 0) {
+        const char *env = getenv("GOW3_FIBER_STACK_KB");
+        value = env ? (int64_t)strtoull(env, NULL, 0) * 1024 : 512 * 1024;
+        atomic_store(&extra, value);
+        if (value) printf("Runtime: fibers run on host stacks %lld KiB larger than their contexts\n",
+                          (long long)(value / 1024));
+        else printf("Runtime: fibers run on their guest contexts (GOW3_FIBER_STACK_KB=0)\n");
+    }
+    return (uint64_t)value;
+}
+
+/* The stack of `fiber` (one it already holds, a free pooled one large enough, or a new one).
+ * NULL: no host stack (switched off or out of memory); the guest context is used. */
+static HostStack *host_stack_acquire(const Fiber *fiber) {
+    uint64_t extra = host_stack_extra();
+    if (!extra) return NULL;
+    uint64_t need = (fiber->size_context + extra + 0xffff) & ~(uint64_t)0xffff;
+    HostStack *found = NULL, *spare = NULL;
+    pthread_mutex_lock(&host_stack_lock);
+    for (size_t i = 0; i < host_stack_count && !found; ++i) {
+        HostStack *s = &host_stacks[i];
+        if (s->owner == fiber) {
+            if (s->size >= need) found = s;
+            else s->owner = NULL; /* the fiber got a larger context */
+        } else if (!s->owner && s->size >= need && (!spare || s->size < spare->size)) {
+            spare = s;
+        }
+    }
+    if (!found) found = spare;
+    if (!found) {
+        unsigned char *base = runtime_low_map(need, 3 /* PROT_READ | PROT_WRITE */);
+        if (base && host_stack_count == host_stack_capacity) {
+            size_t capacity = host_stack_capacity ? host_stack_capacity * 2 : 64;
+            HostStack *grown = realloc(host_stacks, capacity * sizeof(*grown));
+            if (grown) { host_stacks = grown; host_stack_capacity = capacity; }
+        }
+        if (base && host_stack_count < host_stack_capacity) {
+            found = &host_stacks[host_stack_count++];
+            found->base = base;
+            found->size = need;
+            host_stack_bytes += need;
+        } else if (!base) {
+            static int warned;
+            if (!warned++) fprintf(stderr, "Runtime: no memory for a fiber host stack; using the guest context\n");
+        }
+    }
+    if (found) found->owner = fiber;
+    pthread_mutex_unlock(&host_stack_lock);
+    return found;
+}
+
+static void host_stack_release(const Fiber *fiber) {
+    pthread_mutex_lock(&host_stack_lock);
+    for (size_t i = 0; i < host_stack_count; ++i)
+        if (host_stacks[i].owner == fiber) host_stacks[i].owner = NULL;
+    pthread_mutex_unlock(&host_stack_lock);
+}
+
+static HostStack *host_stack_of(const Fiber *fiber) {
+    HostStack *found = NULL;
+    pthread_mutex_lock(&host_stack_lock);
+    for (size_t i = 0; i < host_stack_count && !found; ++i)
+        if (host_stacks[i].owner == fiber) found = &host_stacks[i];
+    pthread_mutex_unlock(&host_stack_lock);
+    return found;
+}
 
 static __thread FiberContext *thread_fiber;
 static atomic_uint context_size_check;
@@ -207,7 +298,8 @@ static int valid(const Fiber *fiber) {
 }
 
 static void check_stack_overflow(FiberContext *ctx) {
-    const uint64_t *base = ctx->current_fiber->addr_context;
+    const HostStack *host = host_stack_extra() ? host_stack_of(ctx->current_fiber) : NULL;
+    const uint64_t *base = host ? (const uint64_t *)host->base : ctx->current_fiber->addr_context;
     if (base && *base != STACK_SIGNATURE) {
         fprintf(stderr, "STOP: fiber '%s' overflowed its context (0x%llx bytes)\n",
                 ctx->current_fiber->name, (unsigned long long)ctx->current_fiber->size_context);
@@ -262,7 +354,17 @@ static __attribute__((noreturn)) void switch_to_fiber(Fiber *fiber, uint64_t arg
         state = &ctx->prev_fiber->state;
         ctx->prev_fiber = NULL;
     }
-    enter(fiber, arg_on_run_to, (unsigned char *)fiber->addr_context + fiber->size_context, state);
+    unsigned char *top = (unsigned char *)fiber->addr_context + fiber->size_context;
+    HostStack *host = host_stack_acquire(fiber);
+    if (host) {
+        /* The fiber starts afresh: mark the stack as fill_stack marks the guest context. */
+        uint64_t *p = (uint64_t *)host->base, *end = (uint64_t *)(host->base + host->size);
+        *p++ = STACK_SIGNATURE;
+        if (fiber->flags & FLAG_CONTEXT_SIZE_CHECK)
+            while (p < end) *p++ = STACK_SIZE_CHECK;
+        top = host->base + host->size;
+    }
+    enter(fiber, arg_on_run_to, top, state);
 }
 
 static __attribute__((noreturn)) void do_switch(Fiber *cur, Fiber *fiber, uint64_t arg_on_run_to, FiberContext *ctx) {
@@ -289,6 +391,7 @@ static ABI int32_t fiber_initialize_impl(Fiber *fiber, const char *name, FiberEn
     uint32_t user_flags = flags;
     if (build_version >= SDK_350) user_flags |= FLAG_SET_FPU_REGS;
     if (atomic_load(&context_size_check)) user_flags |= FLAG_CONTEXT_SIZE_CHECK;
+    host_stack_release(fiber);
     copy_name(fiber->name, name);
     fiber->entry = entry;
     fiber->arg_on_initialize = arg_on_initialize;
@@ -330,6 +433,7 @@ static ABI int32_t fiber_finalize(Fiber *fiber) {
     if (!valid(fiber)) return FIBER_ERROR_INVALID;
     uint32_t expected = STATE_IDLE;
     if (!atomic_compare_exchange_strong(&fiber->state, &expected, STATE_TERMINATED)) return FIBER_ERROR_STATE;
+    host_stack_release(fiber);
     return 0;
 }
 
@@ -457,13 +561,22 @@ static ABI int32_t fiber_get_info(Fiber *fiber, FiberInfo *info) {
     copy_name(info->name, fiber->name);
     info->size_context_margin = UINT64_MAX;
     if ((fiber->flags & FLAG_CONTEXT_SIZE_CHECK) && fiber->addr_context) {
-        const uint64_t *start = fiber->context_start, *end = fiber->context_end, *p = start + 1;
+        const HostStack *host = host_stack_extra() ? host_stack_of(fiber) : NULL;
+        const uint64_t *start = fiber->context_start, *end = fiber->context_end, *p;
+        /* On a host stack: the part of it larger than the guest context counts as used. */
+        uint64_t larger = 0;
+        if (host) {
+            start = (const uint64_t *)host->base;
+            end = (const uint64_t *)(host->base + host->size);
+            larger = host->size - fiber->size_context;
+        }
+        p = start + 1;
         uint64_t margin = 0;
         if (*start == STACK_SIGNATURE) {
             while (p < end && *p == STACK_SIZE_CHECK) ++p;
             margin = (uint64_t)((uintptr_t)p - (uintptr_t)(start + 1));
         }
-        info->size_context_margin = margin;
+        info->size_context_margin = margin > larger ? margin - larger : 0;
     }
     return 0;
 }
@@ -516,7 +629,11 @@ static const RuntimeExport exports[] = {
 uintptr_t runtime_fiber_resolve(const char *name) { return RUNTIME_LOOKUP(exports, name); }
 
 void runtime_fiber_report(void) {
-    printf("Runtime: fibers initialized=%llu, runs=%llu, switches=%llu\n",
+    pthread_mutex_lock(&host_stack_lock);
+    size_t stacks = host_stack_count;
+    uint64_t bytes = host_stack_bytes;
+    pthread_mutex_unlock(&host_stack_lock);
+    printf("Runtime: fibers initialized=%llu, runs=%llu, switches=%llu, host stacks=%zu (%llu KiB)\n",
            (unsigned long long)atomic_load(&fibers_initialized), (unsigned long long)atomic_load(&fiber_runs),
-           (unsigned long long)atomic_load(&fiber_switches));
+           (unsigned long long)atomic_load(&fiber_switches), stacks, (unsigned long long)(bytes / 1024));
 }

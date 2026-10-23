@@ -38,7 +38,9 @@ The console output is also saved in `user/logs/gr2-<date>.log`.
 `launcher/gr2_launcher.py` (Russian and English): the game folder (with an optional 01.11 update
 folder), the system modules folder (found by itself in a shadPS4 install beside the game), port
 graphics options, keyboard / mouse / controller mapping, readback and shader options, and
-shortcuts to saves, screenshots, logs and the cache. From the source tree, in MSYS2 CLANG64:
+shortcuts to saves, screenshots, logs and the cache. The banner shows the dump's `sce_sys/pic1.png`,
+or a picture of your choice (Game tab → Banner picture: a file, or a link the launcher downloads once
+into `user/banner`). From the source tree, in MSYS2 CLANG64:
 
 ```bash
 pacman -S --needed mingw-w64-clang-x86_64-tk mingw-w64-clang-x86_64-python-pillow
@@ -55,7 +57,7 @@ your dump, as the script says).
 |---|---|
 | `scripts/link_modules.py` | Links decrypted firmware modules (`--system-dir`, `--system`) and modules from the game root (`sysdata/libSceSecure.prx`); plain ELF input; empty TLS segments get no module ID |
 | `run.py` | Links `libc`, `Fios2`, `JobManager`, `NpToolkit`, `libSceSecure` and the firmware modules; `GOW3_NATIVE_LIBS` leaves those libraries to the native code |
-| `src/runtime_fiber.c` | `libSceFiber` (the game's job system), ported from shadPS4 |
+| `src/runtime_fiber.c` | `libSceFiber` (the game's job system), ported from shadPS4; fibers run on host stacks 512 KiB larger than the game's contexts (`GOW3_FIBER_STACK_KB`), as host code they call (FFmpeg, drivers) needs far more stack than the PS4 libraries |
 | `src/runtime_eventflag.c` | Kernel event flags |
 | `src/runtime_gr2.c` | Other kernel/libc functions; offline network, content and sharing services; photo JPEG and Audio3d unavailable for now |
 | `src/runtime_services.c` | PSN dialogs and services answering as signed out |
