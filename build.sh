@@ -141,4 +141,6 @@ if [[ ${1:-} == --test ]]; then
     out/fiber-test
     "$CC" -std=c11 -O2 -g -Wall -Wextra -Werror -pthread -I. -Isrc tests/test_eventflag.c -o out/eventflag-test
     out/eventflag-test
+    "$CC" -std=c11 -O2 -g -Wall -Wextra -Werror -pthread -I. -Isrc tests/test_audio3d.c -lm -o out/audio3d-test
+    out/audio3d-test
 fi

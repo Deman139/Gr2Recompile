@@ -323,4 +323,11 @@ static const RuntimeExport exports[]={
     {"sceAudioOutGetLastOutputTime",audio_last_time},
 };
 uintptr_t runtime_audio_resolve(const char *name) { return RUNTIME_LOOKUP(exports,name); }
+/* For libSceAudio3d (runtime_audio3d.c): ports it opens and feeds itself. */
+int32_t runtime_audio_open_port(int32_t type, uint32_t frames, uint32_t format) {
+    audio_init();
+    return audio_open(0xff,type,0,frames,48000,format);
+}
+int32_t runtime_audio_output_port(int32_t handle, const void *data) { return output_port(handle,data,1); }
+int32_t runtime_audio_close_port(int32_t handle) { return audio_close(handle); }
 void runtime_audio_report(void) { printf("Runtime: audio ports opened=%zu, buffers output=%zu\n",ports_opened,buffers_out); }

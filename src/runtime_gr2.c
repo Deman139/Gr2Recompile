@@ -1,7 +1,7 @@
 /* Gravity Rush 2 (CUSA04943): system functions it imports beyond what the Killzone port's
  * runtime serves. Kernel and libc helpers are implemented; the network, PSN and sharing
  * services answer as an offline console with nothing installed besides the game; photo
- * encoding/decoding, content export and 3D audio report themselves unavailable for now.
+ * encoding/decoding and content export report themselves unavailable for now.
  * Behaviour follows shadPS4 (GPL-2.0-or-later) where it is known. */
 #define _GNU_SOURCE
 #include "runtime.h"
@@ -22,7 +22,6 @@
 #define KERNEL_ERR(n) ((int32_t)(UINT32_C(0x80020000) | (n)))
 enum { E_PERM = 1, E_SRCH = 3, E_ACCES = 13, E_FAULT = 14, E_INVAL = 22 };
 #define SAVE_DATA_NOT_FOUND ((int32_t)0x809F0008)
-#define AUDIO3D_NOT_SUPPORTED ((int32_t)0x80EA0008)
 #define JPEG_DEC_UNSUPPORTED ((int32_t)0x80650001)
 #define JPEG_ENC_UNSUPPORTED ((int32_t)0x80650108)
 #define CONTENT_EXPORT_NOT_IMPLEMENTED ((int32_t)0x809D3FFF)
@@ -254,10 +253,9 @@ static ABI int32_t content_export_unavailable(void) { return CONTENT_EXPORT_NOT_
 static ABI int32_t content_delete_not_found(void) { return CONTENT_DELETE_NOT_FOUND; }
 static ABI int32_t share_unavailable(void) { return SHARE_UTILITY_NOT_SUPPORTED; }
 
-/* ---- Photo mode (JPEG) and 3D audio: unavailable for now ---- */
+/* ---- Photo mode (JPEG): unavailable for now ---- */
 static ABI int32_t jpeg_dec_unavailable(void) { once(2, "JpegDec: not implemented (photo album)"); return JPEG_DEC_UNSUPPORTED; }
 static ABI int32_t jpeg_enc_unavailable(void) { once(3, "JpegEnc: not implemented (photo saving)"); return JPEG_ENC_UNSUPPORTED; }
-static ABI int32_t audio3d_unavailable(void) { once(4, "Audio3d: not available (the game uses AudioOut)"); return AUDIO3D_NOT_SUPPORTED; }
 
 static const RuntimeExport exports[] = {
     {"clock_settime", posix_clock_settime}, {"pthread_equal", posix_pthread_equal},
@@ -306,12 +304,6 @@ static const RuntimeExport exports[] = {
     {"sceJpegDecParseHeader", jpeg_dec_unavailable}, {"sceJpegDecQueryMemorySize", jpeg_dec_unavailable},
     {"sceJpegEncCreate", jpeg_enc_unavailable}, {"sceJpegEncDelete", ok}, {"sceJpegEncEncode", jpeg_enc_unavailable},
     {"sceJpegEncQueryMemorySize", jpeg_enc_unavailable},
-    {"sceAudio3dInitialize", audio3d_unavailable}, {"sceAudio3dTerminate", ok},
-    {"sceAudio3dGetDefaultOpenParameters", ok}, {"sceAudio3dPortOpen", audio3d_unavailable},
-    {"sceAudio3dPortClose", ok}, {"sceAudio3dPortAdvance", audio3d_unavailable},
-    {"sceAudio3dPortPush", audio3d_unavailable}, {"sceAudio3dPortGetQueueLevel", audio3d_unavailable},
-    {"sceAudio3dPortSetAttribute", audio3d_unavailable}, {"sceAudio3dObjectReserve", audio3d_unavailable},
-    {"sceAudio3dObjectUnreserve", ok}, {"sceAudio3dObjectSetAttributes", audio3d_unavailable},
 };
 
 uintptr_t runtime_gr2_resolve(const char *name) { return RUNTIME_LOOKUP(exports, name); }

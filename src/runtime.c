@@ -87,6 +87,7 @@ void runtime_report(void) {
     runtime_file_report();
     runtime_fiber_report();
     runtime_eventflag_report();
+    runtime_audio3d_report();
     printf("Runtime: memory operations=%zu\n", (size_t)memory_calls);
     if (report_hook) report_hook();
 }
@@ -289,6 +290,8 @@ uintptr_t runtime_resolve(const char *name, int is_data) {
     if (fiber) return fiber;
     uintptr_t eventflag = runtime_eventflag_resolve(name);
     if (eventflag) return eventflag;
+    uintptr_t audio3d = runtime_audio3d_resolve(name);
+    if (audio3d) return audio3d;
     uintptr_t gr2 = runtime_gr2_resolve(name);
     if (gr2) return gr2;
     return gow3gpu_resolve(name);
