@@ -143,6 +143,46 @@ def glyph_mounts(env, probe, game, out):
     return [part for guest, path in mounts.items() for part in ('--mount', f'{guest}={path}')], style
 
 
+# Gravity Rush 2 links the modules it ships (sce_module, and sysdata/libSceSecure.prx) and these
+# PS4 firmware modules, which the player dumps from their console (decrypted .sprx files, the
+# ones shadPS4 takes in user/sys_modules). Each serves the libraries listed: the host runtime
+# then leaves them to the native code (GOW3_NATIVE_LIBS, src/runtime.c).
+GAME_MODULES = ('libc.prx', 'libSceFios2.prx', 'libSceJobManager.prx', 'libSceNpToolkit.prx',
+                'sysdata/libSceSecure.prx')
+SYSTEM_MODULES = {
+    'libSceNgs2.sprx': ('libSceNgs2',),           # the game's audio engine
+    'libSceJson2.sprx': ('libSceJson2',),
+    'libSceRtc.sprx': ('libSceRtc',),
+    'libSceFreeTypeOt.sprx': ('libSceFreeType',),  # fonts: FreeType, then libSceFontFt, libSceFont
+    'libSceFontFt.sprx': ('libSceFontFt',),
+    'libSceFont.sprx': ('libSceFont',),
+}
+REQUIRED_SYSTEM_MODULES = ('libSceNgs2.sprx',)
+
+
+def gr2_modules(env, game, data):
+    """(game modules, link_modules.py arguments for the firmware modules); sets GOW3_NATIVE_LIBS."""
+    modules = [m for m in env.get('GOW3_MODULES', ' '.join(GAME_MODULES)).split()
+               if '/' not in m or (game / m).is_file()]
+    native = ['libSceSecure'] if 'sysdata/libSceSecure.prx' in modules else []
+    folder = Path(env.get('GOW3_SYS_MODULES', data / 'sys_modules'))
+    wanted = env.get('GOW3_SYSTEM_MODULES', ' '.join(SYSTEM_MODULES)).split()
+    found = [m for m in wanted if (folder / m).is_file()]
+    missing = [m for m in REQUIRED_SYSTEM_MODULES if m in wanted and m not in found]
+    if missing:
+        fail(f'Missing PS4 system modules in {folder}: {", ".join(missing)}. Copy the decrypted .sprx '
+             'files dumped from your PS4 there (the same files shadPS4 uses in user/sys_modules), '
+             'or set GOW3_SYS_MODULES to their folder.')
+    for m in wanted:
+        if m not in found:
+            print(f'System module {m} not found in {folder}: its functions use the port\'s own versions', flush=True)
+    for m in found:
+        native.extend(SYSTEM_MODULES.get(m, ()))
+    env['GOW3_NATIVE_LIBS'] = ','.join(native)
+    print(f'System modules: {", ".join(found) or "none"} (from {folder})', flush=True)
+    return modules, (['--system-dir', str(folder), '--system', *found] if found else [])
+
+
 def main():
     args = sys.argv[1:]
     if len(args) >= 2 and args[0] == '--after':
@@ -173,10 +213,8 @@ def main():
     # output size while the game itself stays at 1080p, so no resolution patch is applied.
     # The saved output_res never decides it (the in-game menu could have stored another one).
     env.setdefault('GOW3_OUTPUT_RES', '1920x1080')
-    # Killzone's UI vertex shader (HUD, menus, movies): where the output-size UI composition starts.
-    env.setdefault('GOW3_UI_TRIGGER_VS', '6a09714a')
-    # Killzone's TMAA copy back into the scene: skipped while FSR / DLSS jitter the scene.
-    env.setdefault('GOW3_GAME_TAA_PS', '9dfb876c')
+    # Killzone's UI and TAA shader hashes (GOW3_UI_TRIGGER_VS, GOW3_GAME_TAA_PS) do not apply to
+    # Gravity Rush 2: the output-size UI composition and the TAA skip stay off unless set.
     # Upscaler quality modes (GOW3_RENDER_RES=WxH below 1080p, the launcher): the loader renders
     # the 3D scene at that size (src/scene_res_hook.h) while the display and UI stay 1080p, and
     # FSR / DLSS reach the output. No resolution patch: it shrank the UI and movies too.
@@ -194,9 +232,9 @@ def main():
     if not env.get('GOW3_FSR411_DIR') and not (PORT / 'fsr4_411').is_dir() and (data / 'fsr4_411').is_dir():
         env['GOW3_FSR411_DIR'] = str(data / 'fsr4_411')
 
-    # The Killzone Shadow Fall package names the game executable after the game.
+    # A package names the game executable after the game.
     probe = (Path(env['GOW3_PROBE']) if env.get('GOW3_PROBE') else
-             find_executable('KillzoneShadowFall' + EXE_SUFFIX) or find_executable('gow3-probe' + EXE_SUFFIX))
+             find_executable('GravityRush2' + EXE_SUFFIX) or find_executable('gow3-probe' + EXE_SUFFIX))
     if not probe or not probe.is_file():
         fail(f'gow3-probe{EXE_SUFFIX} not found: build it with build.sh or use a packaged build.')
     # Development builds run from the MSYS2 tree: its CLANG64 DLLs (SDL3, FFmpeg, ...).
@@ -213,7 +251,7 @@ def main():
         sys.exit(20)
     missing = parse_cpu_features(features.stdout)
 
-    game = Path(env.get('GOW3_GAME_DIR', PORT.parent / 'CUSA01623'))
+    game = Path(env.get('GOW3_GAME_DIR', PORT.parent / 'CUSA04943'))
     if not (game / 'eboot.bin').is_file():
         fail(f'No eboot.bin in {game} (set GOW3_GAME_DIR).')
     update_view = None
@@ -235,7 +273,9 @@ def main():
         run_script('prepare.py', game, '--out', out)
         # Modules in the game root are ones the game loads itself (Killzone: all_programs.prx).
         dynamic = sorted(p.name for p in game.glob('*.prx'))
-        run_script('link_modules.py', game, '--out', out, *(['--dynamic', *dynamic] if dynamic else []))
+        modules, system_args = gr2_modules(env, game, data)
+        run_script('link_modules.py', game, '--out', out, '--modules', *modules, *system_args,
+                   *(['--dynamic', *dynamic] if dynamic else []))
         # A failed rewrite prints its reason and the game starts without the table.
         isa_args = []
         if isa_rewrite_wanted(missing, env):

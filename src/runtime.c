@@ -26,6 +26,7 @@ static struct { const void *data; uint64_t filesz, memsz; } tls_modules[TLS_MODU
 static _Thread_local unsigned char *tls_blocks[TLS_MODULES];
 static void *process_param;
 void runtime_set_procparam(void *param) { process_param=param; }
+const void *runtime_procparam(void) { return process_param; }
 uintptr_t runtime_image_start, runtime_image_end;
 static ABI void *guest_procparam(void) { return process_param; }
 static void **application_heap_api;
@@ -84,6 +85,8 @@ void runtime_report(void) {
     runtime_pad_report();
     runtime_savedata_report();
     runtime_file_report();
+    runtime_fiber_report();
+    runtime_eventflag_report();
     printf("Runtime: memory operations=%zu\n", (size_t)memory_calls);
     if (report_hook) report_hook();
 }
@@ -191,8 +194,30 @@ static const char *canonical_name(const char *name, char out[128]) {
     snprintf(out,128,"%.*s#libkernel",(int)(posix-name),name);
     return out;
 }
+/* GOW3_NATIVE_LIBS (comma-separated library names, e.g. "libSceNgs2,libSceFont"): libraries
+ * served by a firmware module linked into the image (link_modules.py --system). The host
+ * runtime never resolves their imports, so the native exports bind instead. */
+static int native_library(const char *name) {
+    static char *libraries;
+    static int loaded;
+    if (!loaded) {
+        const char *value=getenv("GOW3_NATIVE_LIBS");
+        if (value && *value) {
+            size_t n=strlen(value);
+            libraries=malloc(n+3);
+            if (libraries) { libraries[0]=','; memcpy(libraries+1,value,n); libraries[n+1]=','; libraries[n+2]=0; }
+        }
+        loaded=1;
+    }
+    const char *library=strchr(name,'#');
+    if (!libraries || !library || strlen(library)>100) return 0;
+    char key[104];
+    snprintf(key,sizeof(key),",%s,",library+1);
+    return strstr(libraries,key)!=NULL;
+}
 uintptr_t runtime_resolve(const char *name, int is_data) {
     if (!(capabilities & 1)) return 0;
+    if (native_library(name)) return 0;
     char canonical[128];
     name=canonical_name(name,canonical);
     if (is_data) {
@@ -260,6 +285,12 @@ uintptr_t runtime_resolve(const char *name, int is_data) {
     if (font) return font;
     uintptr_t png = runtime_png_resolve(name);
     if (png) return png;
+    uintptr_t fiber = runtime_fiber_resolve(name);
+    if (fiber) return fiber;
+    uintptr_t eventflag = runtime_eventflag_resolve(name);
+    if (eventflag) return eventflag;
+    uintptr_t gr2 = runtime_gr2_resolve(name);
+    if (gr2) return gr2;
     return gow3gpu_resolve(name);
 }
 static const struct { const char *nid, *symbol; } import_names[]={

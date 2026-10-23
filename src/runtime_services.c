@@ -273,7 +273,9 @@ static ABI int32_t voice_info(uint32_t port,uint32_t *info) {
 typedef struct { const char *name; int initialized, status; uint32_t button; } Dialog;
 static Dialog dialogs[]={{"CommonDialog",0,0,0},{"MsgDialog",0,0,0},{"SaveDataDialog",0,0,0},
                          {"NpProfileDialog",0,0,0},{"NpCommerceDialog",0,0,0},{"ImeDialog",0,0,0},
-                         {"ErrorDialog",0,0,0},{"InvitationDialog",0,0,0},{"WebBrowserDialog",0,0,0}};
+                         {"ErrorDialog",0,0,0},{"InvitationDialog",0,0,0},{"WebBrowserDialog",0,0,0},
+                         {"SigninDialog",0,0,0},{"PlayGoDialog",0,0,0},{"GameCustomDataDialog",0,0,0},
+                         {"NpSnsFacebookDialog",0,0,0}};
 #define DIALOG_RUNNING 2
 #define DIALOG_FINISHED 3
 #define DIALOG_NOT_FINISHED ((int32_t)0x80B80005)
@@ -327,6 +329,25 @@ DIALOG(profile,3) DIALOG(commerce,4) DIALOG(invitation,7) DIALOG(browser,8)
 static ABI int32_t commerce_close(void) { return dialog_close(4); }
 static ABI int32_t invitation_close(void) { return dialog_close(7); }
 static ABI int32_t browser_close(void) { return dialog_close(8); }
+/* Gravity Rush 2's PSN dialogs (sign-in, game data, Facebook, invitations): they open and finish
+ * at once, canceled by the user, as nothing on PSN is reachable. PlayGo's install dialog finishes
+ * at once too: the whole game is installed. */
+DIALOG(signin,9) DIALOG(playgo_dialog,10) DIALOG(custom_data,11) DIALOG(facebook,12)
+static int32_t dialog_canceled(int i, int32_t *out) {
+    if (dialogs[i].status!=DIALOG_FINISHED) return DIALOG_NOT_FINISHED;
+    if (!out) return DIALOG_ARG_NULL;
+    *out=1; /* ORBIS_COMMON_DIALOG_RESULT_USER_CANCELED */
+    return 0;
+}
+static ABI int32_t signin_result(int32_t *out) { return dialog_canceled(9,out); }
+static ABI int32_t signin_close(void) { return dialogs[9].status==DIALOG_FINISHED ? 0 : dialog_close(9); }
+static ABI int32_t playgo_dialog_close(void) { return dialogs[10].status==DIALOG_FINISHED ? 0 : dialog_close(10); }
+static ABI int32_t custom_data_result(int32_t *out) { return dialog_canceled(11,out); }
+static ABI int32_t facebook_result(int32_t *out) { return dialog_canceled(12,out); }
+static ABI int32_t invitation_result(int32_t *out) { return dialog_canceled(7,out); }
+static ABI int32_t commerce_result(int32_t *out) { return dialog_canceled(4,out); }
+#define TROPHY_NO_ICON ((int32_t)0x8055160F)
+static ABI int32_t trophy_no_icon(void) { return TROPHY_NO_ICON; }
 /* ErrorDialog param: size, error code, user. The code goes to the log; the dialog finishes. */
 static ABI int32_t error_init(void) { return dialog_init(6); }
 static ABI int32_t error_open(const int32_t *param) {
@@ -865,5 +886,58 @@ static const RuntimeExport exports[]={
     {"scePlayGoGetEta",playgo_eta}, {"scePlayGoGetLanguageMask",playgo_get_languages},
     {"scePlayGoSetLanguageMask",playgo_set_languages}, {"scePlayGoPrefetch",playgo_prefetch},
     {"scePlayGoGetToDoList",playgo_get_todo},
+    /* Gravity Rush 2 */
+    {"sceErrorDialogGetStatus",error_status},
+    {"sceSigninDialogInitialize",signin_init}, {"sceSigninDialogOpen",signin_open},
+    {"sceSigninDialogUpdateStatus",signin_status}, {"sceSigninDialogGetResult",signin_result},
+    {"sceSigninDialogClose",signin_close}, {"sceSigninDialogTerminate",signin_term},
+    {"scePlayGoDialogInitialize",playgo_dialog_init}, {"scePlayGoDialogOpen",playgo_dialog_open},
+    {"scePlayGoDialogUpdateStatus",playgo_dialog_status}, {"scePlayGoDialogClose",playgo_dialog_close},
+    {"scePlayGoDialogTerminate",playgo_dialog_term},
+    {"sceGameCustomDataDialogInitialize",custom_data_init}, {"sceGameCustomDataDialogOpen",custom_data_open},
+    {"sceGameCustomDataDialogUpdateStatus",custom_data_status}, {"sceGameCustomDataDialogGetResult",custom_data_result},
+    {"sceGameCustomDataDialogTerminate",custom_data_term},
+    {"sceNpSnsFacebookDialogInitialize",facebook_init}, {"sceNpSnsFacebookDialogOpen",facebook_open},
+    {"sceNpSnsFacebookDialogUpdateStatus",facebook_status}, {"sceNpSnsFacebookDialogGetResult",facebook_result},
+    {"sceNpSnsFacebookDialogTerminate",facebook_term},
+    {"sceInvitationDialogGetResult",invitation_result}, {"sceNpCommerceDialogGetResult",commerce_result},
+    {"sceNpCreateRequest",np_request}, {"sceNpGetUserIdByOnlineId",np_signed_out}, {"sceNpWaitAsync",np_poll},
+    {"sceNpRegisterNpReachabilityStateCallback",ok_void}, {"sceNpUnregisterNpReachabilityStateCallback",ok_void},
+    {"sceNpInGameMessageInitialize",lib_init_id}, {"sceNpInGameMessageTerminate",ok_void},
+    {"sceNpInGameMessageCreateHandle",np_signed_out}, {"sceNpInGameMessageDeleteHandle",ok_void},
+    {"sceNpInGameMessagePrepare",np_signed_out}, {"sceNpInGameMessageSendData",np_signed_out},
+    {"sceNpCheckCallbackForLib",ok_void}, {"sceNpRegisterStateCallbackForToolkit",np_register},
+    {"sceNpUnregisterStateCallbackForToolkit",ok_void},
+    {"sceNpAuthCreateRequest",np_request}, {"sceNpLookupCreateRequest",np_request},
+    {"sceNpWordFilterCreateRequest",np_request}, {"sceNpWebApiSendRequest2",np_signed_out},
+    {"sceNpTusCreateNpTitleCtx",np_request_ctx}, {"sceNpTusDeleteNpTitleCtx",ok_void},
+    {"sceNpTusCreateRequest",np_request}, {"sceNpTusDeleteRequest",ok_void},
+    {"sceNpTssGetData",np_signed_out}, {"sceNpTusAddAndGetVariable",np_signed_out},
+    {"sceNpTusAddAndGetVariableVUser",np_signed_out}, {"sceNpTusDeleteMultiSlotData",np_signed_out},
+    {"sceNpTusDeleteMultiSlotDataVUser",np_signed_out}, {"sceNpTusGetData",np_signed_out},
+    {"sceNpTusGetDataVUser",np_signed_out}, {"sceNpTusGetMultiSlotVariable",np_signed_out},
+    {"sceNpTusGetMultiSlotVariableVUser",np_signed_out}, {"sceNpTusSetData",np_signed_out},
+    {"sceNpTusSetDataVUser",np_signed_out}, {"sceNpTusSetMultiSlotVariable",np_signed_out},
+    {"sceNpTusSetMultiSlotVariableVUser",np_signed_out},
+    {"sceNpScoreGetFriendsRanking",np_signed_out}, {"sceNpScoreGetFriendsRankingAsync",np_signed_out},
+    {"sceNpScoreGetGameDataAsync",np_signed_out}, {"sceNpScoreGetRankingByNpId",np_signed_out},
+    {"sceNpScoreGetRankingByNpIdAsync",np_signed_out}, {"sceNpScoreGetRankingByRangeAsync",np_signed_out},
+    {"sceNpScorePollAsync",np_poll}, {"sceNpScoreRecordGameDataAsync",np_signed_out},
+    {"sceNpScoreRecordScoreAsync",np_signed_out},
+    {"sceNpMatching2GetRoomDataExternalList",np_signed_out}, {"sceNpMatching2GetRoomDataInternal",np_signed_out},
+    {"sceNpMatching2GetRoomMemberDataInternal",np_signed_out}, {"sceNpMatching2GetUserInfoList",np_signed_out},
+    {"sceNpMatching2RegisterRoomMessageCallback",ok_void}, {"sceNpMatching2SendRoomMessage",np_signed_out},
+    {"sceNpMatching2SetUserInfo",np_signed_out}, {"sceNpMatching2SendRoomChatMessage",np_signed_out}, {"sceNpMatching2SignalingGetConnectionInfo",np_signed_out},
+    {"sceNpSnsFacebookCreateRequest",np_signed_out}, {"sceNpSnsFacebookDeleteRequest",ok_void},
+    {"sceNpSnsFacebookGetAccessToken",np_signed_out},
+    {"sceNpTrophyCaptureScreenshot",ok_void}, {"sceNpTrophyGetGameIcon",trophy_no_icon},
+    {"sceNpTrophyGetGroupIcon",trophy_no_icon}, {"sceNpTrophyGetTrophyIcon",trophy_no_icon},
+    {"sceNpTrophyGetGroupInfo",trophy_no_icon},
+    {"sceHttpAbortRequest",ok_void}, {"sceHttpParseResponseHeader",http_fail},
+    {"sceHttpSetAuthEnabled",ok_void}, {"sceHttpSetAutoRedirect",ok_void},
+    {"sceHttpSetResolveRetry",ok_void}, {"sceHttpSetResolveTimeOut",ok_void}, {"sceHttpSetSendTimeOut",ok_void},
+    {"sceHttpsGetSslError",http_fail},
+    {"sceNetResolverAbort",ok_void}, {"sceNetResolverStartNtoaMultipleRecords",net_unreachable},
+    {"sceNetGetpeername",net_unreachable},
 };
 uintptr_t runtime_services_resolve(const char *name) { return RUNTIME_LOOKUP(exports,name); }

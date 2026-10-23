@@ -557,6 +557,12 @@ static ABI int32_t map_flexible_named(void **inout, uint64_t size, int prot, int
     (void)name; return map_flexible(inout,size,prot,flags);
 }
 static ABI int32_t release_flexible(void *address, uint64_t size) { return direct_unmap(address,size); }
+uint64_t runtime_flexible_available(void) {
+    read_lock();
+    uint64_t available=flexible_bytes<FLEXIBLE_SIZE ? FLEXIBLE_SIZE-flexible_bytes : 0;
+    read_unlock();
+    return available;
+}
 void *runtime_memory_map_host_pixels(uint64_t size) {
     void *out=NULL;
     if (!size || size%PAGE || map_flexible(&out,size,0x33,0)) return NULL;

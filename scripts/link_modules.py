@@ -32,9 +32,28 @@ def canonical(identity, fallback=None):
     return f'{identity[0]}#{identity[1][0]}' if identity else fallback
 
 
+def parse_elf(data):
+    """An already decrypted PS4 module (a plain ELF, e.g. a firmware .sprx dumped from the
+    console): same result shape as parse_self."""
+    header = unpack('<16sHHIQQQIHHHHHH', data, 0)
+    if header[0][:7] != b'\x7fELF\x02\x01\x01' or header[2] != 62:
+        raise ValueError('expected little-endian x86-64 ELF')
+    if header[9] != 56 or not 0 < header[10] < 256:
+        raise ValueError('unsupported program headers')
+    ph = [dict(zip(('type', 'flags', 'offset', 'vaddr', 'paddr', 'filesz', 'memsz', 'align'),
+                   unpack('<IIQQQQQQ', data, header[5] + i * 56)))
+          for i in range(header[10])]
+    for p in ph:
+        span(data, p['offset'], p['filesz'])
+    return bytearray(data), header, ph, [], []
+
+
 def module(path):
     source = read_self(path)
-    elf, header, ph, _, missing = parse_self(source)
+    if source[:4] == b'\x7fELF':
+        elf, header, ph, _, missing = parse_elf(source)
+    else:
+        elf, header, ph, _, missing = parse_self(source)
     dp = next(p for p in ph if p['type'] == 2)
     dynamic = []
     for pos in range(dp['offset'], dp['offset'] + dp['filesz'], 16):
@@ -99,7 +118,7 @@ def patch_fs_loads(image, ph, base):
     return patched
 
 
-def link(game, out, module_names=DEFAULT_MODULES, dynamic_names=()):
+def link(game, out, module_names=DEFAULT_MODULES, dynamic_names=(), system_dir=None, system_names=()):
     main = module(game / 'eboot.bin')
     raw = (out / 'boot.bin').read_bytes()
     magic, size, entry, ns, nr, ni, flags = unpack('<8s6Q', raw, 0)
@@ -136,9 +155,16 @@ def link(game, out, module_names=DEFAULT_MODULES, dynamic_names=()):
     fs_patched = patch_fs_loads(image, main['ph'], 0)
     tls_module = 2
     dynamic = []
-    for filename in list(module_names) + list(dynamic_names):
+    # System modules (firmware libraries dumped from a PS4, e.g. libSceNgs2.sprx) are linked and
+    # started like the game's own sce_module ones, after them.
+    for filename in list(module_names) + list(system_names) + list(dynamic_names):
         is_dynamic = filename in dynamic_names
-        m = module(game / filename if is_dynamic else game / 'sce_module' / filename)
+        if filename in system_names:
+            m = module(Path(system_dir) / filename)
+        elif is_dynamic or '/' in filename:
+            m = module(game / filename)  # a path from the game root, e.g. sysdata/libSceSecure.prx
+        else:
+            m = module(game / 'sce_module' / filename)
         loads = [p for p in m['ph'] if p['type'] in (1, 0x61000010)]
         modsize = max(p['vaddr'] + p['memsz'] for p in loads)
         if base + modsize > 512 * 1024 * 1024:
@@ -153,6 +179,8 @@ def link(game, out, module_names=DEFAULT_MODULES, dynamic_names=()):
             image[base + p['vaddr']:base + p['vaddr'] + p['filesz']] = span(m['elf'], p['offset'], p['filesz'])
             segments.append((base + p['vaddr'], p['memsz'], p['flags']))
         tls = next((p for p in m['ph'] if p['type'] == 7), None)
+        if tls and not tls['memsz']:
+            tls = None  # firmware modules carry an empty PT_TLS: no TLS block, no module ID
         module_id = 0
         if is_dynamic:
             # Started by the game itself: no TLS block and no initializer to run at boot.
@@ -307,5 +335,9 @@ if __name__ == '__main__':
     p.add_argument('--modules', nargs='*', default=list(DEFAULT_MODULES))
     p.add_argument('--dynamic', nargs='*', default=[],
                    help='modules in the game root that the game loads itself (sceKernelLoadStartModule)')
+    p.add_argument('--system-dir', type=Path, help='folder with decrypted PS4 firmware modules (.sprx)')
+    p.add_argument('--system', nargs='*', default=[], help='firmware modules from --system-dir to link')
     a = p.parse_args()
-    link(a.game, a.out, a.modules, a.dynamic)
+    if a.system and not a.system_dir:
+        p.error('--system needs --system-dir')
+    link(a.game, a.out, a.modules, a.dynamic, a.system_dir, a.system)

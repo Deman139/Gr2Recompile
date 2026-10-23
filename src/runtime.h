@@ -128,4 +128,13 @@ void runtime_savedata_report(void);
 int runtime_savedata_param(int32_t user, const char *dir, void *param);
 int runtime_savedata_icon(int32_t user, const char *dir, char *out, size_t size);
 void runtime_thread_attach_host(const char *name);
+uintptr_t runtime_fiber_resolve(const char *name);
+void runtime_fiber_report(void);
+uintptr_t runtime_eventflag_resolve(const char *name);
+void runtime_eventflag_report(void);
+/* Gravity Rush 2: the kernel, PSN and system-library functions it needs beyond the base port. */
+uintptr_t runtime_gr2_resolve(const char *name);
+/* The guest's process parameters (procparam), set by the loader. */
+const void *runtime_procparam(void);
+uint64_t runtime_flexible_available(void);
 #endif

@@ -44,7 +44,7 @@ static uint64_t import_count;
 static unsigned char *image;
 static size_t page_size;
 typedef struct { uint64_t base, size, init, tls_address, tls_memsz, tls_filesz, tls_module; } LinkedModule;
-static LinkedModule modules[16];
+static LinkedModule modules[32];
 static uint64_t module_count;
 static int entered_game;
 static int gpu_enabled;
