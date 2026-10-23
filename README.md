@@ -113,12 +113,15 @@ the same values.
 | | Field of view (FOV) | ⚡ Live |
 | | Vibration, stick dead zone, controller speaker | ⚡ Live |
 | | Hold Share for the quick menu, tips at startup | ⚡ Live |
+| | Camera shake (explosions, hits) | ⚡ Live |
+| | Button prompts: last device used / keyboard and mouse / PS4 | 🔄 Restart |
 | 🖼️ **Image** | Display mode (window / borderless / fullscreen), VSync | ⚡ Live |
 | | FSR 1 upscaling, sharpening (RCAS) and its strength | ⚡ Live |
 | | Upscaler **FSR 3.1 / DLSS** *(when the game started with one)* | ⚡ Live |
 | | **Frame generation** Off / FSR 3.1 / DLSS | ⚡ Live · 🔄 restart to turn it on from Off |
-| | Texture sharpness (LOD bias) | ⚡ Live |
+| | Texture sharpness (LOD bias, -2 to +2) | ⚡ Live |
 | | Anisotropic filtering | 🔄 Restart |
+| | Effects: motion blur, depth of field, bloom, film grain | 🔄 Restart |
 | 🚀 **Performance** | Frame rate limit, frames queued, background shader compiling | ⚡ Live |
 | | GPU readback options (the 0.2.5 performance options) | 🔄 Restart |
 | 📊 **Overlay** | FPS, frame time, upscaler, GPU, CPU, RAM, VRAM · size, corner, opacity | ⚡ Live |
@@ -149,12 +152,64 @@ the same values.
   on RTX 50). Almost twice the frames on screen with sharp HUD and text.
 - Classic method (a game resolution patch) still under *Advanced*.
 
+### 🎚️ Upscaling quality modes
+
+*Launcher → Graphics → **FSR / DLSS quality***. The 3D scene is drawn **smaller** and FSR 3.1 or DLSS
+rebuild it up to your output resolution. **HUD, menus and videos stay sharp at full size.**
+
+| Mode | Scene at **1080p** output | **1440p** | **1800p** | **4K** |
+|---|---|---|---|---|
+| ⭐ **Native** (best quality) | 1080p | 1080p | 1080p | 1080p |
+| **Quality** | 720p | 960p | 1080p | 1080p |
+| **Balanced** | 630p | 836p | 1044p | 1080p |
+| **Performance** | 540p | 720p | 900p | 1080p |
+| **Ultra performance** | 360p | 480p | 600p | 720p |
+
+| ✅ Use it when | ❌ It won't help when |
+|---|---|
+| Your **graphics card is the limit**: modest GPU, or 1440p / 1800p / 4K with the GPU near 100% | Your **processor is the limit** (low FPS while the GPU is under 100%): fewer pixels don't help the CPU |
+| You want more FPS and accept a slightly softer image | Your GPU already holds the FPS you want: **Native** looks best |
+
+It needs **FSR 3.1 or DLSS** as the resolution method (*Advanced → Resolution method*) or frame
+generation on, and it is read when the game starts. **Insert → Image** shows the sizes in use
+(*"WxH scene, WxH output"*).
+
+### 🧩 Shader cache and precompiling
+
+The game's shaders are **compiled by your PC the first time each area needs them**, which is why a
+new zone can stutter or an effect can show up late. Every compiled shader is saved in the **cache**:
+**once you've played an area, it is ready** and loads fast the next time.
+
+| Where | Option | What it does |
+|---|---|---|
+| 🧰 Launcher → Advanced | **Precompile shaders at startup** *(on by default)* | Before the game opens, prepares **every shader already in your cache** on all your cores. The start takes longer (the first time with a big cache, more) and uses more memory meanwhile. |
+| 🎮 In game → Performance | **Compile new shaders in the background** | Live. Fewer stutters in **new** areas; an object or effect may appear a moment later. |
+
+- 💡 It helps most on PCs with a **not-so-fast CPU**: the work is done once at startup instead of
+  while you play, so there are far fewer hitches.
+- ⏳ **The first time can take a while** and areas you **never played** still compile as you reach
+  them; after that starts are quick. The more you play, the better it gets.
+
+### 🎬 Screen effects
+
+Turn off **motion blur, depth of field, bloom and film grain** (*Launcher → Graphics → Effects*, or
+*Insert → Image*): they apply **when the game starts** (use **Apply and restart** in the menu).
+**Camera shake** (explosions, hits) switches **live** in *Insert → Controls*. Weapon recoil stays.
+
+### ⌨️ Keyboard and mouse button icons
+
+The game's prompts can show **your keys** (or the mouse button) instead of PS4 buttons: **last
+device used** (default), **keyboard and mouse**, or **PS4**. Set it in the launcher (*Controls*) or
+*Insert → Controls → Button prompts*. 🔄 **The game uses the option it was opened with: restart to
+change it.** Sticks and the touchpad keep their PS4 icons.
+
 ### 🧰 Launcher
 
 English and Spanish · dump check · automatic updates · display mode, window size, resolution,
-upscaler, frame generation, frame rate limit (30, 60, experimental 144 / 240 / unlimited), VSync,
-anisotropic filtering, texture sharpness, FSR 1 · keyboard, mouse and controller mapping · FOV ·
-quick links to saves, screenshots and logs · **Ports Discord** button.
+upscaler and its **quality mode**, frame generation, frame rate limit (30, 60, experimental 144 /
+240 / unlimited), VSync, anisotropic filtering, texture sharpness, FSR 1, **screen effects**,
+**shader precompile**, **button icons** · keyboard, mouse and controller mapping · FOV · quick links
+to saves, screenshots and logs · **Ports Discord** button.
 
 ## 🗂️ Game versions
 
@@ -183,7 +238,8 @@ Reports (distro or Steam Deck, Proton version, GPU) are welcome on Discord or in
   something looks wrong, turn off *Advanced → Performance* and try again before reporting.
 - **Mouse:** walking without sprinting turns at the game's own (slower) speed; see
   [Direct mouse aim](#-direct-mouse-aim-11).
-- **First play:** some effects can show up a few frames late while their shader compiles.
+- **First play:** some effects can show up a few frames late while their shader compiles; see
+  [Shader cache](#-shader-cache-and-precompiling).
 - **Above 60 FPS (experimental):** turn VSync off on a 60 Hz monitor.
 - The shader cache can take several GB ("Clear cache" in the launcher).
 - Multiplayer: offline only (Botzone).
@@ -192,10 +248,13 @@ Reports (distro or Steam Deck, Proton version, GPU) are welcome on Discord or in
 
 **🔜 Coming next**
 - 🖥️ **Ultrawide (21:9)** support: wider view (Hor+) with the HUD kept in place.
-- 🎚️ **Upscaling quality modes** (Quality / Balanced / Performance) for weaker PCs.
+- ✨ **FSR 4** upscaling.
+- 🎮 **Cheats**: debug menu and patches (e.g. unlocking every chapter).
+- 🧰 A **new, improved and more intuitive launcher**: it already has many options, and the new one
+  will present them far more clearly.
 
 **Later**
-- FSR 4 · in-game menu in Spanish · debug menu, cheats and patches (e.g. unlocking every chapter).
+- In-game menu in Spanish.
 - Native Linux version (AppImage), with Steam Deck in mind, once the game is fully stable.
 
 ## 🐞 Reporting bugs
@@ -331,12 +390,15 @@ se aplica al instante**, sin cerrar el juego. Se guarda solo, y el launcher mues
 | | Campo de visión (FOV) | ⚡ En vivo |
 | | Vibración, zona muerta de sticks, altavoz del mando | ⚡ En vivo |
 | | Mantener Share para el menú rápido, consejos al iniciar | ⚡ En vivo |
+| | Temblor de cámara (explosiones, impactos) | ⚡ En vivo |
+| | Íconos de botones: último dispositivo / teclado y mouse / PS4 | 🔄 Reinicio |
 | 🖼️ **Image** | Modo de pantalla (ventana / sin bordes / completa), VSync | ⚡ En vivo |
 | | Reescalado FSR 1, nitidez (RCAS) y su intensidad | ⚡ En vivo |
 | | Reescalador **FSR 3.1 / DLSS** *(si el juego arrancó con uno)* | ⚡ En vivo |
 | | **Generación de frames** Apagada / FSR 3.1 / DLSS | ⚡ En vivo · 🔄 reinicio para encenderla desde apagada |
-| | Nitidez de texturas (LOD bias) | ⚡ En vivo |
+| | Nitidez de texturas (LOD bias, de -2 a +2) | ⚡ En vivo |
 | | Filtrado anisotrópico | 🔄 Reinicio |
+| | Efectos: desenfoque de movimiento, profundidad de campo, bloom, grano | 🔄 Reinicio |
 | 🚀 **Performance** | Límite de FPS, cuadros en cola, compilación de shaders en segundo plano | ⚡ En vivo |
 | | Opciones de lectura de GPU (las de rendimiento de la 0.2.5) | 🔄 Reinicio |
 | 📊 **Overlay** | FPS, frametime, reescalador, GPU, CPU, RAM, VRAM · tamaño, esquina, opacidad | ⚡ En vivo |
@@ -367,11 +429,65 @@ se aplica al instante**, sin cerrar el juego. Se guarda solo, y el launcher mues
   (hasta 4x en RTX 50). Casi el doble de cuadros con HUD y textos nítidos.
 - El método clásico (parche de resolución del juego) sigue en *Avanzado*.
 
+### 🎚️ Calidades de reescalado
+
+*Launcher → Gráficos → **Calidad de FSR / DLSS***. La escena 3D se dibuja **más chica** y FSR 3.1 o
+DLSS la reconstruyen hasta tu resolución de salida. **HUD, menús y videos siguen nítidos a tamaño
+completo.**
+
+| Modo | Escena con salida **1080p** | **1440p** | **1800p** | **4K** |
+|---|---|---|---|---|
+| ⭐ **Nativa** (máxima calidad) | 1080p | 1080p | 1080p | 1080p |
+| **Calidad** | 720p | 960p | 1080p | 1080p |
+| **Equilibrado** | 630p | 836p | 1044p | 1080p |
+| **Rendimiento** | 540p | 720p | 900p | 1080p |
+| **Ultra rendimiento** | 360p | 480p | 600p | 720p |
+
+| ✅ Usalo cuando | ❌ No ayuda cuando |
+|---|---|
+| El límite es tu **placa de video**: GPU modesta, o 1440p / 1800p / 4K con la GPU cerca del 100% | El límite es tu **procesador** (pocos FPS con la GPU por debajo del 100%): menos píxeles no ayudan a la CPU |
+| Querés más FPS y aceptás una imagen algo más suave | Tu GPU ya sostiene los FPS que querés: **Nativa** es la que mejor se ve |
+
+Necesita **FSR 3.1 o DLSS** como método de resolución (*Avanzado → Método de resolución*) o la
+generación de frames activada, y se lee al iniciar el juego. **Insert → Image** muestra los tamaños
+en uso (*"WxH scene, WxH output"*).
+
+### 🧩 Caché de shaders y precompilado
+
+Los shaders del juego **los compila tu PC la primera vez que cada zona los necesita**, por eso una
+zona nueva puede dar tirones o un efecto puede aparecer tarde. Cada shader compilado se guarda en
+la **caché**: **una vez jugada una zona, queda lista** y carga rápido la próxima vez.
+
+| Dónde | Opción | Qué hace |
+|---|---|---|
+| 🧰 Launcher → Avanzado | **Precompilar shaders al iniciar** *(activada por defecto)* | Antes de abrir el juego prepara **todos los shaders que ya están en tu caché** con todos tus núcleos. El inicio tarda más (la primera vez con una caché grande, más) y usa más memoria mientras tanto. |
+| 🎮 En el juego → Performance | **Compile new shaders in the background** | En vivo. Menos tirones en zonas **nuevas**; un objeto o efecto puede aparecer un momento después. |
+
+- 💡 Ayuda sobre todo a PCs con un **procesador no muy rápido**: el trabajo se hace una vez al
+  iniciar en lugar de mientras jugás, así que hay muchos menos tirones.
+- ⏳ **La primera vez puede tardar** y las zonas que **nunca jugaste** se siguen compilando al llegar;
+  después los inicios son rápidos. Cuanto más jugás, mejor queda.
+
+### 🎬 Efectos de pantalla
+
+Desactivá **desenfoque de movimiento, profundidad de campo, bloom y grano** (*Launcher → Gráficos →
+Efectos*, o *Insert → Image*): se aplican **al iniciar el juego** (usá **Apply and restart** en el
+menú). El **temblor de cámara** (explosiones, impactos) cambia **en vivo** en *Insert → Controls*. El
+retroceso del arma se mantiene.
+
+### ⌨️ Íconos de teclado y mouse
+
+Los avisos del juego pueden mostrar **tus teclas** (o el botón del mouse) en vez de los botones de
+PS4: **último dispositivo usado** (por defecto), **teclado y mouse**, o **PS4**. Se elige en el
+launcher (*Controles*) o en *Insert → Controls → Button prompts*. 🔄 **El juego usa la opción con la
+que lo abriste: reiniciá para cambiarla.** Los sticks y el touchpad conservan el ícono de PS4.
+
 ### 🧰 Launcher
 
 Inglés y español · verificación del dump · actualizaciones automáticas · modo de pantalla, tamaño
-de ventana, resolución, reescalador, generación de frames, límite de FPS (30, 60, experimentales
-144 / 240 / sin límite), VSync, filtrado anisotrópico, nitidez de texturas, FSR 1 · controles de
+de ventana, resolución, reescalador y su **modo de calidad**, generación de frames, límite de FPS
+(30, 60, experimentales 144 / 240 / sin límite), VSync, filtrado anisotrópico, nitidez de texturas,
+FSR 1, **efectos de pantalla**, **precompilado de shaders**, **íconos de botones** · controles de
 teclado, mouse y mando · FOV · accesos a partidas, capturas y logs · botón **Ports Discord**.
 
 ## 🗂️ Versiones del juego
@@ -402,7 +518,8 @@ Linux (AppImage).
   o algo se ve mal, desactivá *Avanzado → Rendimiento* y probá de nuevo antes de reportar.
 - **Mouse:** caminando sin correr, la cámara gira a la velocidad (más lenta) del propio juego; ver
   [Mouse directo](#-mouse-directo-11).
-- **Primera partida:** algunos efectos pueden aparecer unos cuadros tarde mientras se compila su shader.
+- **Primera partida:** algunos efectos pueden aparecer unos cuadros tarde mientras se compila su
+  shader; ver [Caché de shaders](#-caché-de-shaders-y-precompilado).
 - **Más de 60 FPS (experimental):** con un monitor de 60 Hz desactivá VSync.
 - La caché de shaders puede ocupar varios GB ("Borrar caché" en el launcher).
 - Multijugador: solo sin conexión (Botzone).
@@ -411,11 +528,13 @@ Linux (AppImage).
 
 **🔜 Lo que viene**
 - 🖥️ **Soporte ultrawide (21:9):** vista más ancha (Hor+) con el HUD en su lugar.
-- 🎚️ **Calidades de reescalado** (Calidad / Equilibrado / Rendimiento) para PCs más modestas.
+- ✨ **FSR 4**.
+- 🎮 **Cheats**: menú debug y parches (por ejemplo desbloquear todos los capítulos).
+- 🧰 Un **launcher nuevo, mejorado e intuitivo**: ya tiene muchas opciones, y el nuevo las va a
+  presentar mucho más claras.
 
 **Más adelante**
-- FSR 4 · menú dentro del juego en español · menú debug, trucos y parches (por ejemplo desbloquear
-  todos los capítulos).
+- Menú dentro del juego en español.
 - Versión nativa para Linux (AppImage), pensando en Steam Deck, cuando el juego esté 100% estable.
 
 ## 🐞 Reportar errores
