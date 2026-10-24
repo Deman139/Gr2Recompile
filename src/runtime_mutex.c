@@ -10,17 +10,48 @@
 typedef struct { int type; } GuestAttr;
 typedef struct { uint32_t magic; pthread_mutex_t native; } GuestMutex;
 #define MUTEX_MAGIC UINT32_C(0x4d555458)
-/* A handle that is not a live mutex of ours (freed, overwritten, never initialized) is reported
- * with the guest caller instead of faulting inside winpthreads without a report. */
+/* Every mutex ever created stays allocated (a few hundred in a session): Gravity Rush 2 and its
+ * firmware modules lock mutexes that another thread is destroying, and freed memory was reused
+ * under them (startup crashes in winpthreads' pthread_mutex_lock). The registry tells a handle of
+ * ours whose magic was overwritten from a foreign pointer. */
+static pthread_mutex_t registry_lock = PTHREAD_MUTEX_INITIALIZER;
+static GuestMutex **registry;
+static size_t registry_count, registry_capacity;
+static void register_mutex(GuestMutex *m) {
+    pthread_mutex_lock(&registry_lock);
+    if (registry_count == registry_capacity) {
+        size_t capacity = registry_capacity ? registry_capacity * 2 : 256;
+        GuestMutex **grown = realloc(registry, capacity * sizeof(*grown));
+        if (grown) { registry = grown; registry_capacity = capacity; }
+    }
+    if (registry_count < registry_capacity) registry[registry_count++] = m;
+    pthread_mutex_unlock(&registry_lock);
+}
+static int registered(const GuestMutex *m) {
+    int found = 0;
+    pthread_mutex_lock(&registry_lock);
+    for (size_t i = 0; i < registry_count && !found; ++i) found = registry[i] == m;
+    pthread_mutex_unlock(&registry_lock);
+    return found;
+}
+/* A handle that is not a mutex of ours (overwritten with something else, never initialized)
+ * stops with the guest caller instead of faulting inside winpthreads without a report. One of
+ * ours with a damaged magic is repaired and reported. */
 static GuestMutex *live(GuestMutex **mutex, void *caller) {
     GuestMutex *m = *mutex;
-    if (m->magic != MUTEX_MAGIC) {
-        fprintf(stderr, "STOP: guest mutex at %p holds %p, not a live mutex (magic 0x%08x); caller %p\n",
-                (void *)mutex, (void *)m, (unsigned)m->magic, caller);
-        fflush(NULL);
-        __builtin_trap(); /* the fault report adds the stack */
+    if (__builtin_expect(m->magic == MUTEX_MAGIC, 1)) return m;
+    if (registered(m)) {
+        static int reported;
+        if (reported++ < 8)
+            fprintf(stderr, "Runtime: guest mutex %p had its magic overwritten (0x%08x), repaired; caller %p\n",
+                    (void *)m, (unsigned)m->magic, caller);
+        m->magic = MUTEX_MAGIC;
+        return m;
     }
-    return m;
+    fprintf(stderr, "STOP: guest mutex at %p holds %p, not a mutex of ours (magic 0x%08x); caller %p\n",
+            (void *)mutex, (void *)m, (unsigned)m->magic, caller);
+    fflush(NULL);
+    __builtin_trap(); /* the fault report adds the stack */
 }
 static size_t created, locks, unlocks;
 static int32_t orbis_error(int e) {
@@ -72,6 +103,7 @@ static ABI int32_t mutex_init(GuestMutex **out, GuestAttr **attr, const char *na
     pthread_mutexattr_destroy(&native_attr);
     if (e) { free(mutex); return orbis_error(e); }
     mutex->magic = MUTEX_MAGIC;
+    register_mutex(mutex);
     *out = mutex; ++created; return 0;
 }
 static pthread_mutex_t static_init = PTHREAD_MUTEX_INITIALIZER;
@@ -115,9 +147,10 @@ static ABI int32_t mutex_unlock(GuestMutex **mutex) {
 static ABI int32_t mutex_destroy(GuestMutex **mutex) {
     if (!mutex || (uintptr_t)*mutex == 2) return orbis_error(EINVAL);
     if ((uintptr_t)*mutex < 2) return 0;
-    int e = pthread_mutex_destroy(&live(mutex, __builtin_return_address(0))->native);
-    if (!e) { (*mutex)->magic = 0; free(*mutex); *mutex = (GuestMutex *)(uintptr_t)2; }
-    return orbis_error(e);
+    /* Not freed nor destroyed (see the registry): a thread still locking it keeps working. */
+    live(mutex, __builtin_return_address(0));
+    *mutex = (GuestMutex *)(uintptr_t)2;
+    return 0;
 }
 static int deadline_after(struct timespec *end, uint64_t usec) {
     if (clock_gettime(CLOCK_REALTIME, end)) return errno;
@@ -165,8 +198,9 @@ static int32_t ensure_cond(GuestCond **cond) {
 static ABI int32_t cond_destroy(GuestCond **cond) {
     if (!cond) return orbis_error(EINVAL);
     if ((uintptr_t)*cond < 2) return 0;
-    int e = pthread_cond_destroy(&(*cond)->native);
-    if (!e) { free(*cond); *cond = NULL; }
+    /* Kept allocated like mutexes: a thread still signalling it must not reach freed memory. */
+    int e = 0;
+    *cond = NULL;
     return orbis_error(e);
 }
 static ABI int32_t cond_wait(GuestCond **cond, GuestMutex **mutex) {
