@@ -127,7 +127,13 @@ TEXTS = {
         'fps_help': 'Патч 60 FPS Junmin Lee (GR2fork): игра считает время шагами по 1/60 секунды, поэтому '
                     'если компьютер не держит 60 кадров, игра замедляется. Файл патча скачивается один раз '
                     'из репозитория GR2fork в user/patches.',
-        'fps_failed': 'Не удалось подготовить патч 60 FPS:\n{error}\n\nЗапустить игру в 30 FPS?',
+        'fps_failed': 'Не удалось подготовить патчи GR2fork (частота кадров, разрешение):\n{error}\n\n'
+                      'Запустить игру без них (30 FPS, 1080p)?',
+        'game_resolution': 'Разрешение игры', 'res_1080': '1920 × 1080 (как на PS4)',
+        'res_1440': '2560 × 1440 (патч GR2fork)', 'res_2160': '3840 × 2160 (патч GR2fork)',
+        'game_resolution_help': 'В каком разрешении игра рисует кадр (патч разрешения Junmin Lee, GR2fork), '
+                                'в отличие от размера окна, до которого кадр 1080p только растягивается. '
+                                'Выше разрешение — чётче и тяжелее для видеокарты. Окно лучше поставить того же размера.',
         'window_size_help': 'Только в оконном режиме. Картинка игры масштабируется под окно.',
         'vsync': 'Вертикальная синхронизация (VSync)', 'vsync_help': 'Без разрывов кадра.',
         'anisotropy': 'Анизотропная фильтрация', 'aniso_game': 'Как в игре',
@@ -232,7 +238,13 @@ TEXTS = {
         'fps_help': 'Junmin Lee\'s 60 FPS patch (GR2fork): the game steps its time 1/60 s per frame, so it '
                     'slows down when the PC cannot hold 60 FPS. The patch file is downloaded once from the '
                     'GR2fork repository into user/patches.',
-        'fps_failed': 'Could not prepare the 60 FPS patch:\n{error}\n\nStart the game at 30 FPS?',
+        'fps_failed': 'Could not prepare the GR2fork patches (frame rate, resolution):\n{error}\n\n'
+                      'Start the game without them (30 FPS, 1080p)?',
+        'game_resolution': 'Game resolution', 'res_1080': '1920 × 1080 (as on PS4)',
+        'res_1440': '2560 × 1440 (GR2fork patch)', 'res_2160': '3840 × 2160 (GR2fork patch)',
+        'game_resolution_help': 'The resolution the game draws at (Junmin Lee\'s resolution patch, GR2fork), '
+                                'unlike the window size, to which a 1080p frame is only stretched. Higher is '
+                                'sharper and heavier on the GPU. Best with a window of the same size.',
         'window_size_help': 'Windowed mode only. The game image is scaled to the window.',
         'vsync': 'VSync (vertical sync)', 'vsync_help': 'Prevents tearing.',
         'anisotropy': 'Anisotropic filtering', 'aniso_game': 'Game default',
@@ -438,7 +450,7 @@ LAUNCHER_DEFAULTS = {'game_dir': '', 'update_dir': '', 'modules_dir': '', 'langu
                      'window_size': '1920x1080', 'key_map': {}, 'pad_map': {}, 'mouse_look': True,
                      'mouse_sens': 1.0, 'mouse_invert': False, 'pad_dead_zone': 0, 'pad_speaker': 100,
                      'smart_pending': True, 'precompile': True, 'readback_max_kb': 2048, 'menu_key': 'F12',
-                     'banner_image': '', 'gs_outline': False, 'fps': '30'}
+                     'banner_image': '', 'gs_outline': False, 'fps': '30', 'game_resolution': '1920x1080'}
 BANNER_DIR = USER_DIR / 'banner'
 # Frame rate patches: Junmin Lee's GoldHEN/shadPS4 patch file for Gravity Rush 2 01.11 (the GR2fork
 # repository; not bundled), downloaded once into user/patches, where run.py's patches.py finds it;
@@ -448,6 +460,8 @@ FPS_PATCH_URL = ('https://raw.githubusercontent.com/junminlee2004/GoldHEN_Patch_
                  'patches/xml/GravityDaze2-Orbis.xml')
 FPS_PATCH_FILE = 'GravityDaze2-Orbis.xml'
 FPS_CHOICES = ('30', '60')
+RESOLUTION_CHOICES = ('1920x1080', '2560x1440', '3840x2160')
+DMEM_RETAIL_MB = 4608  # runtime_memory.c's pool; patch notes ask for extra_dmem_in_mbytes on top
 PATCHES_DIR = USER_DIR / 'patches'
 PATCHES_CONFIG = USER_DIR / 'patches.json'
 
@@ -459,11 +473,15 @@ def fps_patch_names(path):
             if m.get('AppVer') == GAME_VERSION and m.get('AppElf', 'eboot.bin') == 'eboot.bin' and m.get('Name')]
 
 
-def prepare_fps_patch(fps):
-    """Selects the frame rate patch for this start (fps '30' turns them off). Downloads the patch
-    file first when needed. Raises OSError/ValueError when the patch cannot be prepared."""
+def prepare_game_patches(fps, resolution):
+    """Selects the frame rate and resolution patches for this start ('30' and '1920x1080' turn them
+    off), downloading the patch file first when needed. Returns the extra direct memory (MiB) the
+    chosen patches' notes ask for. Raises OSError/ValueError when they cannot be prepared."""
+    import re
+    import xml.etree.ElementTree as ET
     path = PATCHES_DIR / FPS_PATCH_FILE
-    if fps != '30' and not path.is_file():
+    wanted_any = fps != '30' or resolution != '1920x1080'
+    if wanted_any and not path.is_file():
         import urllib.request
         request = urllib.request.Request(FPS_PATCH_URL, headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0)'})
         with urllib.request.urlopen(request, timeout=30) as response:
@@ -478,13 +496,24 @@ def prepare_fps_patch(fps):
             raise ValueError(f'{FPS_PATCH_FILE}: {error}') from error
         partial.replace(path)
     if not path.is_file():
-        return
+        return 0
     names = fps_patch_names(path)
-    wanted = None
+    wanted = []
     if fps != '30':
-        wanted = next((n for n in names if n.lower().startswith(f'{fps}fps')), None)
-        if not wanted:
+        name = next((n for n in names if n.lower().startswith(f'{fps}fps')), None)
+        if not name:
             raise ValueError(f'{FPS_PATCH_FILE} has no {fps} FPS patch for {GAME_VERSION}')
+        wanted.append(name)
+    if resolution != '1920x1080':
+        name = next((n for n in names if n.startswith(f'Resolution {resolution} ')), None)
+        if not name:
+            raise ValueError(f'{FPS_PATCH_FILE} has no {resolution} resolution patch for {GAME_VERSION}')
+        wanted.append(name)
+    extra_dmem = 0
+    for meta in ET.parse(path).getroot().iter('Metadata'):
+        if meta.get('Name') in wanted and meta.get('AppVer') == GAME_VERSION:
+            if m := re.search(r'extra_dmem_in_mbytes\s+(\d+)', meta.get('Note', '')):
+                extra_dmem = max(extra_dmem, int(m.group(1)))
     try:
         config = json.loads(PATCHES_CONFIG.read_text(encoding='utf-8'))
     except (OSError, ValueError):
@@ -493,9 +522,10 @@ def prepare_fps_patch(fps):
         config = {}
     prefix = FPS_PATCH_FILE + '/'
     keep = lambda key: [k for k in config.get(key, []) if isinstance(k, str) and not k.startswith(prefix)]
-    config['enabled'] = keep('enabled') + ([prefix + wanted] if wanted else [])
-    config['disabled'] = keep('disabled') + [prefix + n for n in names if n != wanted]
+    config['enabled'] = keep('enabled') + [prefix + n for n in wanted]
+    config['disabled'] = keep('disabled') + [prefix + n for n in names if n not in wanted]
     PATCHES_CONFIG.write_text(json.dumps(config, indent=2, ensure_ascii=False) + '\n', encoding='utf-8')
+    return extra_dmem
 
 
 def is_link(value):
@@ -1249,6 +1279,11 @@ class Launcher:
         fps = self.settings.get('fps') if self.settings.get('fps') in FPS_CHOICES else '30'
         self.choice(parent, tr('frame_rate'), FPS_CHOICES, [tr('fps_30'), tr('fps_60')], fps,
                     lambda v: self.set_setting('fps', v), tr('fps_help'))
+        resolution = (self.settings.get('game_resolution') if self.settings.get('game_resolution') in
+                      RESOLUTION_CHOICES else '1920x1080')
+        self.choice(parent, tr('game_resolution'), RESOLUTION_CHOICES,
+                    [tr('res_1080'), tr('res_1440'), tr('res_2160')], resolution,
+                    lambda v: self.set_setting('game_resolution', v), tr('game_resolution_help'))
         self.choice(parent, tr('anisotropy'), ANISOTROPY, [tr('aniso_game'), '2x', '4x', '8x', '16x'],
                     self.graphics['anisotropy'], lambda v: self.set_graphic('anisotropy', v))
         self.choice(parent, tr('mip_bias'), MIP_BIASES,
@@ -1512,19 +1547,29 @@ class Launcher:
         save_graphics(self.graphics)
         save_launcher(self.settings)
         fps = self.settings.get('fps') if self.settings.get('fps') in FPS_CHOICES else '30'
+        resolution = (self.settings.get('game_resolution') if self.settings.get('game_resolution') in
+                      RESOLUTION_CHOICES else '1920x1080')
         try:
-            prepare_fps_patch(fps)
+            extra_dmem = prepare_game_patches(fps, resolution)
         except Exception as error:  # noqa: BLE001  (network, HTTP, file or XML errors: shown to the player)
             if not self.messagebox.askyesno(APP_NAME, tr('fps_failed', error=error), parent=self.root):
                 return
+            resolution = '1920x1080'
             try:
-                prepare_fps_patch('30')
+                extra_dmem = prepare_game_patches('30', resolution)
             except Exception:  # noqa: BLE001
-                pass
+                extra_dmem = 0
         run_dir = LOGS_DIR / time.strftime('%Y-%m-%d_%H-%M-%S')
         run_dir.mkdir(parents=True, exist_ok=True)
         prune_logs()
         env = game_environment(self.settings, self.graphics, needs_update)
+        if extra_dmem:
+            env['GOW3_DMEM_MB'] = str(DMEM_RETAIL_MB + extra_dmem)
+        if resolution != '1920x1080' and env.get('GOW3_READBACK_MAX_KB', '0') != '0':
+            # Render targets grow with the resolution: the readback size limit grows with them, so
+            # the same images (those the CPU reads) are still copied back.
+            w, h = (int(v) for v in resolution.split('x'))
+            env['GOW3_READBACK_MAX_KB'] = str(int(int(env['GOW3_READBACK_MAX_KB']) * w * h / (1920 * 1080)))
         try:
             out = open(run_dir / 'game.log', 'w', encoding='utf-8')
             err = open(run_dir / 'errors.log', 'w', encoding='utf-8')

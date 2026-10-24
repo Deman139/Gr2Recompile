@@ -51,13 +51,15 @@ A package players can run without MSYS2 or Python (`dist/Gravity Rush 2/Gravity 
 `bash packaging/windows/package_gr2.sh` (needs a python.org Python; the icon is made once from
 your dump, as the script says).
 
-### 60 FPS
+### 60 FPS and higher resolutions
 
-Launcher → Graphics → Frame rate → 60 FPS uses Junmin Lee's 60 FPS patch for 01.11 from
+Launcher → Graphics → Frame rate → 60 FPS, and Game resolution → 2560 × 1440 or 3840 × 2160, use
+Junmin Lee's patches for 01.11 (resolution: the game itself draws at that size; 4K adds the 128 MiB
+of direct memory its note asks for, and the readback size limit grows with the pixel count), from
 [GR2fork](https://github.com/junminlee2004/GR2fork) (its
 [patch repository](https://github.com/junminlee2004/GoldHEN_Patch_Repository)). The launcher downloads
-the patch file once into `user/patches` and selects the patch in `user/patches.json`; nothing is
-bundled. The game then steps its time 1/60 s per frame: below 60 FPS it slows down. Any other
+the patch file once into `user/patches` and selects the patches in `user/patches.json`; nothing is
+bundled. At 60 FPS the game steps its time 1/60 s per frame: below 60 FPS it slows down. Any other
 shadPS4/GoldHEN XML file in `user/patches` that names the game's title ID works the same way
 (`patches.json`: `{"enabled": ["<file>/<patch name>"], "disabled": [...]}`).
 
