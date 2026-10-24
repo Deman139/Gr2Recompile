@@ -51,6 +51,11 @@ A package players can run without MSYS2 or Python (`dist/Gravity Rush 2/Gravity 
 `bash packaging/windows/package_gr2.sh` (needs a python.org Python; the icon is made once from
 your dump, as the script says).
 
+Steam Input (Steam Controller, gyro to mouse, ...): add `Gravity Rush 2 (Steam).bat` to Steam as a
+non-Steam game and turn Steam Input on in its controller settings. Unlike `Gravity Rush 2.bat` it
+keeps running until the launcher closes, so Steam keeps its virtual gamepad for the game (SDL sees
+an Xbox controller; the mouse look takes Steam's gyro-as-mouse).
+
 ### 60 FPS and higher resolutions
 
 Launcher → Graphics → Frame rate → 60 FPS, and Game resolution → 2560 × 1440 or 3840 × 2160, use
