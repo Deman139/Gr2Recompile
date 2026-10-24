@@ -1809,8 +1809,6 @@ void TextureCache::GarbageCollectImages() {
         }
         --num_deletions;
         auto& image = slot_images[image_id];
-        ResolveReadbacks(image.info.guest_address, image.info.guest_size, true,
-                         ReadbackSource::CacheCleanup);
         const bool download = image.SafeToDownload();
         const bool tiled = image.info.IsTiled();
         if (tiled && download) {
@@ -1820,6 +1818,11 @@ void TextureCache::GarbageCollectImages() {
         if (download && !pressured) {
             return false;
         }
+        // gr2: only an image that is really freed waits for the readbacks over its memory.
+        // Waiting first, for the GPU-modified images kept above, stalled the GPU thread on the
+        // GPU once a frame (Gravity Rush 2 at 4K: 1.8 s of every 5 s, 35-50 FPS).
+        ResolveReadbacks(image.info.guest_address, image.info.guest_size, true,
+                         ReadbackSource::CacheCleanup);
         if (download) {
             // gow3: synchronously, while the image still protects its pages. A deferred
             // write-back landed after FreeImage had unprotected them, over whatever the game
