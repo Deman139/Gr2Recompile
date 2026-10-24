@@ -52,6 +52,13 @@ public:
         }
         return tick;
     }
+    /// gr2 (diagnostics): calls visit(entry) for the waited-for copies over [address, +size).
+    template <typename Visit>
+    void ForEachRequired(std::uint64_t address, std::uint64_t size, Visit&& visit) const {
+        for (const auto& entry : entries) {
+            if (entry.valid && entry.watched && OverlapsPage(entry, address, size)) visit(entry);
+        }
+    }
     template <typename Callback>
     void Cancel(std::uint64_t address, std::uint64_t size, Callback&& cancel) {
         for (auto& entry : entries) {

@@ -70,6 +70,19 @@ void runtime_start(uint64_t flags) {
     stack_canary &= ~UINT64_C(255);
 }
 static void (*report_hook)(void); /* loader extras (ISA site counts) */
+/* Ends the process at once, without DLL shutdown (Windows: TerminateProcess; the drivers'
+ * detach code faulted in ExitProcess after the window was closed). Output is flushed first. */
+#ifdef _WIN32
+__declspec(dllimport) void *__stdcall GetCurrentProcess(void);
+__declspec(dllimport) int __stdcall TerminateProcess(void *process, unsigned code);
+#endif
+void runtime_terminate(int code) {
+    fflush(NULL);
+#ifdef _WIN32
+    TerminateProcess(GetCurrentProcess(), (unsigned)code);
+#endif
+    _Exit(code);
+}
 void runtime_report(void) {
     printf("Runtime: _init_env=%zu, atexit=%zu, __cxa_atexit=%zu, registered handlers=%zu\n",
            calls_init, calls_atexit, calls_cxa, handler_count);

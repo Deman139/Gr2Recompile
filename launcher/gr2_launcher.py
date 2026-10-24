@@ -1605,6 +1605,10 @@ class Launcher:
 
     def wait_game(self, process, out, err, run_dir):
         code = process.wait()
+        try:  # Windows status codes (0xC0000005 ...) tell how a run ended without a report
+            err.write(f'Launcher: the game ended with exit code {code} (0x{code & 0xffffffff:08X})\n')
+        except (OSError, ValueError, TypeError):
+            pass
         out.close()
         err.close()
         self.root.after(0, lambda: self.game_ended(code, run_dir))

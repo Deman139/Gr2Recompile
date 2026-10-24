@@ -28,6 +28,8 @@ uintptr_t runtime_hoststack_wrap(uintptr_t function, const char *nid);
 long runtime_hoststack_run(long (*function)(void *), void *argument);
 void runtime_hoststack_report(void);
 void runtime_report(void);
+/* Ends the process at once: output flushed, no atexit handlers or DLL shutdown. */
+void runtime_terminate(int code) __attribute__((noreturn));
 /* Called at the end of runtime_report (the loader adds its own counters). */
 void runtime_set_report_hook(void (*hook)(void));
 void runtime_finalize(void *dso);

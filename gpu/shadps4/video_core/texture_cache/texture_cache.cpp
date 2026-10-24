@@ -135,6 +135,21 @@ bool TextureCache::ResolveReadbacks(VAddr address, u64 size, bool assume_locks,
             }
         }
         Gow3Stats::Timer readback_timer{Gow3Stats::t_readback_wait};
+        if (diag && (source == ReadbackSource::BufferObtain || source == ReadbackSource::CacheCleanup)) {
+            // gr2: what a buffer binding waited for (the first 48 waits of a run).
+            static std::atomic<unsigned> shown{0};
+            if (pending_readbacks.RequiredTick(address, size) && shown.fetch_add(1) < 48) {
+                pending_readbacks.ForEachRequired(address, size, [&](const auto& entry) {
+                    const bool bytes = address < entry.address + entry.size && entry.address < address + size;
+                    std::printf("Readback wait (%s): range 0x%llx+0x%llx, copy 0x%llx+0x%llx, %s\n",
+                                ReadbackSourceName(source), (unsigned long long)address,
+                                (unsigned long long)size, (unsigned long long)entry.address,
+                                (unsigned long long)entry.size,
+                                !bytes ? "same page only" : address == entry.address ? "same start"
+                                                                                     : "overlapping bytes");
+                });
+            }
+        }
         if (const u64 tick = pending_readbacks.RequiredTick(address, size)) {
             ++readbacks_waited;
             waited = !scheduler.IsFree(tick);

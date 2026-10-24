@@ -49,6 +49,7 @@ int32_t* runtime_errno(void);
 void runtime_memory_set_gpu_hooks(RuntimeGpuRange map, RuntimeGpuRange unmap, RuntimeGpuRange invalidate);
 // runtime.c: exit counters (and the ISA site report), as on the guest's own exit
 void runtime_report(void);
+[[noreturn]] void runtime_terminate(int code);
 }
 
 Frontend::WindowSDL* g_window = nullptr;
@@ -255,7 +256,11 @@ extern "C" int gow3gpu_init(const Gow3GpuConfig* config) {
         LOG_INFO(Frontend, "Window closed by user");
         runtime_report();
         std::fflush(stdout);
-        std::_Exit(0);
+        std::fflush(stderr);
+        // gr2: no DLL shutdown (runtime_terminate). ExitProcess ran the drivers' detach code
+        // while their threads were already gone, and the Direct3D shader cache (D3DSCache.dll)
+        // faulted there: an error report after a normal close.
+        runtime_terminate(0);
     });
     g_window_thread.detach();
     {
