@@ -178,6 +178,10 @@ TEXTS = {
         'precompile': 'Подготавливать шейдеры из кэша при запуске',
         'precompile_help': 'Меньше рывков в уже пройденных местах, но запуск дольше.',
         'readback_heading': 'Копирование с видеокарты',
+        'no_gpu_copies': 'Не копировать данные с видеокарты (как GR2fork)',
+        'no_gpu_copies_help': 'Игра не получает обратно изображения и буферы, которые рисует видеокарта. '
+                              'Так работает GR2fork: быстрее и без разлетающейся листвы при 60 FPS. '
+                              'Если игра начнёт вылетать при запуске — выключи.',
         'readback_max': 'Предел размера копируемых изображений',
         'readback_max_help': 'Изображения крупнее остаются на видеокарте. 2 МБ дают 30 FPS; больше — '
                              'медленнее, но если где-то появятся артефакты, попробуй увеличить.',
@@ -301,6 +305,10 @@ TEXTS = {
         'precompile': 'Prepare cached shaders at startup',
         'precompile_help': 'Less stutter in places you already visited, but a longer start.',
         'readback_heading': 'Copies from the graphics card',
+        'no_gpu_copies': "Don't copy data back from the graphics card (like GR2fork)",
+        'no_gpu_copies_help': 'The game does not get back the images and buffers the graphics card draws. '
+                              'This is how GR2fork runs: faster, and no scattered foliage at 60 FPS. '
+                              'Turn it off if the game starts crashing at launch.',
         'readback_max': 'Size limit of copied images',
         'readback_max_help': 'Larger images stay on the graphics card. 2 MB gives 30 FPS; more is slower, '
                              'but try raising it if artifacts appear somewhere.',
@@ -476,7 +484,7 @@ LAUNCHER_DEFAULTS = {'game_dir': '', 'update_dir': '', 'modules_dir': '', 'langu
                      'smart_pending': True, 'precompile': True, 'readback_max_kb': 2048, 'menu_key': 'F12',
                      'banner_image': '', 'gs_outline': False, 'fps': '30', 'game_resolution': '1920x1080',
                      'perf_diag': False, 'perf_crowd': 'full', 'perf_particles': False,
-                     'perf_shadows': False, 'perf_haze': False}
+                     'perf_shadows': False, 'perf_haze': False, 'no_gpu_copies': False}
 BANNER_DIR = USER_DIR / 'banner'
 # Frame rate patches: Junmin Lee's GoldHEN/shadPS4 patch file for Gravity Rush 2 01.11 (the GR2fork
 # repository; not bundled), downloaded once into user/patches, where run.py's patches.py finds it;
@@ -772,6 +780,11 @@ def game_environment(settings, graphics, needs_update):
         'GOW3_DISCORD': '0',
         'PYTHONIOENCODING': 'utf-8',
     })
+    if settings.get('no_gpu_copies'):
+        # As GR2fork (readbacks = false, readbackLinearImages = false): no image or buffer
+        # readbacks. With them, the 60 FPS patch scattered tree foliage.
+        env['GOW3_READBACK_LINEAR'] = '0'
+        env['GOW3_READBACKS'] = '0'
     if needs_update and settings.get('update_dir'):
         env['GOW3_PATCH_DIR'] = settings['update_dir']
     else:
@@ -1552,6 +1565,7 @@ class Launcher:
         self.setting_check(parent, tr('precompile'), 'precompile', tr('precompile_help'))
         self.setting_check(parent, tr('perf_diag'), 'perf_diag', tr('perf_diag_help'))
         self.heading(parent, tr('readback_heading'), pady=(16, 4))
+        self.setting_check(parent, tr('no_gpu_copies'), 'no_gpu_copies', tr('no_gpu_copies_help'))
         limit = self.settings.get('readback_max_kb', 2048)
         limit = limit if limit in READBACK_LIMITS else 2048
         self.choice(parent, tr('readback_max'), READBACK_LIMITS,
