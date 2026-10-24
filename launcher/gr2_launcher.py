@@ -176,7 +176,8 @@ TEXTS = {
         'smart_pending_help': 'Почти без рывков при первом посещении мест. Выключи, если пропадают или мигают '
                               'объекты или свет: тогда игра ждёт каждый шейдер.',
         'precompile': 'Подготавливать шейдеры из кэша при запуске',
-        'precompile_help': 'Меньше рывков в уже пройденных местах, но запуск дольше.',
+        'precompile_help': 'Меньше рывков в уже пройденных местах, но запуск дольше. Пока не включай: '
+                           'с шейдерами из кэша листва на деревьях разлетается (ищу причину).',
         'readback_heading': 'Копирование с видеокарты',
         'no_gpu_copies': 'Не копировать данные с видеокарты (как GR2fork)',
         'no_gpu_copies_help': 'Игра не получает обратно изображения и буферы, которые рисует видеокарта. '
@@ -303,7 +304,8 @@ TEXTS = {
         'smart_pending_help': 'Almost no stutter the first time you visit a place. Turn it off if objects or '
                               'lights go missing or flicker: the game then waits for every shader.',
         'precompile': 'Prepare cached shaders at startup',
-        'precompile_help': 'Less stutter in places you already visited, but a longer start.',
+        'precompile_help': 'Less stutter in places you already visited, but a longer start. Keep it off for '
+                           'now: with cached shaders the tree foliage scatters (being investigated).',
         'readback_heading': 'Copies from the graphics card',
         'no_gpu_copies': "Don't copy data back from the graphics card (like GR2fork)",
         'no_gpu_copies_help': 'The game does not get back the images and buffers the graphics card draws. '
@@ -481,7 +483,7 @@ GRAPHICS_DEFAULTS = {
 LAUNCHER_DEFAULTS = {'game_dir': '', 'update_dir': '', 'modules_dir': '', 'language': '',
                      'window_size': '1920x1080', 'key_map': {}, 'pad_map': {}, 'mouse_look': True,
                      'mouse_sens': 1.0, 'mouse_invert': False, 'pad_dead_zone': 0, 'pad_speaker': 100,
-                     'smart_pending': True, 'precompile': True, 'readback_max_kb': 2048, 'menu_key': 'F12',
+                     'smart_pending': True, 'precompile': False, 'readback_max_kb': 2048, 'menu_key': 'F12',
                      'banner_image': '', 'gs_outline': False, 'fps': '30', 'game_resolution': '1920x1080',
                      'perf_diag': False, 'perf_crowd': 'full', 'perf_particles': False,
                      'perf_shadows': False, 'perf_haze': False, 'no_gpu_copies': False}
@@ -774,7 +776,7 @@ def game_environment(settings, graphics, needs_update):
         'GOW3_READBACK_MAX_KB': str(int(readback)) if readback else '0',
         'GOW3_SMART_PENDING': '1' if settings.get('smart_pending', True) else '0',
         'GOW3_GS_OUTLINE': '1' if settings.get('gs_outline') else '0',
-        'GOW3_PRECOMPILE': os.environ.get('GOW3_PRECOMPILE', '1' if settings.get('precompile', True) else '0'),
+        'GOW3_PRECOMPILE': os.environ.get('GOW3_PRECOMPILE', '1' if settings.get('precompile', False) else '0'),
         # An "Apply and restart" in the game ends it with code 75: game_ended starts it again.
         'GOW3_LAUNCHER_RESTART': '1',
         'GOW3_DISCORD': '0',
