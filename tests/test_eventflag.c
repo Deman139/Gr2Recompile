@@ -4,6 +4,10 @@
 #include <assert.h>
 #include <unistd.h>
 
+uintptr_t runtime_image_start, runtime_image_end;
+const char *runtime_fiber_current(void) { return NULL; }
+int runtime_rwlock_stale_holds(double seconds) { (void)seconds; return 0; }
+void runtime_rwlock_dump(void) {}
 uintptr_t runtime_lookup(const RuntimeExport *table, size_t count, const char *nid) {
     (void)table; (void)count; (void)nid;
     return 0;

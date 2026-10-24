@@ -41,6 +41,20 @@ int runtime_memory_is_mapped(uintptr_t address, uint64_t size);
 const char *runtime_import_name(const char *name);
 uintptr_t runtime_rwlock_resolve(const char *name);
 void runtime_rwlock_report(void);
+/* Hang diagnostics: rwlock holders and event flag waiters (stderr). */
+void runtime_rwlock_dump(void);
+/* How many rwlock holds are older than `seconds`. */
+int runtime_rwlock_stale_holds(double seconds);
+void runtime_eventflag_dump(void);
+/* The fiber running on this thread (its name), or NULL. */
+const char *runtime_fiber_current(void);
+#ifdef _WIN32
+#define runtime_tid() compat_thread_id()
+#else
+#include <unistd.h>
+#include <sys/syscall.h>
+#define runtime_tid() ((unsigned long)syscall(SYS_gettid))
+#endif
 void runtime_set_libc_tls(const void *data, uint64_t filesz, uint64_t memsz);
 void runtime_set_module_tls(uint64_t module, const void *data, uint64_t filesz, uint64_t memsz);
 void runtime_set_procparam(void *param);

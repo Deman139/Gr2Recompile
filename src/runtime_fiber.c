@@ -182,6 +182,10 @@ static __attribute__((noinline)) FiberContext *current_context(void) {
     __asm__ volatile("" ::: "memory");
     return thread_fiber;
 }
+const char *runtime_fiber_current(void) {
+    FiberContext *ctx = current_context();
+    return ctx && ctx->current_fiber ? ctx->current_fiber->name : NULL;
+}
 static __attribute__((noinline)) void set_current_context(FiberContext *ctx) {
     __asm__ volatile("" ::: "memory");
     thread_fiber = ctx;

@@ -51,6 +51,7 @@ static inline int compat_mkdir(const char *path, int mode) { (void)mode; return 
 
 /* pread/pwrite on CRT descriptors: positioned I/O that leaves the file offset unchanged. */
 void compat_set_thread_name(const char *name);
+unsigned long compat_thread_id(void);
 unsigned long compat_last_io_error(void);
 ssize_t compat_pread(int fd, void *buffer, size_t size, int64_t offset);
 ssize_t compat_pwrite(int fd, const void *buffer, size_t size, int64_t offset);

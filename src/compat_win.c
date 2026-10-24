@@ -154,6 +154,8 @@ void compat_set_thread_name(const char *name) {
     if (set && MultiByteToWideChar(CP_UTF8, 0, name, -1, wide, 64)) set(GetCurrentThread(), wide);
 }
 
+unsigned long compat_thread_id(void) { return GetCurrentThreadId(); }
+
 /* One high-resolution timer per thread (Windows 10 1803+); a plain waitable timer before. */
 static __thread HANDLE sleep_timer;
 void compat_sleep_ns(uint64_t ns) {

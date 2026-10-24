@@ -28,6 +28,9 @@ typedef struct Waiter {
     uint64_t bits, result;
     uint32_t mode;
     int ready, canceled, deleted;
+    unsigned long tid;
+    uintptr_t caller;
+    const char *fiber;
     struct Waiter *next;
 } Waiter;
 typedef struct {
@@ -38,7 +41,12 @@ typedef struct {
     int multi, deleted;
     uint64_t bits;
     Waiter *first;
+    struct EventFlagLink *link;
 } EventFlag;
+/* Every live event flag, for the hang report (runtime_eventflag_dump). */
+typedef struct EventFlagLink { EventFlag *flag; struct EventFlagLink *next; } EventFlagLink;
+static pthread_mutex_t flags_lock = PTHREAD_MUTEX_INITIALIZER;
+static EventFlagLink *all_flags;
 #define EVF_MAGIC UINT32_C(0x45564631)
 
 static atomic_ullong created, waits, blocked, sets;
@@ -80,6 +88,13 @@ static ABI int32_t evf_create(void **out, const char *name, uint32_t attr, uint6
     strcpy(f->name, name);
     f->multi = (attr & 0xf0) == ATTR_MULTI;
     f->bits = pattern;
+    EventFlagLink *link = calloc(1, sizeof(*link));
+    if (link) {
+        link->flag = f;
+        pthread_mutex_lock(&flags_lock);
+        link->next = all_flags; all_flags = link; f->link = link;
+        pthread_mutex_unlock(&flags_lock);
+    }
     *out = f;
     atomic_fetch_add(&created, 1);
     if (getenv("GOW3_TRACE_EVF"))
@@ -90,6 +105,11 @@ static ABI int32_t evf_create(void **out, const char *name, uint32_t attr, uint6
 static ABI int32_t evf_delete(void *handle) {
     EventFlag *f = checked(handle);
     if (!f) return ERR(E_SRCH);
+    /* Out of the hang report's list first (it locks flags_lock, then each flag). */
+    pthread_mutex_lock(&flags_lock);
+    for (EventFlagLink **p = &all_flags; *p; p = &(*p)->next)
+        if (*p == f->link) { EventFlagLink *dead = *p; *p = dead->next; free(dead); break; }
+    pthread_mutex_unlock(&flags_lock);
     pthread_mutex_lock(&f->lock);
     f->deleted = 1;
     for (Waiter *w = f->first; w; w = w->next) { w->deleted = 1; pthread_cond_signal(&w->event); }
@@ -103,7 +123,7 @@ static ABI int32_t evf_delete(void *handle) {
 }
 
 /* timeout: microseconds, NULL waits forever; 0 polls. */
-static int32_t wait_flag(EventFlag *f, uint64_t bits, uint32_t mode, uint64_t *result, uint32_t *timeout) {
+static int32_t wait_flag(EventFlag *f, uint64_t bits, uint32_t mode, uint64_t *result, uint32_t *timeout, uintptr_t caller) {
     if (!bits) return ERR(E_INVAL);
     uint32_t wait = mode & 0xf, clear = mode & 0xf0;
     if ((wait != WAIT_AND && wait != WAIT_OR) || (clear && clear != CLEAR_ALL && clear != CLEAR_PAT) || (mode & ~0xffu))
@@ -124,7 +144,7 @@ static int32_t wait_flag(EventFlag *f, uint64_t bits, uint32_t mode, uint64_t *r
         return ERR(E_TIMEDOUT);
     }
     atomic_fetch_add(&blocked, 1);
-    Waiter w = {.bits = bits, .mode = mode};
+    Waiter w = {.bits = bits, .mode = mode, .tid = runtime_tid(), .caller = caller, .fiber = runtime_fiber_current()};
     pthread_condattr_t attr;
     host_check(pthread_condattr_init(&attr));
     host_check(pthread_condattr_setclock(&attr, WAIT_CLOCK));
@@ -141,8 +161,32 @@ static int32_t wait_flag(EventFlag *f, uint64_t bits, uint32_t mode, uint64_t *r
         deadline.tv_sec += (time_t)(ns / 1000000000);
         deadline.tv_nsec = (long)(ns % 1000000000);
     }
+    /* Untimed waits wake every 10 s: while an rwlock has been held for that long too, the game
+     * is probably hung, and the first such wait prints what every thread waits for. */
+    int slices = 0;
     while (!w.ready && !w.canceled && !w.deleted) {
-        int e = timeout ? pthread_cond_timedwait(&w.event, &f->lock, &deadline) : pthread_cond_wait(&w.event, &f->lock);
+        int e;
+        if (timeout) e = pthread_cond_timedwait(&w.event, &f->lock, &deadline);
+        else {
+            struct timespec slice;
+            clock_gettime(WAIT_CLOCK, &slice);
+            slice.tv_sec += 10;
+            e = pthread_cond_timedwait(&w.event, &f->lock, &slice);
+            if (e == ETIMEDOUT) {
+                if (++slices == 1 && runtime_rwlock_stale_holds(10.0)) {
+                    static atomic_int reports;
+                    if (atomic_fetch_add(&reports, 1) < 2) {
+                        pthread_mutex_unlock(&f->lock);
+                        fprintf(stderr, "Runtime: thread %lu has waited 10 s on event flag '%s' while an rwlock is held "
+                                "as long; the game may hang:\n", w.tid, f->name);
+                        runtime_rwlock_dump();
+                        runtime_eventflag_dump();
+                        pthread_mutex_lock(&f->lock);
+                    }
+                }
+                continue;
+            }
+        }
         if (e == ETIMEDOUT) {
             if (!w.ready && !w.canceled && !w.deleted) timed_out = 1;
             break;
@@ -167,14 +211,14 @@ static int32_t wait_flag(EventFlag *f, uint64_t bits, uint32_t mode, uint64_t *r
 
 static ABI int32_t evf_wait(void *handle, uint64_t bits, uint32_t mode, uint64_t *result, uint32_t *timeout) {
     EventFlag *f = checked(handle);
-    return f ? wait_flag(f, bits, mode, result, timeout) : ERR(E_SRCH);
+    return f ? wait_flag(f, bits, mode, result, timeout, (uintptr_t)__builtin_return_address(0)) : ERR(E_SRCH);
 }
 
 static ABI int32_t evf_poll(void *handle, uint64_t bits, uint32_t mode, uint64_t *result) {
     EventFlag *f = checked(handle);
     if (!f) return ERR(E_SRCH);
     uint32_t zero = 0;
-    int32_t status = wait_flag(f, bits, mode, result, &zero);
+    int32_t status = wait_flag(f, bits, mode, result, &zero, 0);
     return status == ERR(E_TIMEDOUT) ? ERR(E_BUSY) : status;
 }
 
@@ -230,6 +274,30 @@ static const RuntimeExport exports[] = {
 };
 
 uintptr_t runtime_eventflag_resolve(const char *name) { return RUNTIME_LOOKUP(exports, name); }
+
+void runtime_eventflag_dump(void) {
+    pthread_mutex_lock(&flags_lock);
+    fputs("Runtime: event flags with waiting threads:\n", stderr);
+    for (EventFlagLink *link = all_flags; link; link = link->next) {
+        EventFlag *f = link->flag;
+        pthread_mutex_lock(&f->lock);
+        if (f->first) {
+            fprintf(stderr, "  '%s' %p: pattern 0x%llx\n", f->name, (void *)f, (unsigned long long)f->bits);
+            for (Waiter *w = f->first; w; w = w->next) {
+                const uintptr_t at = w->caller - runtime_image_start;
+                fprintf(stderr, "    thread %lu waits for 0x%llx (%s%s), caller %s0x%llx%s%s%s\n", w->tid,
+                        (unsigned long long)w->bits, (w->mode & 0xf) == WAIT_AND ? "all" : "any",
+                        w->ready ? ", woken" : "",
+                        w->caller >= runtime_image_start && w->caller < runtime_image_end ? "image+" : "",
+                        (unsigned long long)(w->caller >= runtime_image_start && w->caller < runtime_image_end ? at : w->caller),
+                        w->fiber ? " in fiber '" : "", w->fiber ? w->fiber : "", w->fiber ? "'" : "");
+            }
+        }
+        pthread_mutex_unlock(&f->lock);
+    }
+    fflush(stderr);
+    pthread_mutex_unlock(&flags_lock);
+}
 
 void runtime_eventflag_report(void) {
     printf("Runtime: event flags created=%llu, waits=%llu (blocked %llu), sets=%llu\n",
