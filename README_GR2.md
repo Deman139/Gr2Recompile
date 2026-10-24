@@ -63,6 +63,19 @@ bundled. At 60 FPS the game steps its time 1/60 s per frame: below 60 FPS it slo
 shadPS4/GoldHEN XML file in `user/patches` that names the game's title ID works the same way
 (`patches.json`: `{"enabled": ["<file>/<patch name>"], "disabled": [...]}`).
 
+### NVIDIA DLAA
+
+Launcher → Graphics → "NVIDIA DLAA" (`GOW3_DLAA=1`) replaces the game's anti-aliasing compute pass
+(cs `6f705679`: FXAA plus a light temporal blend on the tonemapped frame) with DLSS at native
+resolution (`vk_gr2_dlaa.cpp`). Motion vectors come from the game's own velocity target (previous −
+current position in NDC, y up; `gr2_dlaa_motion.comp` turns it into pixels), scene geometry drawn
+with the scene depth gets a Halton sub-pixel viewport jitter, and DLSS writes the pass's RGBA8 output
+the display composite samples. It needs a GeForce RTX card and the DLSS bridge: `gow3_dlss.dll`
+(built from `gpu/dlss_bridge` with Visual Studio) and NVIDIA's `nvngx_dlss.dll` in `out/`; without
+them, or when the pass's images are not recognised, the game's own pass runs. Options:
+`GOW3_DLSS_PRESET` (11 = model K, transformer), `GOW3_DLAA_JITTER=0`, `GOW3_DLAA_JITTER_SIGN=-1`,
+`GOW3_DLAA_PHASES`, `GOW3_DLAA_CS`.
+
 ## What differs from the Killzone port
 
 | Part | Change |
