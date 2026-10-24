@@ -144,12 +144,6 @@ TEXTS = {
         'fsr1_help': 'Для экранов выше 1080p (1440p, 4K): чётче обычного растяжения. На 1080p ничего не меняет.',
         'sharpen': 'Повышение резкости (RCAS)', 'show_fps': 'Показывать FPS на экране',
         'gs_outline': 'Комиксный контур персонажей (экспериментально)',
-        'dlaa': 'NVIDIA DLAA — сглаживание нейросетью (RTX)',
-        'dlaa_help': 'Заменяет сглаживание игры (FXAA) на DLSS в родном разрешении: ровные края без '
-                     'мерцания. Нужны видеокарта GeForce RTX, gow3_dlss.dll и nvngx_dlss.dll рядом с игрой. '
-                     'Без них остаётся сглаживание игры.',
-        'dlss_model': 'Модель DLSS', 'dlss_model_default': 'Как в драйвере',
-        'dlss_model_k': 'Transformer (K, нужен DLSS 4)',
         'perf_heading': 'Производительность (патчи GR2fork)',
         'perf_help': 'В людных местах частоту кадров ограничивает число объектов на экране, а не видеокарта: '
                      'эти патчи Junmin Lee убирают часть объектов и эффектов.',
@@ -273,12 +267,6 @@ TEXTS = {
         'fsr1_help': 'For screens above 1080p (1440p, 4K): sharper than plain stretching. No change at 1080p.',
         'sharpen': 'Sharpening (RCAS)', 'show_fps': 'Show FPS on screen',
         'gs_outline': 'Comic outline around characters (experimental)',
-        'dlaa': 'NVIDIA DLAA — AI anti-aliasing (RTX)',
-        'dlaa_help': "Replaces the game's anti-aliasing (FXAA) with DLSS at native resolution: smooth, "
-                     'stable edges. Needs a GeForce RTX card, gow3_dlss.dll and nvngx_dlss.dll next to the '
-                     "game; without them the game's own anti-aliasing stays.",
-        'dlss_model': 'DLSS model', 'dlss_model_default': 'Driver default',
-        'dlss_model_k': 'Transformer (K, needs DLSS 4)',
         'perf_heading': 'Performance (GR2fork patches)',
         'perf_help': 'In busy places the frame rate is limited by the number of objects on screen, not by the '
                      'graphics card: these patches by Junmin Lee remove some objects and effects.',
@@ -488,10 +476,8 @@ LAUNCHER_DEFAULTS = {'game_dir': '', 'update_dir': '', 'modules_dir': '', 'langu
                      'smart_pending': True, 'precompile': True, 'readback_max_kb': 2048, 'menu_key': 'F12',
                      'banner_image': '', 'gs_outline': False, 'fps': '30', 'game_resolution': '1920x1080',
                      'perf_diag': False, 'perf_crowd': 'full', 'perf_particles': False,
-                     'perf_shadows': False, 'perf_haze': False, 'dlaa': False, 'dlss_preset': '0'}
+                     'perf_shadows': False, 'perf_haze': False}
 BANNER_DIR = USER_DIR / 'banner'
-# NGX render presets: driver default, K (transformer model, DLSS 4 DLLs).
-DLSS_PRESETS = ['0', '11']
 # Frame rate patches: Junmin Lee's GoldHEN/shadPS4 patch file for Gravity Rush 2 01.11 (the GR2fork
 # repository; not bundled), downloaded once into user/patches, where run.py's patches.py finds it;
 # user/patches.json enables the chosen one and disables the rest of that file (its other patches
@@ -780,8 +766,6 @@ def game_environment(settings, graphics, needs_update):
         'GOW3_READBACK_MAX_KB': str(int(readback)) if readback else '0',
         'GOW3_SMART_PENDING': '1' if settings.get('smart_pending', True) else '0',
         'GOW3_GS_OUTLINE': '1' if settings.get('gs_outline') else '0',
-        'GOW3_DLAA': '1' if settings.get('dlaa') else '0',
-        'GOW3_DLSS_PRESET': str(settings.get('dlss_preset') or '0'),
         'GOW3_PRECOMPILE': os.environ.get('GOW3_PRECOMPILE', '1' if settings.get('precompile', True) else '0'),
         # An "Apply and restart" in the game ends it with code 75: game_ended starts it again.
         'GOW3_LAUNCHER_RESTART': '1',
@@ -1366,10 +1350,6 @@ class Launcher:
         self.check(parent, tr('sharpen'), 'rcas')
         self.check(parent, tr('show_fps'), 'show_fps')
         self.setting_check(parent, tr('gs_outline'), 'gs_outline', tr('gs_outline_help'))
-        self.setting_check(parent, tr('dlaa'), 'dlaa', tr('dlaa_help'))
-        preset = self.settings.get('dlss_preset') if self.settings.get('dlss_preset') in DLSS_PRESETS else '0'
-        self.choice(parent, tr('dlss_model'), DLSS_PRESETS, [tr('dlss_model_default'), tr('dlss_model_k')],
-                    preset, lambda v: self.set_setting('dlss_preset', v))
         self.heading(parent, tr('perf_heading'), pady=(16, 4))
         self.note(parent, tr('perf_help'))
         crowd = self.settings.get('perf_crowd') if self.settings.get('perf_crowd') in CROWD_CHOICES else 'full'
