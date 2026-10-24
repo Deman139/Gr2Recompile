@@ -122,6 +122,12 @@ TEXTS = {
         'display_mode': 'Режим экрана', 'mode_windowed': 'В окне', 'mode_borderless': 'Окно без рамки',
         'mode_fullscreen': 'Полный экран',
         'window_size': 'Размер окна',
+        'frame_rate': 'Частота кадров', 'fps_30': '30 FPS (как на PS4)',
+        'fps_60': '60 FPS (патч GR2fork, экспериментально)',
+        'fps_help': 'Патч 60 FPS Junmin Lee (GR2fork): игра считает время шагами по 1/60 секунды, поэтому '
+                    'если компьютер не держит 60 кадров, игра замедляется. Файл патча скачивается один раз '
+                    'из репозитория GR2fork в user/patches.',
+        'fps_failed': 'Не удалось подготовить патч 60 FPS:\n{error}\n\nЗапустить игру в 30 FPS?',
         'window_size_help': 'Только в оконном режиме. Картинка игры масштабируется под окно.',
         'vsync': 'Вертикальная синхронизация (VSync)', 'vsync_help': 'Без разрывов кадра.',
         'anisotropy': 'Анизотропная фильтрация', 'aniso_game': 'Как в игре',
@@ -221,6 +227,12 @@ TEXTS = {
         'display_mode': 'Display mode', 'mode_windowed': 'Windowed', 'mode_borderless': 'Borderless window',
         'mode_fullscreen': 'Fullscreen',
         'window_size': 'Window size',
+        'frame_rate': 'Frame rate', 'fps_30': '30 FPS (as on PS4)',
+        'fps_60': '60 FPS (GR2fork patch, experimental)',
+        'fps_help': 'Junmin Lee\'s 60 FPS patch (GR2fork): the game steps its time 1/60 s per frame, so it '
+                    'slows down when the PC cannot hold 60 FPS. The patch file is downloaded once from the '
+                    'GR2fork repository into user/patches.',
+        'fps_failed': 'Could not prepare the 60 FPS patch:\n{error}\n\nStart the game at 30 FPS?',
         'window_size_help': 'Windowed mode only. The game image is scaled to the window.',
         'vsync': 'VSync (vertical sync)', 'vsync_help': 'Prevents tearing.',
         'anisotropy': 'Anisotropic filtering', 'aniso_game': 'Game default',
@@ -426,8 +438,64 @@ LAUNCHER_DEFAULTS = {'game_dir': '', 'update_dir': '', 'modules_dir': '', 'langu
                      'window_size': '1920x1080', 'key_map': {}, 'pad_map': {}, 'mouse_look': True,
                      'mouse_sens': 1.0, 'mouse_invert': False, 'pad_dead_zone': 0, 'pad_speaker': 100,
                      'smart_pending': True, 'precompile': True, 'readback_max_kb': 2048, 'menu_key': 'F12',
-                     'banner_image': '', 'gs_outline': False}
+                     'banner_image': '', 'gs_outline': False, 'fps': '30'}
 BANNER_DIR = USER_DIR / 'banner'
+# Frame rate patches: Junmin Lee's GoldHEN/shadPS4 patch file for Gravity Rush 2 01.11 (the GR2fork
+# repository; not bundled), downloaded once into user/patches, where run.py's patches.py finds it;
+# user/patches.json enables the chosen one and disables the rest of that file (its other patches
+# stay off unless the player edits the file).
+FPS_PATCH_URL = ('https://raw.githubusercontent.com/junminlee2004/GoldHEN_Patch_Repository/main/'
+                 'patches/xml/GravityDaze2-Orbis.xml')
+FPS_PATCH_FILE = 'GravityDaze2-Orbis.xml'
+FPS_CHOICES = ('30', '60')
+PATCHES_DIR = USER_DIR / 'patches'
+PATCHES_CONFIG = USER_DIR / 'patches.json'
+
+
+def fps_patch_names(path):
+    """Names of the 01.11 eboot patches in the patch file."""
+    import xml.etree.ElementTree as ET
+    return [m.get('Name') for m in ET.parse(path).getroot().iter('Metadata')
+            if m.get('AppVer') == GAME_VERSION and m.get('AppElf', 'eboot.bin') == 'eboot.bin' and m.get('Name')]
+
+
+def prepare_fps_patch(fps):
+    """Selects the frame rate patch for this start (fps '30' turns them off). Downloads the patch
+    file first when needed. Raises OSError/ValueError when the patch cannot be prepared."""
+    path = PATCHES_DIR / FPS_PATCH_FILE
+    if fps != '30' and not path.is_file():
+        import urllib.request
+        request = urllib.request.Request(FPS_PATCH_URL, headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0)'})
+        with urllib.request.urlopen(request, timeout=30) as response:
+            data = response.read(16 * 1024 * 1024)
+        PATCHES_DIR.mkdir(parents=True, exist_ok=True)
+        partial = path.with_suffix('.part')
+        partial.write_bytes(data)
+        try:
+            fps_patch_names(partial)
+        except Exception as error:  # noqa: BLE001  (not the XML we expect)
+            partial.unlink(missing_ok=True)
+            raise ValueError(f'{FPS_PATCH_FILE}: {error}') from error
+        partial.replace(path)
+    if not path.is_file():
+        return
+    names = fps_patch_names(path)
+    wanted = None
+    if fps != '30':
+        wanted = next((n for n in names if n.lower().startswith(f'{fps}fps')), None)
+        if not wanted:
+            raise ValueError(f'{FPS_PATCH_FILE} has no {fps} FPS patch for {GAME_VERSION}')
+    try:
+        config = json.loads(PATCHES_CONFIG.read_text(encoding='utf-8'))
+    except (OSError, ValueError):
+        config = {}
+    if not isinstance(config, dict):
+        config = {}
+    prefix = FPS_PATCH_FILE + '/'
+    keep = lambda key: [k for k in config.get(key, []) if isinstance(k, str) and not k.startswith(prefix)]
+    config['enabled'] = keep('enabled') + ([prefix + wanted] if wanted else [])
+    config['disabled'] = keep('disabled') + [prefix + n for n in names if n != wanted]
+    PATCHES_CONFIG.write_text(json.dumps(config, indent=2, ensure_ascii=False) + '\n', encoding='utf-8')
 
 
 def is_link(value):
@@ -1178,6 +1246,9 @@ class Launcher:
         size = self.settings.get('window_size') if self.settings.get('window_size') in WINDOW_SIZES else '1920x1080'
         self.choice(parent, tr('window_size'), WINDOW_SIZES, [s.replace('x', ' × ') for s in WINDOW_SIZES], size,
                     lambda v: self.set_setting('window_size', v), tr('window_size_help'))
+        fps = self.settings.get('fps') if self.settings.get('fps') in FPS_CHOICES else '30'
+        self.choice(parent, tr('frame_rate'), FPS_CHOICES, [tr('fps_30'), tr('fps_60')], fps,
+                    lambda v: self.set_setting('fps', v), tr('fps_help'))
         self.choice(parent, tr('anisotropy'), ANISOTROPY, [tr('aniso_game'), '2x', '4x', '8x', '16x'],
                     self.graphics['anisotropy'], lambda v: self.set_graphic('anisotropy', v))
         self.choice(parent, tr('mip_bias'), MIP_BIASES,
@@ -1440,6 +1511,16 @@ class Launcher:
             return
         save_graphics(self.graphics)
         save_launcher(self.settings)
+        fps = self.settings.get('fps') if self.settings.get('fps') in FPS_CHOICES else '30'
+        try:
+            prepare_fps_patch(fps)
+        except Exception as error:  # noqa: BLE001  (network, HTTP, file or XML errors: shown to the player)
+            if not self.messagebox.askyesno(APP_NAME, tr('fps_failed', error=error), parent=self.root):
+                return
+            try:
+                prepare_fps_patch('30')
+            except Exception:  # noqa: BLE001
+                pass
         run_dir = LOGS_DIR / time.strftime('%Y-%m-%d_%H-%M-%S')
         run_dir.mkdir(parents=True, exist_ok=True)
         prune_logs()

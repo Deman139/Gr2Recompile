@@ -51,6 +51,16 @@ A package players can run without MSYS2 or Python (`dist/Gravity Rush 2/Gravity 
 `bash packaging/windows/package_gr2.sh` (needs a python.org Python; the icon is made once from
 your dump, as the script says).
 
+### 60 FPS
+
+Launcher → Graphics → Frame rate → 60 FPS uses Junmin Lee's 60 FPS patch for 01.11 from
+[GR2fork](https://github.com/junminlee2004/GR2fork) (its
+[patch repository](https://github.com/junminlee2004/GoldHEN_Patch_Repository)). The launcher downloads
+the patch file once into `user/patches` and selects the patch in `user/patches.json`; nothing is
+bundled. The game then steps its time 1/60 s per frame: below 60 FPS it slows down. Any other
+shadPS4/GoldHEN XML file in `user/patches` that names the game's title ID works the same way
+(`patches.json`: `{"enabled": ["<file>/<patch name>"], "disabled": [...]}`).
+
 ## What differs from the Killzone port
 
 | Part | Change |
@@ -63,6 +73,7 @@ your dump, as the script says).
 | `src/runtime_gr2.c` | Other kernel/libc functions; offline network, content and sharing services; photo JPEG and Audio3d unavailable for now |
 | `src/runtime_services.c` | PSN dialogs and services answering as signed out |
 | `vk_rasterizer.cpp` | Draws with adjacency (the comic outline geometry shader, mistranslated: black streaks) are skipped unless `GOW3_GS_OUTLINE=1`; found by [HayatoG/gr2_pc](https://github.com/HayatoG/gr2_pc) |
+| `scripts/patches.py` | Games without a built-in patch file (Gravity Rush 2) get the third-party XML patches in `user/patches` that name their title ID and version |
 | `tools/check_imports.py` | Offline check that every import the host must serve is implemented |
 
 Check the imports after changing the runtime:

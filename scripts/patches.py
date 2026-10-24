@@ -334,8 +334,19 @@ def main():
     title=game_title_id(a.game_dir)
     profile=game_profile_for(a.game_dir)
     if not profile:
-        write_patches(a.out,[])
-        print(f'Patches: no patch profile for {title}: none applied')
+        # No built-in file (Gravity Rush 2): only the third-party files that name this title ID,
+        # for the version the game reports (an update folder's param.sfo when one is used).
+        version=game_app_version(os.environ.get('GOW3_PATCH_DIR') or a.game_dir) or game_app_version(a.game_dir)
+        writes,selected=[],[]
+        if a.patches_dir and title and version and (a.out/'eboot.elf').is_file():
+            segments=eboot_segments((a.out/'eboot.elf').read_bytes())
+            selected=external_selection(external_patches(a.patches_dir,version,a.out/'none.xml',{title}),
+                                        a.patches_config)
+            writes=compile_external(selected,segments)
+        write_patches(a.out,writes)
+        applied=[key.split('/',1)[-1] for key,_,_ in selected]
+        (a.out/'patch_status.json').write_text(json.dumps({'sha256':None,'applied':applied,'skipped':{}}))
+        print(f'Patches: {title} {version}; {len(writes)} writes from {applied or "none"}')
         return
     ids,xml,tag,_name=profile
     sha=eboot_sha256(a.game_dir)
