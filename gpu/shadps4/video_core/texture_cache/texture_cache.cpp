@@ -107,6 +107,18 @@ void TextureCache::RetireReadbacks() {
     has_pending_readbacks.store(pending_readbacks.Bytes() != 0, std::memory_order_release);
 }
 
+// gr2: a buffer binding reads only its own bytes from guest memory: a pending copy that merely
+// shares a page with it (Gravity Rush 2's per-frame buffers next to its read-back images) is not
+// waited for. Measured at 4K: every such wait was page-only, 0.6-1.5 s of every 5 s on the GPU
+// thread. GOW3_READBACK_PAGE_WAIT=1 restores the page rule.
+static bool ByteExact(ReadbackSource source) {
+    static const bool page_rule = [] {
+        const char* env = std::getenv("GOW3_READBACK_PAGE_WAIT");
+        return env && env[0] == '1';
+    }();
+    return !page_rule && source == ReadbackSource::BufferObtain;
+}
+
 bool TextureCache::ResolveReadbacks(VAddr address, u64 size, bool assume_locks,
                                     ReadbackSource source) {
     if (!deferred_readbacks || !has_pending_readbacks.load(std::memory_order_acquire)) return false;
@@ -119,7 +131,7 @@ bool TextureCache::ResolveReadbacks(VAddr address, u64 size, bool assume_locks,
             readbacks_released += pending_readbacks.ReleaseOutside(address, size, 64_KB,
                 [this](auto& entry) { WatchReadback<false>(entry.address, entry.size); });
         }
-        if (!pending_readbacks.RequiredTick(address, size)) return false;
+        if (!pending_readbacks.RequiredTick(address, size, ByteExact(source))) return false;
     }
     const auto resolve = [this, address, size, source] {
         const bool diag = Vulkan::WaitDiagnostics::Enabled();
@@ -138,7 +150,7 @@ bool TextureCache::ResolveReadbacks(VAddr address, u64 size, bool assume_locks,
         if (diag && (source == ReadbackSource::BufferObtain || source == ReadbackSource::CacheCleanup)) {
             // gr2: what a buffer binding waited for (the first 48 waits of a run).
             static std::atomic<unsigned> shown{0};
-            if (pending_readbacks.RequiredTick(address, size) && shown.fetch_add(1) < 48) {
+            if (pending_readbacks.RequiredTick(address, size, ByteExact(source)) && shown.fetch_add(1) < 48) {
                 pending_readbacks.ForEachRequired(address, size, [&](const auto& entry) {
                     const bool bytes = address < entry.address + entry.size && entry.address < address + size;
                     std::printf("Readback wait (%s): range 0x%llx+0x%llx, copy 0x%llx+0x%llx, %s\n",
@@ -150,7 +162,7 @@ bool TextureCache::ResolveReadbacks(VAddr address, u64 size, bool assume_locks,
                 });
             }
         }
-        if (const u64 tick = pending_readbacks.RequiredTick(address, size)) {
+        if (const u64 tick = pending_readbacks.RequiredTick(address, size, ByteExact(source))) {
             ++readbacks_waited;
             waited = !scheduler.IsFree(tick);
             const auto start = diag ? std::chrono::steady_clock::now()

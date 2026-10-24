@@ -45,10 +45,16 @@ public:
         entries.push_back({address, size, tick, std::move(payload)});
         bytes += size;
     }
-    std::uint64_t RequiredTick(std::uint64_t address, std::uint64_t size) const {
+    /// bytes: only copies sharing bytes with the range count (a GPU buffer binding reads no
+    /// other byte of a shared page from them); otherwise every copy sharing a page (CPU access,
+    /// whose faults are per page).
+    std::uint64_t RequiredTick(std::uint64_t address, std::uint64_t size, bool bytes = false) const {
         std::uint64_t tick = 0;
         for (const auto& entry : entries) {
-            if (entry.valid && entry.watched && OverlapsPage(entry, address, size)) tick = entry.tick;
+            if (entry.valid && entry.watched &&
+                (bytes ? OverlapsBytes(entry, address, size) : OverlapsPage(entry, address, size))) {
+                tick = entry.tick;
+            }
         }
         return tick;
     }
@@ -97,6 +103,9 @@ public:
     std::uint64_t Bytes() const { return bytes; }
 
 private:
+    static bool OverlapsBytes(const Entry& entry, std::uint64_t address, std::uint64_t size) {
+        return size && address < entry.address + entry.size && entry.address < address + size;
+    }
     static bool OverlapsPage(const Entry& entry, std::uint64_t address, std::uint64_t size) {
         if (!size) return false;
         const auto begin = entry.address & ~std::uint64_t{4095};
