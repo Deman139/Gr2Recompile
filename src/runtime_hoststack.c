@@ -32,7 +32,10 @@ typedef struct AltStack {
     struct AltStack *next;
 } AltStack;
 
-/* gs offset of the TEB TLS slot holding the thread's AltStack (0x1480 + 8 * slot); 0 = off. */
+/* Where the thread's AltStack pointer is: below 0x1780, the gs offset of a TEB TlsSlots entry
+ * (0x1480 + 8 * slot, slots 0-63); from 0x1780, 0x1780 + 8 * (slot - 64): an entry of the
+ * TlsExpansionSlots array the TEB points to at gs:0x1780 (slots 64-1087; the Vulkan driver and
+ * the other DLLs often hold all 64 first ones). 0 = off. */
 uint32_t runtime_hoststack_slot __asm__("runtime_hoststack_slot");
 static DWORD slot = TLS_OUT_OF_INDEXES;
 static size_t stack_size;
@@ -63,7 +66,19 @@ __asm__(
     "    movl runtime_hoststack_slot(%rip), %r10d\n"
     "    testl %r10d, %r10d\n"
     "    jz 2f\n"
+    "    cmpl $0x1780, %r10d\n"
+    "    jae 4f\n"
     "    movq %gs:(%r10), %r10\n"
+    "    jmp 5f\n"
+    "4:\n"                                 /* an expansion slot (r11 is kept in xmm15) */
+    "    movq %r11, %xmm15\n"
+    "    movq %gs:0x1780, %r11\n"
+    "    testq %r11, %r11\n"
+    "    jz 6f\n"
+    "    subl $0x1780, %r10d\n"
+    "    movq (%r11,%r10), %r10\n"
+    "    movq %xmm15, %r11\n"
+    "5:\n"
     "    testq %r10, %r10\n"
     "    jz 2f\n"                           /* a thread without a host stack */
     "    movq 8(%r10), %xmm14\n"
@@ -104,6 +119,8 @@ __asm__(
     "    movq %xmm15, %gs:0x08\n"
     "    movq 152(%rsp), %rsp\n"
     "    ret\n"
+    "6:\n"
+    "    movq %xmm15, %r11\n"
     "2:\n"
     "    jmp *%r11\n"
     /* Microsoft ABI: long runtime_hoststack_run(long (*function)(void *), void *argument). */
@@ -117,7 +134,17 @@ __asm__(
     "    movl runtime_hoststack_slot(%rip), %eax\n"
     "    testl %eax, %eax\n"
     "    jz 3f\n"
+    "    cmpl $0x1780, %eax\n"
+    "    jae 4f\n"
     "    movq %gs:(%rax), %rax\n"
+    "    jmp 5f\n"
+    "4:\n"
+    "    movq %gs:0x1780, %r10\n"
+    "    testq %r10, %r10\n"
+    "    jz 3f\n"
+    "    subl $0x1780, %eax\n"
+    "    movq (%r10,%rax), %rax\n"
+    "5:\n"
     "    testq %rax, %rax\n"
     "    jz 3f\n"
     "    pushq %rbx\n"
@@ -162,16 +189,16 @@ void runtime_hoststack_init(void) {
     }
     if (kb < 64) kb = 64;
     slot = TlsAlloc();
-    if (slot >= 64) {
+    if (slot == TLS_OUT_OF_INDEXES || slot >= 64 + 1024) {
         if (slot != TLS_OUT_OF_INDEXES) TlsFree(slot);
         slot = TLS_OUT_OF_INDEXES;
         stack_size = 1;
-        fprintf(stderr, "Runtime: no TEB TLS slot below 64: host calls stay on guest stacks\n");
+        fprintf(stderr, "Runtime: no TLS slot: host calls stay on guest stacks\n");
         return;
     }
     stack_size = (size_t)kb * 1024;
-    runtime_hoststack_slot = 0x1480 + 8 * (uint32_t)slot;
-    printf("Runtime: host calls from guest stacks run on %llu KiB host stacks\n", kb);
+    runtime_hoststack_slot = slot < 64 ? 0x1480 + 8 * (uint32_t)slot : 0x1780 + 8 * ((uint32_t)slot - 64);
+    printf("Runtime: host calls from guest stacks run on %llu KiB host stacks (TLS slot %lu)\n", kb, slot);
 }
 
 void runtime_hoststack_attach(void) {
