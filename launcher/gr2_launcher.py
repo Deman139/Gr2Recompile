@@ -144,6 +144,14 @@ TEXTS = {
         'fsr1_help': 'Для экранов выше 1080p (1440p, 4K): чётче обычного растяжения. На 1080p ничего не меняет.',
         'sharpen': 'Повышение резкости (RCAS)', 'show_fps': 'Показывать FPS на экране',
         'gs_outline': 'Комиксный контур персонажей (экспериментально)',
+        'perf_heading': 'Производительность (патчи GR2fork)',
+        'perf_help': 'В людных местах частоту кадров ограничивает число объектов на экране, а не видеокарта: '
+                     'эти патчи Junmin Lee убирают часть объектов и эффектов.',
+        'perf_crowd': 'Прохожие, птицы, патрульные роботы', 'crowd_full': 'Как в игре',
+        'crowd_half': 'Меньше (около 60%)', 'crowd_quarter': 'Мало (около 35%)',
+        'perf_particles': 'Вдвое меньше частиц (дым, пыль, обломки)',
+        'perf_shadows': 'Без динамических теней (статичные и запечённые остаются)',
+        'perf_haze': 'Без марева (искажение над огнём и взрывами)',
         'gs_outline_help': 'Контур рисуется геометрическим шейдером, который порт пока переводит неверно: '
                            'по всему кадру появляются чёрные линии. Выключено — линий нет, но без части контура.',
         'graphics_note': 'Во время игры F12 открывает меню порта (на геймпаде R3 + L2), F11 делает скриншот. '
@@ -259,6 +267,14 @@ TEXTS = {
         'fsr1_help': 'For screens above 1080p (1440p, 4K): sharper than plain stretching. No change at 1080p.',
         'sharpen': 'Sharpening (RCAS)', 'show_fps': 'Show FPS on screen',
         'gs_outline': 'Comic outline around characters (experimental)',
+        'perf_heading': 'Performance (GR2fork patches)',
+        'perf_help': 'In busy places the frame rate is limited by the number of objects on screen, not by the '
+                     'graphics card: these patches by Junmin Lee remove some objects and effects.',
+        'perf_crowd': 'Pedestrians, birds, patrol robots', 'crowd_full': 'As in the game',
+        'crowd_half': 'Fewer (about 60%)', 'crowd_quarter': 'Few (about 35%)',
+        'perf_particles': 'Half the particles (smoke, dust, debris)',
+        'perf_shadows': 'No dynamic shadows (static and baked ones stay)',
+        'perf_haze': 'No heat haze (distortion over fire and explosions)',
         'gs_outline_help': 'The outline is drawn by a geometry shader the port still translates wrongly: '
                            'black streaks across the frame. Off: no streaks, part of the outline is missing.',
         'graphics_note': 'In game, F12 opens the port menu (on a controller: R3 + L2) and F11 takes a screenshot. '
@@ -459,7 +475,8 @@ LAUNCHER_DEFAULTS = {'game_dir': '', 'update_dir': '', 'modules_dir': '', 'langu
                      'mouse_sens': 1.0, 'mouse_invert': False, 'pad_dead_zone': 0, 'pad_speaker': 100,
                      'smart_pending': True, 'precompile': True, 'readback_max_kb': 2048, 'menu_key': 'F12',
                      'banner_image': '', 'gs_outline': False, 'fps': '30', 'game_resolution': '1920x1080',
-                     'perf_diag': False}
+                     'perf_diag': False, 'perf_crowd': 'full', 'perf_particles': False,
+                     'perf_shadows': False, 'perf_haze': False}
 BANNER_DIR = USER_DIR / 'banner'
 # Frame rate patches: Junmin Lee's GoldHEN/shadPS4 patch file for Gravity Rush 2 01.11 (the GR2fork
 # repository; not bundled), downloaded once into user/patches, where run.py's patches.py finds it;
@@ -482,14 +499,34 @@ def fps_patch_names(path):
             if m.get('AppVer') == GAME_VERSION and m.get('AppElf', 'eboot.bin') == 'eboot.bin' and m.get('Name')]
 
 
-def prepare_game_patches(fps, resolution):
+# Junmin Lee's performance patches in the same file (fewer objects and effects: fewer draws,
+# which is what the frame rate depends on in busy scenes). launcher.json key -> patch name prefix.
+PERF_PATCHES = {'crowd_half': 'Performance: half pedestrian density',
+                'crowd_quarter': 'Performance: quarter pedestrian density',
+                'perf_particles': 'Performance: half particle density',
+                'perf_shadows': 'Performance: disable dynamic shadows',
+                'perf_haze': 'Performance: disable heat-haze distortion'}
+CROWD_CHOICES = ('full', 'half', 'quarter')
+
+
+def performance_patch_prefixes(settings):
+    """The patch name prefixes of the performance options chosen in the launcher."""
+    chosen = []
+    crowd = settings.get('perf_crowd', 'full')
+    if crowd in ('half', 'quarter'):
+        chosen.append(PERF_PATCHES['crowd_' + crowd])
+    chosen += [PERF_PATCHES[key] for key in ('perf_particles', 'perf_shadows', 'perf_haze') if settings.get(key)]
+    return chosen
+
+
+def prepare_game_patches(fps, resolution, extras=()):
     """Selects the frame rate and resolution patches for this start ('30' and '1920x1080' turn them
     off), downloading the patch file first when needed. Returns the extra direct memory (MiB) the
     chosen patches' notes ask for. Raises OSError/ValueError when they cannot be prepared."""
     import re
     import xml.etree.ElementTree as ET
     path = PATCHES_DIR / FPS_PATCH_FILE
-    wanted_any = fps != '30' or resolution != '1920x1080'
+    wanted_any = fps != '30' or resolution != '1920x1080' or bool(extras)
     if wanted_any and not path.is_file():
         import urllib.request
         request = urllib.request.Request(FPS_PATCH_URL, headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0)'})
@@ -517,6 +554,11 @@ def prepare_game_patches(fps, resolution):
         name = next((n for n in names if n.startswith(f'Resolution {resolution} ')), None)
         if not name:
             raise ValueError(f'{FPS_PATCH_FILE} has no {resolution} resolution patch for {GAME_VERSION}')
+        wanted.append(name)
+    for prefix in extras:
+        name = next((n for n in names if n.startswith(prefix)), None)
+        if not name:
+            raise ValueError(f'{FPS_PATCH_FILE} has no "{prefix}" patch for {GAME_VERSION}')
         wanted.append(name)
     extra_dmem = 0
     for meta in ET.parse(path).getroot().iter('Metadata'):
@@ -1308,6 +1350,13 @@ class Launcher:
         self.check(parent, tr('sharpen'), 'rcas')
         self.check(parent, tr('show_fps'), 'show_fps')
         self.setting_check(parent, tr('gs_outline'), 'gs_outline', tr('gs_outline_help'))
+        self.heading(parent, tr('perf_heading'), pady=(16, 4))
+        self.note(parent, tr('perf_help'))
+        crowd = self.settings.get('perf_crowd') if self.settings.get('perf_crowd') in CROWD_CHOICES else 'full'
+        self.choice(parent, tr('perf_crowd'), CROWD_CHOICES, [tr('crowd_full'), tr('crowd_half'), tr('crowd_quarter')],
+                    crowd, lambda v: self.set_setting('perf_crowd', v))
+        for key in ('perf_particles', 'perf_shadows', 'perf_haze'):
+            self.setting_check(parent, tr(key), key)
         self.tk.Frame(parent, bg=LINE, height=1).pack(fill='x', pady=self.px(14))
         self.note(parent, tr('graphics_note'))
 
@@ -1560,7 +1609,7 @@ class Launcher:
         resolution = (self.settings.get('game_resolution') if self.settings.get('game_resolution') in
                       RESOLUTION_CHOICES else '1920x1080')
         try:
-            extra_dmem = prepare_game_patches(fps, resolution)
+            extra_dmem = prepare_game_patches(fps, resolution, performance_patch_prefixes(self.settings))
         except Exception as error:  # noqa: BLE001  (network, HTTP, file or XML errors: shown to the player)
             if not self.messagebox.askyesno(APP_NAME, tr('fps_failed', error=error), parent=self.root):
                 return

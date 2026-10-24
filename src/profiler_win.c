@@ -16,8 +16,11 @@
 #include <inttypes.h>
 #include "compat_win.h"
 
-enum { MAX_THREADS = 96, MAX_FRAMES = 16, KEY_FRAMES = 8, STACKS = 256, TOP = 6 };
-typedef struct { uintptr_t frame[MAX_FRAMES]; int depth; } Stack;
+enum { MAX_THREADS = 96, MAX_FRAMES = 24, KEY_FRAMES = 8, STACKS = 256, TOP = 6, FUNCS = 1024, FUNC_TOP = 30 };
+/* func: the function each frame is in (host: its .pdata start; leaf and guest frames: the
+ * address itself), for the per-function totals of the busy threads. */
+typedef struct { uintptr_t frame[MAX_FRAMES], func[MAX_FRAMES]; int depth; } Stack;
+typedef struct { uintptr_t func; unsigned self, total; } FuncCount;
 typedef struct { uintptr_t key[KEY_FRAMES]; int depth; unsigned count; } StackCount;
 typedef struct {
     DWORD tid;
@@ -30,6 +33,8 @@ typedef struct {
     StackCount stacks[STACKS];
     unsigned distinct, dropped;
     Stack last;
+    FuncCount funcs[FUNCS];
+    unsigned func_count;
 } ThreadInfo;
 
 static ThreadInfo threads[MAX_THREADS];
@@ -128,10 +133,12 @@ static void walk(const ThreadInfo *t, CONTEXT *c, Stack *s) {
     s->depth = 0;
     uintptr_t low = t->stack_low, high = t->stack_high;
     while (s->depth < MAX_FRAMES && c->Rip) {
-        s->frame[s->depth++] = c->Rip;
+        s->frame[s->depth] = s->func[s->depth] = c->Rip;
+        ++s->depth;
         DWORD64 base = 0;
         int host = in_host_module(c->Rip);
         PRUNTIME_FUNCTION f = host ? RtlLookupFunctionEntry(c->Rip, &base, NULL) : NULL;
+        if (f) s->func[s->depth - 1] = (uintptr_t)(base + f->BeginAddress);
         if (f) {
             void *handler_data; DWORD64 frame;
             RtlVirtualUnwind(UNW_FLAG_NHANDLER, base, c->Rip, f, c, &handler_data, &frame, NULL);
@@ -150,9 +157,33 @@ static void walk(const ThreadInfo *t, CONTEXT *c, Stack *s) {
     }
 }
 
+static FuncCount *func_slot(ThreadInfo *t, uintptr_t func) {
+    unsigned i = (unsigned)((func >> 4) * 2654435761u) % FUNCS;
+    for (unsigned n = 0; n < FUNCS; ++n, i = (i + 1) % FUNCS) {
+        FuncCount *e = &t->funcs[i];
+        if (e->func == func) return e;
+        if (!e->func) {
+            if (t->func_count * 4 >= FUNCS * 3) return NULL; /* full enough: drop new ones */
+            e->func = func;
+            ++t->func_count;
+            return e;
+        }
+    }
+    return NULL;
+}
+
 static void record(ThreadInfo *t, const Stack *s) {
     ++t->samples;
     t->last = *s;
+    for (int i = 0; i < s->depth; ++i) {
+        int seen = 0; /* recursion counts once per sample */
+        for (int j = 0; j < i && !seen; ++j) seen = s->func[j] == s->func[i];
+        if (seen) continue;
+        FuncCount *e = func_slot(t, s->func[i]);
+        if (!e) continue;
+        ++e->total;
+        if (!i) ++e->self;
+    }
     if (s->depth && s->frame[0] >= ntdll_base && s->frame[0] < ntdll_end) ++t->waiting; /* syscall stubs: waits/sleeps */
     int depth = s->depth < KEY_FRAMES ? s->depth : KEY_FRAMES;
     for (unsigned i = 0; i < t->distinct; ++i) {
@@ -172,6 +203,15 @@ static void print_stack(const uintptr_t *frames, int depth) {
         describe(where, sizeof(where), frames[i]);
         fprintf(report, "        %s\n", where);
     }
+}
+
+static int by_total(const void *a, const void *b) {
+    unsigned x = ((const FuncCount *)a)->total, y = ((const FuncCount *)b)->total;
+    return x < y ? 1 : x > y ? -1 : 0;
+}
+static int by_self(const void *a, const void *b) {
+    unsigned x = ((const FuncCount *)a)->self, y = ((const FuncCount *)b)->self;
+    return x < y ? 1 : x > y ? -1 : 0;
 }
 
 static int by_count(const void *a, const void *b) {
@@ -197,6 +237,25 @@ static void write_report(uint64_t window_ms, unsigned round) {
         }
         fprintf(report, "   last:\n");
         print_stack(t->last.frame, t->last.depth);
+        if (busy >= 30.0) {
+            /* Per function: samples inside it (total) and at its own code (self). */
+            char where[MAX_PATH + 96];
+            qsort(t->funcs, FUNCS, sizeof(FuncCount), by_total);
+            fprintf(report, "   functions by total (in it or below):\n");
+            for (unsigned k = 0; k < FUNC_TOP && t->funcs[k].total * 100 >= t->samples; ++k) {
+                describe(where, sizeof(where), t->funcs[k].func);
+                fprintf(report, "     %5.1f%% total %5.1f%% self  %s\n", 100.0 * t->funcs[k].total / t->samples,
+                        100.0 * t->funcs[k].self / t->samples, where);
+            }
+            qsort(t->funcs, FUNCS, sizeof(FuncCount), by_self);
+            fprintf(report, "   functions by self:\n");
+            for (unsigned k = 0; k < FUNC_TOP && t->funcs[k].self * 200 >= t->samples; ++k) {
+                describe(where, sizeof(where), t->funcs[k].func);
+                fprintf(report, "     %5.1f%% self  %s\n", 100.0 * t->funcs[k].self / t->samples, where);
+            }
+        }
+        memset(t->funcs, 0, sizeof(t->funcs));
+        t->func_count = 0;
         t->samples = t->waiting = t->distinct = t->dropped = 0;
     }
     fflush(report);

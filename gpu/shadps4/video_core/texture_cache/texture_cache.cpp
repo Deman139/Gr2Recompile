@@ -6,6 +6,7 @@
 #include "video_core/amdgpu/liverpool.h"
 
 #include "gow3_toggles.h"
+#include "gow3_copy.h"
 #include "common/assert.h"
 #include "common/debug.h"
 #include "common/div_ceil.h"
@@ -97,8 +98,20 @@ void TextureCache::RetireReadbacks() {
         [this](auto& entry) {
             if (entry.valid) {
                 entry.payload.Invalidate();
-                Core::Memory::Instance()->TryWriteBacking(std::bit_cast<u8*>(entry.address),
-                    entry.payload.mapped, entry.size);
+                // gr2: large copies are written back on the copy threads in 512 KiB parts: Gravity
+                // Rush 2 publishes ~6 MiB a frame at 4K, a single memcpy on the GPU thread.
+                constexpr u64 Part = 512_KB;
+                if (entry.size >= 4 * Part && Gow3Copy::Enabled()) {
+                    Gow3Copy::ParallelFor((entry.size + Part - 1) / Part, [&](std::size_t i) {
+                        const u64 offset = i * Part;
+                        Core::Memory::Instance()->TryWriteBacking(
+                            std::bit_cast<u8*>(entry.address + offset), entry.payload.mapped + offset,
+                            std::min(Part, entry.size - offset));
+                    });
+                } else {
+                    Core::Memory::Instance()->TryWriteBacking(std::bit_cast<u8*>(entry.address),
+                        entry.payload.mapped, entry.size);
+                }
                 if (entry.watched) WatchReadback<false>(entry.address, entry.size);
                 ++readbacks_completed;
             }
