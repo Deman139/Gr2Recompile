@@ -183,8 +183,8 @@ TEXTS = {
                              'медленнее, но если где-то появятся артефакты, попробуй увеличить.',
         'perf_diag': 'Диагностика производительности (статистика в логах)',
         'perf_diag_help': 'Каждые 5 секунд пишет в лог FPS, худший кадр, ожидания видеокарты и профиль '
-                          'потоков (profile.txt рядом с логом). Немного снижает FPS; включай, чтобы найти '
-                          'причину просадок.',
+                          'потоков (profile.txt рядом с логом). F9 в игре записывает устройство кадра '
+                          '(папка captures рядом с логом). Немного снижает FPS.',
         'stale_readback': 'Не ждать видеокарту при чтении',
         'stale_help': 'Больше FPS. Выключи, если освещение или объекты выглядят неправильно.',
         'deferred_readback': 'Отложенное копирование с видеокарты',
@@ -306,8 +306,8 @@ TEXTS = {
                              'but try raising it if artifacts appear somewhere.',
         'perf_diag': 'Performance diagnostics (statistics in the logs)',
         'perf_diag_help': 'Every 5 seconds the log gets the FPS, the worst frame, GPU waits and a thread '
-                          'profile (profile.txt beside the log). Costs a little FPS; turn it on to find '
-                          'the cause of slowdowns.',
+                          'profile (profile.txt beside the log). F9 in the game records the structure of a '
+                          'frame (captures folder beside the log). Costs a little FPS.',
         'stale_readback': 'GPU readbacks without waiting',
         'stale_help': 'More FPS. Turn it off if lighting or objects look wrong.',
         'deferred_readback': 'Deferred GPU readbacks',
@@ -1633,7 +1633,8 @@ class Launcher:
         if extra_dmem:
             env['GOW3_DMEM_MB'] = str(DMEM_RETAIL_MB + extra_dmem)
         if self.settings.get('perf_diag'):
-            env.update(GOW3_FRAME_STATS='1', GOW3_PERF_DIAG='1', GOW3_PROFILE=str(run_dir / 'profile.txt'))
+            env.update(GOW3_FRAME_STATS='1', GOW3_PERF_DIAG='1', GOW3_PROFILE=str(run_dir / 'profile.txt'),
+                       GOW3_FRAME_CAPTURE_KEY='1', GOW3_CAPTURE_DIR=str(run_dir / 'captures'))
         if resolution != '1920x1080' and env.get('GOW3_READBACK_MAX_KB', '0') != '0':
             # Render targets grow with the resolution: the readback size limit grows with them, so
             # the same images (those the CPU reads) are still copied back.

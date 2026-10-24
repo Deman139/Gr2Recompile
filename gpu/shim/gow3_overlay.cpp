@@ -1428,7 +1428,8 @@ bool HandleEvent(const SDL_Event& event) {
             }
             return true;
         }
-        if (down && !event.key.repeat && capture_key && event.key.key == SDLK_F11) {
+        // gr2: F9 (F11 takes screenshots when the menu is on F12).
+        if (down && !event.key.repeat && capture_key && event.key.key == SDLK_F9) {
             Vulkan::FrameCapture::Request();
             return true;
         }
