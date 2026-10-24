@@ -1559,6 +1559,12 @@ class Launcher:
                 extra_dmem = prepare_game_patches('30', resolution)
             except Exception:  # noqa: BLE001
                 extra_dmem = 0
+        # Shaders cached for another game resolution drew the comic panels' borders at the old
+        # positions: the shader cache is cleared when the resolution changes.
+        if self.settings.get('cache_resolution', '1920x1080') != resolution:
+            shutil.rmtree(PS4_DIR / 'cache', ignore_errors=True)
+            self.settings['cache_resolution'] = resolution
+            save_launcher(self.settings)
         run_dir = LOGS_DIR / time.strftime('%Y-%m-%d_%H-%M-%S')
         run_dir.mkdir(parents=True, exist_ok=True)
         prune_logs()
