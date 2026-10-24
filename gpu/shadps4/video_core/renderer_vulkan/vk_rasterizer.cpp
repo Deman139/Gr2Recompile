@@ -200,6 +200,7 @@ Rasterizer::Rasterizer(const Instance& instance_, Scheduler& scheduler_, Runtime
     camera_motion->SetObjectMotion(object_motion.get());
     upscaler = std::make_unique<TemporalUpscaler>(instance, scheduler, texture_cache, runtime,
                                                   *camera_motion, *scene_targets);
+    gr2_dlaa = std::make_unique<Gr2Dlaa>(instance, scheduler, texture_cache, runtime);
     if (!EmulatorSettings.IsNullGPU()) {
         liverpool->BindRasterizer(this);
     }
@@ -1362,6 +1363,10 @@ void Rasterizer::DrawRecord(const GraphicsPipeline* pipeline, const PreparedDraw
         (gbuffer_draw || regs.num_indices > 6 || regs.num_instances.NumInstances() > 1)) {
         draw_jitter = upscaler->Jitter();
     }
+    // Gravity Rush 2 DLAA: scene geometry, not the full-screen passes drawn with the depth bound.
+    if (gr2_dlaa->Enabled() && (regs.num_indices > 6 || regs.num_instances.NumInstances() > 1)) {
+        draw_jitter = gr2_dlaa->JitterFor(db_desc.first);
+    }
     UpdateDynamicState(pipeline, is_indexed);
     MarkPass(pipeline, state);
     scheduler.BeginRendering(state);
@@ -1500,6 +1505,9 @@ void Rasterizer::DrawIndirectRecord(const GraphicsPipeline* pipeline, bool is_in
     if (upscaler->Enabled() && camera_motion->SceneDepth(db_desc.first)) {
         draw_jitter = upscaler->Jitter();
     }
+    if (gr2_dlaa->Enabled()) {
+        draw_jitter = gr2_dlaa->JitterFor(db_desc.first);
+    }
     UpdateDynamicState(pipeline, is_indexed);
     MarkPass(pipeline, state);
     scheduler.BeginRendering(state);
@@ -1598,6 +1606,13 @@ void Rasterizer::DispatchRecord(const ComputePipeline* pipeline) {
 
     scheduler.EndRendering();
     mark();
+    // Gravity Rush 2: DLAA writes the AA pass's output instead (vk_gr2_dlaa.h).
+    if (gr2_dlaa->IsTaa(cs.pgm_hash) &&
+        gr2_dlaa->Replace({bound_images.data(), bound_images.size()})) {
+        ResetBindings(true);
+        scheduler.KickRecording();
+        return;
+    }
     pipeline->BindResources(set_writes, push_data);
 
     const vk::Pipeline handle = pipeline->Handle();
