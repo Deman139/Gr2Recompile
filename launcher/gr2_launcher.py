@@ -173,6 +173,10 @@ TEXTS = {
         'readback_max': 'Предел размера копируемых изображений',
         'readback_max_help': 'Изображения крупнее остаются на видеокарте. 2 МБ дают 30 FPS; больше — '
                              'медленнее, но если где-то появятся артефакты, попробуй увеличить.',
+        'perf_diag': 'Диагностика производительности (статистика в логах)',
+        'perf_diag_help': 'Каждые 5 секунд пишет в лог FPS, худший кадр, ожидания видеокарты и профиль '
+                          'потоков (profile.txt рядом с логом). Немного снижает FPS; включай, чтобы найти '
+                          'причину просадок.',
         'stale_readback': 'Не ждать видеокарту при чтении',
         'stale_help': 'Больше FPS. Выключи, если освещение или объекты выглядят неправильно.',
         'deferred_readback': 'Отложенное копирование с видеокарты',
@@ -284,6 +288,10 @@ TEXTS = {
         'readback_max': 'Size limit of copied images',
         'readback_max_help': 'Larger images stay on the graphics card. 2 MB gives 30 FPS; more is slower, '
                              'but try raising it if artifacts appear somewhere.',
+        'perf_diag': 'Performance diagnostics (statistics in the logs)',
+        'perf_diag_help': 'Every 5 seconds the log gets the FPS, the worst frame, GPU waits and a thread '
+                          'profile (profile.txt beside the log). Costs a little FPS; turn it on to find '
+                          'the cause of slowdowns.',
         'stale_readback': 'GPU readbacks without waiting',
         'stale_help': 'More FPS. Turn it off if lighting or objects look wrong.',
         'deferred_readback': 'Deferred GPU readbacks',
@@ -450,7 +458,8 @@ LAUNCHER_DEFAULTS = {'game_dir': '', 'update_dir': '', 'modules_dir': '', 'langu
                      'window_size': '1920x1080', 'key_map': {}, 'pad_map': {}, 'mouse_look': True,
                      'mouse_sens': 1.0, 'mouse_invert': False, 'pad_dead_zone': 0, 'pad_speaker': 100,
                      'smart_pending': True, 'precompile': True, 'readback_max_kb': 2048, 'menu_key': 'F12',
-                     'banner_image': '', 'gs_outline': False, 'fps': '30', 'game_resolution': '1920x1080'}
+                     'banner_image': '', 'gs_outline': False, 'fps': '30', 'game_resolution': '1920x1080',
+                     'perf_diag': False}
 BANNER_DIR = USER_DIR / 'banner'
 # Frame rate patches: Junmin Lee's GoldHEN/shadPS4 patch file for Gravity Rush 2 01.11 (the GR2fork
 # repository; not bundled), downloaded once into user/patches, where run.py's patches.py finds it;
@@ -1492,6 +1501,7 @@ class Launcher:
         self.note(parent, '      ' + tr('async_help'))
         self.setting_check(parent, tr('smart_pending'), 'smart_pending', tr('smart_pending_help'))
         self.setting_check(parent, tr('precompile'), 'precompile', tr('precompile_help'))
+        self.setting_check(parent, tr('perf_diag'), 'perf_diag', tr('perf_diag_help'))
         self.heading(parent, tr('readback_heading'), pady=(16, 4))
         limit = self.settings.get('readback_max_kb', 2048)
         limit = limit if limit in READBACK_LIMITS else 2048
@@ -1560,10 +1570,12 @@ class Launcher:
             except Exception:  # noqa: BLE001
                 extra_dmem = 0
         # Shaders cached for another game resolution drew the comic panels' borders at the old
-        # positions: the shader cache is cleared when the resolution changes.
-        if self.settings.get('cache_resolution', '1920x1080') != resolution:
+        # positions, and a cache from another frame rate patch could crash the game: the shader
+        # cache is cleared when either changes.
+        cache_key = f'{resolution}@{fps}'
+        if self.settings.get('cache_resolution', '1920x1080@30') != cache_key:
             shutil.rmtree(PS4_DIR / 'cache', ignore_errors=True)
-            self.settings['cache_resolution'] = resolution
+            self.settings['cache_resolution'] = cache_key
             save_launcher(self.settings)
         run_dir = LOGS_DIR / time.strftime('%Y-%m-%d_%H-%M-%S')
         run_dir.mkdir(parents=True, exist_ok=True)
@@ -1571,6 +1583,8 @@ class Launcher:
         env = game_environment(self.settings, self.graphics, needs_update)
         if extra_dmem:
             env['GOW3_DMEM_MB'] = str(DMEM_RETAIL_MB + extra_dmem)
+        if self.settings.get('perf_diag'):
+            env.update(GOW3_FRAME_STATS='1', GOW3_PERF_DIAG='1', GOW3_PROFILE=str(run_dir / 'profile.txt'))
         if resolution != '1920x1080' and env.get('GOW3_READBACK_MAX_KB', '0') != '0':
             # Render targets grow with the resolution: the readback size limit grows with them, so
             # the same images (those the CPU reads) are still copied back.
