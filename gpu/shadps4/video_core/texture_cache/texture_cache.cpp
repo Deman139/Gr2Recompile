@@ -107,16 +107,22 @@ void TextureCache::RetireReadbacks() {
     has_pending_readbacks.store(pending_readbacks.Bytes() != 0, std::memory_order_release);
 }
 
-// gr2: a buffer binding reads only its own bytes from guest memory: a pending copy that merely
-// shares a page with it (Gravity Rush 2's per-frame buffers next to its read-back images) is not
-// waited for. Measured at 4K: every such wait was page-only, 0.6-1.5 s of every 5 s on the GPU
-// thread. GOW3_READBACK_PAGE_WAIT=1 restores the page rule.
-static bool ByteExact(ReadbackSource source) {
+// gr2: work on the GPU side (buffer bindings and uploads, GPU writes into buffers, image
+// uploads, refreshes, downloads and frees) touches only its own bytes of guest memory, so a
+// pending copy that merely shares a 4 KiB page with it is not waited for. Gravity Rush 2 reads
+// back four images every frame that its per-frame buffers share pages with: each such wait
+// drained the GPU (0.6-1.5 s of every 5 s on the GPU thread at 4K, wherever the wait moved).
+// CPU accesses keep the page rule (their faults are per page), and so does everything when CPU
+// reads wait for the copies (stale readbacks off: read-protected pages would fault in the host
+// copies). GOW3_READBACK_PAGE_WAIT=1 restores the page rule everywhere.
+static bool ByteExact(ReadbackSource source, bool stale) {
     static const bool page_rule = [] {
         const char* env = std::getenv("GOW3_READBACK_PAGE_WAIT");
         return env && env[0] == '1';
     }();
-    return !page_rule && source == ReadbackSource::BufferObtain;
+    if (page_rule || !stale) return false;
+    return source != ReadbackSource::CpuRead && source != ReadbackSource::CpuWrite &&
+           source != ReadbackSource::Unknown;
 }
 
 bool TextureCache::ResolveReadbacks(VAddr address, u64 size, bool assume_locks,
@@ -131,7 +137,7 @@ bool TextureCache::ResolveReadbacks(VAddr address, u64 size, bool assume_locks,
             readbacks_released += pending_readbacks.ReleaseOutside(address, size, 64_KB,
                 [this](auto& entry) { WatchReadback<false>(entry.address, entry.size); });
         }
-        if (!pending_readbacks.RequiredTick(address, size, ByteExact(source))) return false;
+        if (!pending_readbacks.RequiredTick(address, size, ByteExact(source, stale_readbacks))) return false;
     }
     const auto resolve = [this, address, size, source] {
         const bool diag = Vulkan::WaitDiagnostics::Enabled();
@@ -147,10 +153,10 @@ bool TextureCache::ResolveReadbacks(VAddr address, u64 size, bool assume_locks,
             }
         }
         Gow3Stats::Timer readback_timer{Gow3Stats::t_readback_wait};
-        if (diag && (source == ReadbackSource::BufferObtain || source == ReadbackSource::CacheCleanup)) {
-            // gr2: what a buffer binding waited for (the first 48 waits of a run).
+        if (diag) {
+            // gr2: what each wait was for (the first 48 waits of a run).
             static std::atomic<unsigned> shown{0};
-            if (pending_readbacks.RequiredTick(address, size, ByteExact(source)) && shown.fetch_add(1) < 48) {
+            if (pending_readbacks.RequiredTick(address, size, ByteExact(source, stale_readbacks)) && shown.fetch_add(1) < 48) {
                 pending_readbacks.ForEachRequired(address, size, [&](const auto& entry) {
                     const bool bytes = address < entry.address + entry.size && entry.address < address + size;
                     std::printf("Readback wait (%s): range 0x%llx+0x%llx, copy 0x%llx+0x%llx, %s\n",
@@ -162,7 +168,7 @@ bool TextureCache::ResolveReadbacks(VAddr address, u64 size, bool assume_locks,
                 });
             }
         }
-        if (const u64 tick = pending_readbacks.RequiredTick(address, size, ByteExact(source))) {
+        if (const u64 tick = pending_readbacks.RequiredTick(address, size, ByteExact(source, stale_readbacks))) {
             ++readbacks_waited;
             waited = !scheduler.IsFree(tick);
             const auto start = diag ? std::chrono::steady_clock::now()
