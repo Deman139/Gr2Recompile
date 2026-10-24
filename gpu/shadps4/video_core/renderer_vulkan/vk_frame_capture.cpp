@@ -231,19 +231,34 @@ void FrameCapture::BeginPass(const VideoCore::ImageInfo* const* colors, u32 num_
     const bool new_pass = !(pass_open && !entries.empty() && !entries.back().compute &&
                             entries.back().colors == targets);
     if (display && new_pass) {
-        if (state.load(std::memory_order_relaxed) == Recording) {
+        // gr2: Gravity Rush 2 writes a display buffer more than once a frame (the scene composite,
+        // then the HUD): a capture spans GOW3_CAPTURE_WINDOWS (default 3) such boundaries, so it
+        // holds a whole frame with its scene passes.
+        static const u32 windows = [] {
+            const char* env = std::getenv("GOW3_CAPTURE_WINDOWS");
+            const long n = env ? std::strtol(env, nullptr, 10) : 3;
+            return u32(std::clamp(n, 1L, 16L));
+        }();
+        static u32 boundaries = 0;
+        if (state.load(std::memory_order_relaxed) == Recording && ++boundaries < windows) {
+            entries.push_back({.compute = false, .note = "---- display buffer boundary ----"});
+            pass_open = false;
+        } else if (state.load(std::memory_order_relaxed) == Recording) {
+            boundaries = 0;
             Write(last_presented.load(std::memory_order_relaxed));
             entries.clear();
             pending_sampled.clear();
             pending_buffers.clear();
             state.store(Idle, std::memory_order_release);
             return;
+        } else {
+            boundaries = 0;
+            entries.clear();
+            pending_sampled.clear();
+            pending_buffers.clear();
+            pass_open = false;
+            state.store(Recording, std::memory_order_release);
         }
-        entries.clear();
-        pending_sampled.clear();
-        pending_buffers.clear();
-        pass_open = false;
-        state.store(Recording, std::memory_order_release);
     }
     if (state.load(std::memory_order_relaxed) != Recording) {
         pending_sampled.clear();
