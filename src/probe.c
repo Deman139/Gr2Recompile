@@ -1483,7 +1483,15 @@ int main(int argc, char **argv) {
     protect(image, round_page(size), 0);
     int executable_entry = 0;
     for (uint64_t i = 0; i < ns; ++i) {
-        protect(image + segments[i].address, round_page(segments[i].size), (unsigned)segments[i].flags);
+        /* PS4 pages are 16 KiB: a segment's last page reaches the next 16 KiB boundary, and code
+         * may use that tail (Gravity Rush 2's 60 FPS patch keeps its state past the end of .bss).
+         * It is extended so far, up to the next segment and the image's end. */
+        uint64_t start = segments[i].address, end = (start + segments[i].size + 0x3fff) & ~(uint64_t)0x3fff;
+        for (uint64_t j = 0; j < ns; ++j)
+            if (segments[j].address >= start + segments[i].size && segments[j].address < end) end = segments[j].address;
+        if (end > round_page(size)) end = round_page(size);
+        if (end < start + round_page(segments[i].size)) end = start + round_page(segments[i].size);
+        protect(image + start, (size_t)(end - start), (unsigned)segments[i].flags);
         if ((segments[i].flags & 1) && entry >= segments[i].address && entry - segments[i].address < segments[i].size)
             executable_entry = 1;
     }

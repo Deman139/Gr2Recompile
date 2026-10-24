@@ -356,7 +356,7 @@ def main():
         env['GOW3_ENGINE_FPS'] = str(engine_fps)
         derived.append('GOW3_ENGINE_FPS')
         print(f'Engine frame rate: {engine_fps} FPS'
-              + ('' if engine_fps > 60 or graphics['engine_fps'] == '60' else
+              + ('' if not profile or engine_fps > 60 or graphics['engine_fps'] == '60' else
                  ' (the frame rate patch was not found in this eboot.bin)'), flush=True)
         glyph_args, glyph_style = glyph_mounts(env, probe, game, out)
         if glyph_style:  # the in-game menu names the buttons the same way
