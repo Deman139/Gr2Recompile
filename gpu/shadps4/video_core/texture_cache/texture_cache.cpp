@@ -146,11 +146,30 @@ bool TextureCache::ResolveReadbacks(VAddr address, u64 size, bool assume_locks,
         // Stale mode, byte rule: God of War III writes every frame to the page that holds a
         // 1x1 exposure copy, but not to its bytes. That write need not wait for the GPU: the
         // copy only stops protecting its page and is still published when the GPU is done.
+        // gr2: CPU reads too when CPU reads wait for the copies (stale readbacks off). Gravity
+        // Rush 2 reads 8 bytes every frame from the page that ends a 64x60 motion-blur tile image
+        // (GPU-only data, 0x500001800): that false-shared page drained the GPU each frame (about
+        // a third of the time at 4K 60 FPS). GOW3_READBACK_RELEASE=0 turns this off.
+        static const bool release_reads = [] {
+            const char* env = std::getenv("GOW3_READBACK_RELEASE");
+            return !env || env[0] != '0';
+        }();
+        unsigned released = 0;
         if (stale_readbacks && source == ReadbackSource::CpuWrite) {
-            readbacks_released += pending_readbacks.ReleaseOutside(address, size, 64_KB,
+            released = pending_readbacks.ReleaseOutside(address, size, 64_KB,
+                [this](auto& entry) { WatchReadback<false>(entry.address, entry.size); });
+        } else if (!stale_readbacks && release_reads &&
+                   (source == ReadbackSource::CpuRead || source == ReadbackSource::CpuWrite)) {
+            // A fault reports one address: the instruction may access up to 64 bytes around it.
+            const VAddr low = address >= 64 ? address - 64 : 0;
+            released = pending_readbacks.ReleaseOutside(low, size + 128, 64_KB,
                 [this](auto& entry) { WatchReadback<false>(entry.address, entry.size); });
         }
-        if (!pending_readbacks.RequiredTick(address, size, ByteExact(source, stale_readbacks))) return false;
+        readbacks_released += released;
+        if (!pending_readbacks.RequiredTick(address, size, ByteExact(source, stale_readbacks))) {
+            // Released copies handled the fault: the page had no other reason to be protected.
+            return released != 0 && !stale_readbacks;
+        }
     }
     const auto resolve = [this, address, size, source] {
         const bool diag = Vulkan::WaitDiagnostics::Enabled();
@@ -355,8 +374,8 @@ void TextureCache::ProcessDownloadImages() {
                 readbacks_queued = readbacks_completed = readbacks_waited = readbacks_canceled = 0;
                 readbacks_peak_bytes = pending_readbacks.Bytes();
                 readback_sources.Report(stdout);
-                if (stale_readbacks) {
-                    std::printf("Readback byte rule: %llu CPU writes went on without waiting\n",
+                if (readbacks_released) {
+                    std::printf("Readback byte rule: %llu CPU accesses went on without waiting\n",
                                 static_cast<unsigned long long>(readbacks_released));
                     readbacks_released = 0;
                 }
