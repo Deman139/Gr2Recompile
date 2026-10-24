@@ -12,6 +12,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <math.h>
 #include <pthread.h>
 #include <time.h>
 #include <SDL3/SDL.h>
@@ -103,6 +104,51 @@ static void play_click(PadData *d) {
     if (now>=down && now<up) d->buttons|=BTN_TOUCHPAD;
 }
 
+/* Motion sensors as libScePad reports them (as GR2fork/shadPS4 do): angular velocity in rad/s
+ * and acceleration in g in the pad's frame (SDL's DualShock/DualSense axes are the PS4's), and
+ * an orientation quaternion integrated from the angular velocity (scePadResetOrientation sets it
+ * back to identity). Pads without sensors report a still, level pad. Under lock. */
+static struct {
+    int gyro, accel, enabled, reset;
+    float q[4]; /* x, y, z, w */
+    uint64_t last_us;
+} motion={.enabled=1,.reset=1};
+/* The game's light bar colour, applied to pads that have one (DualShock 4, DualSense). */
+static struct { int set; uint8_t r, g, b; } light;
+
+static void integrate_orientation(const float w[3], uint64_t now) {
+    if (motion.reset) { motion.q[0]=motion.q[1]=motion.q[2]=0.0f; motion.q[3]=1.0f; motion.last_us=now; motion.reset=0; return; }
+    float dt=(float)(now-motion.last_us)/1e6f;
+    motion.last_us=now;
+    if (!(dt>0.0f)) return;
+    if (dt>0.05f) dt=0.05f; /* a stall: a long Euler step would snap the attitude */
+    float *q=motion.q;
+    /* q' = q + 0.5 * q * (w, 0) * dt */
+    const float dx=0.5f*( q[3]*w[0] + q[1]*w[2] - q[2]*w[1]);
+    const float dy=0.5f*( q[3]*w[1] + q[2]*w[0] - q[0]*w[2]);
+    const float dz=0.5f*( q[3]*w[2] + q[0]*w[1] - q[1]*w[0]);
+    const float dw=0.5f*(-q[0]*w[0] - q[1]*w[1] - q[2]*w[2]);
+    q[0]+=dx*dt; q[1]+=dy*dt; q[2]+=dz*dt; q[3]+=dw*dt;
+    const float n=sqrtf(q[0]*q[0]+q[1]*q[1]+q[2]*q[2]+q[3]*q[3]);
+    if (n>0.0f) for (int i=0;i<4;++i) q[i]/=n;
+}
+
+static void sample_motion(SDL_Gamepad *g, PadData *d) {
+    float w[3]={0,0,0}, a[3]={0,0,0};
+    static int allowed=-1; /* GOW3_PAD_MOTION=0: report a still pad */
+    if (allowed<0) { const char *e=getenv("GOW3_PAD_MOTION"); allowed=!e || *e!='0'; }
+    if (!allowed) g=NULL;
+    const int have_gyro=g && motion.enabled && motion.gyro && SDL_GetGamepadSensorData(g,SDL_SENSOR_GYRO,w,3);
+    if (g && motion.enabled && motion.accel && SDL_GetGamepadSensorData(g,SDL_SENSOR_ACCEL,a,3)) {
+        for (int i=0;i<3;++i) d->acceleration[i]=a[i]/9.80665f;
+    } else {
+        d->acceleration[1]=1.0f; /* level: gravity along the pad's y axis */
+    }
+    if (have_gyro) for (int i=0;i<3;++i) d->angular_velocity[i]=w[i];
+    integrate_orientation(have_gyro ? w : (float[3]){0,0,0},d->timestamp);
+    memcpy(d->orientation,motion.q,sizeof(motion.q));
+}
+
 /* Opens the first gamepad SDL knows about; called under lock. */
 static SDL_Gamepad *current_gamepad(void) {
     if (!sdl_ready) sdl_ready = SDL_WasInit(SDL_INIT_GAMEPAD) ? 1 : SDL_InitSubSystem(SDL_INIT_GAMEPAD) ? 1 : -1;
@@ -113,7 +159,18 @@ static SDL_Gamepad *current_gamepad(void) {
         SDL_JoystickID *ids=SDL_GetGamepads(&count);
         if (ids && count>0) {
             gamepad=SDL_OpenGamepad(ids[0]);
-            if (gamepad) { ++connected_count; printf("Runtime: gamepad connected: %s\n",SDL_GetGamepadName(gamepad)); }
+            if (gamepad) {
+                ++connected_count;
+                /* DualShock 4 / DualSense (and other pads with them): gyro and accelerometer. */
+                motion.gyro=SDL_GamepadHasSensor(gamepad,SDL_SENSOR_GYRO) &&
+                            SDL_SetGamepadSensorEnabled(gamepad,SDL_SENSOR_GYRO,true);
+                motion.accel=SDL_GamepadHasSensor(gamepad,SDL_SENSOR_ACCEL) &&
+                             SDL_SetGamepadSensorEnabled(gamepad,SDL_SENSOR_ACCEL,true);
+                motion.reset=1;
+                printf("Runtime: gamepad connected: %s%s%s\n",SDL_GetGamepadName(gamepad),
+                       motion.gyro ? ", gyro" : "",motion.accel ? ", accelerometer" : "");
+                if (light.set) SDL_SetGamepadLED(gamepad,light.r,light.g,light.b);
+            }
         }
         SDL_free(ids);
     }
@@ -430,6 +487,7 @@ static void sample_host(PadData *d) {
     d->connected=1; d->connected_count=connected_count ? connected_count : 1;
     d->timestamp=now_us();
     SDL_Gamepad *g=current_gamepad();
+    sample_motion(g,d);
     gow3gpu_input_settings(&input);
     if (gow3gpu_overlay_captures_input()) { /* settings menu open: neutral input */
         if (back_hold.since) back_hold.opened=1; /* the press that opened it stays with the menu */
@@ -732,16 +790,41 @@ static ABI int32_t pad_ok_handle_flag(int32_t handle, uint8_t flag) { (void)flag
 
 static ABI int32_t pad_light_bar(int32_t handle, const uint8_t *rgb) {
     if (handle!=PAD_HANDLE || !opened) return ERR_INVALID_HANDLE;
-    (void)rgb; return 0;
+    if (!rgb) return ERR_INVALID_ARG;
+    pthread_mutex_lock(&lock);
+    light.set=1; light.r=rgb[0]; light.g=rgb[1]; light.b=rgb[2];
+    SDL_Gamepad *g=current_gamepad();
+    if (g) SDL_SetGamepadLED(g,light.r,light.g,light.b);
+    pthread_mutex_unlock(&lock);
+    return 0;
+}
+static ABI int32_t pad_reset_light_bar(int32_t handle) {
+    if (handle!=PAD_HANDLE || !opened) return ERR_INVALID_HANDLE;
+    pthread_mutex_lock(&lock);
+    light.set=1; light.r=0; light.g=0; light.b=64; /* the PS4's first-player blue */
+    SDL_Gamepad *g=current_gamepad();
+    if (g) SDL_SetGamepadLED(g,light.r,light.g,light.b);
+    pthread_mutex_unlock(&lock);
+    return 0;
+}
+static ABI int32_t pad_reset_orientation(int32_t handle) {
+    if (handle!=PAD_HANDLE || !opened) return ERR_INVALID_HANDLE;
+    pthread_mutex_lock(&lock); motion.reset=1; pthread_mutex_unlock(&lock);
+    return 0;
+}
+static ABI int32_t pad_motion_sensor_state(int32_t handle, uint8_t enable) {
+    if (handle!=PAD_HANDLE || !opened) return ERR_INVALID_HANDLE;
+    pthread_mutex_lock(&lock); motion.enabled=enable!=0; pthread_mutex_unlock(&lock);
+    return 0;
 }
 static const RuntimeExport exports[]={
-    {"scePadSetLightBar",pad_light_bar}, {"scePadResetLightBar",pad_ok_handle},
+    {"scePadSetLightBar",pad_light_bar}, {"scePadResetLightBar",pad_reset_light_bar},
     {"scePadInit",pad_init}, {"scePadOpen",pad_open}, {"scePadClose",pad_close},
     {"scePadReadState",pad_read_state}, {"scePadRead",pad_read},
     {"scePadGetControllerInformation",pad_info}, {"scePadSetVibration",pad_vibration},
-    {"scePadResetOrientation",pad_ok_handle},
+    {"scePadResetOrientation",pad_reset_orientation},
     {"scePadSetAngularVelocityDeadbandState",pad_ok_handle_flag}, {"scePadSetTiltCorrectionState",pad_ok_handle_flag},
-    {"scePadSetMotionSensorState",pad_ok_handle_flag},
+    {"scePadSetMotionSensorState",pad_motion_sensor_state},
 };
 uintptr_t runtime_pad_resolve(const char *name) { return RUNTIME_LOOKUP(exports,name); }
 void runtime_pad_report(void) { printf("Runtime: pad reads=%zu, gamepad=%s\n",reads,gamepad ? SDL_GetGamepadName(gamepad) : "none"); }
