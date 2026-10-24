@@ -187,6 +187,8 @@ private:
         u64 generation = ~0ULL;
     };
     std::array<ImageMiss, 256> image_miss_cache{};
+    /// gr2: read-only buffers filled from the image the GPU drew there (ObtainBuffer).
+    std::atomic<u64> buffers_from_images{0};
     Vulkan::Runtime& runtime;
     Vulkan::StagingBufferPool& staging_pool;
     AmdGpu::Liverpool* liverpool;

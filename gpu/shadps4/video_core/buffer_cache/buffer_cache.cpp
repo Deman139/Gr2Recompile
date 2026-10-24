@@ -24,6 +24,7 @@
 #include "video_core/renderer_vulkan/vk_instance.h"
 #include "video_core/renderer_vulkan/vk_runtime.h"
 #include "video_core/renderer_vulkan/vk_scheduler.h"
+#include "video_core/renderer_vulkan/vk_wait_diagnostics.h"
 #include "video_core/texture_cache/texture_cache.h"
 
 #include <vk_mem_alloc.h>
@@ -369,6 +370,36 @@ std::pair<const Buffer*, u64> BufferCache::ObtainBuffer(VAddr device_addr, u32 s
                                                         bool is_written, bool is_texel_buffer) {
     if (is_written) {
         NoteWrittenBinding(device_addr, size);
+    }
+    // gr2: a read-only buffer over an image the GPU drew (Gravity Rush 2 reads four such images
+    // as buffers every frame) is filled from the image on the GPU, as texel buffers are. Waiting
+    // for the image's readback to reach guest memory first stalled the GPU thread on the GPU at
+    // every such binding (1.3 s of every 5 s at 4K, 45 FPS). GOW3_BUFFER_FROM_IMAGE=0: the wait.
+    static const bool from_image = [] {
+        const char* env = std::getenv("GOW3_BUFFER_FROM_IMAGE");
+        return !(env && env[0] == '0');
+    }();
+    if (from_image && !is_written && texture_cache.ReadbackPending(device_addr, size)) {
+        if (const ImageId image_id = texture_cache.FindImageFromRange(device_addr, size, true)) {
+            const u64 first_block = device_addr >> block_shift;
+            const u64 last_block = (device_addr + size - 1) >> block_shift;
+            const auto* arena = GetArena(first_block, last_block);
+            EnsureResident(arena, first_block, last_block);
+            SynchronizeMemory(arena, device_addr, size, false, true);
+            const u64 count = buffers_from_images.fetch_add(1, std::memory_order_relaxed) + 1;
+            if (Vulkan::WaitDiagnostics::Enabled()) {
+                static auto report = std::chrono::steady_clock::now();
+                static u64 reported = 0;
+                const auto now = std::chrono::steady_clock::now();
+                if (now - report >= std::chrono::seconds(5)) {
+                    std::printf("Buffers filled from images (no readback wait): %llu in 5 s\n",
+                                static_cast<unsigned long long>(count - reported));
+                    report = now;
+                    reported = count;
+                }
+            }
+            return {arena, arena->Offset(device_addr)};
+        }
     }
     texture_cache.ResolveReadbacks(device_addr, size, true, ReadbackSource::BufferObtain);
     const bool stats = BufferStatsEnabled();

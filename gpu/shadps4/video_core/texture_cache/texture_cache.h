@@ -136,6 +136,12 @@ public:
     bool ResolveReadbacks(VAddr address, u64 size, bool assume_locks = true,
                           ReadbackSource source = ReadbackSource::Unknown);
     void CancelReadbacks(VAddr address, u64 size);
+    /// gr2: whether a readback copy over [address, address + size) has not reached guest memory.
+    bool ReadbackPending(VAddr address, u64 size) {
+        if (!has_pending_readbacks.load(std::memory_order_acquire)) return false;
+        std::scoped_lock lock{readback_mutex};
+        return pending_readbacks.RequiredTick(address, size) != 0;
+    }
 
     /// Retrieves the image handle of the image with the provided attributes.
     [[nodiscard]] ImageId FindImage(ImageDesc& desc, bool exact_fmt = false);
