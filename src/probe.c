@@ -260,10 +260,13 @@ static LONG CALLBACK vectored_fault(EXCEPTION_POINTERS *info) {
          * and system libraries may handle their own exceptions. */
         uintptr_t rip=(uintptr_t)info->ContextRecord->Rip;
         HMODULE self=GetModuleHandleA(NULL), module=NULL;
-        /* The C runtime counts as ours: the runtime calls it with guest pointers. */
+        /* The C runtime and winpthreads count as ours: the runtime calls them with guest
+         * pointers (two startup crashes in pthread_mutex_lock ended without a report: another
+         * DLL had replaced the unhandled-exception filter). */
         int ours=(image && rip-(uintptr_t)image<0x20000000) ||
                  (GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS|GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,(LPCSTR)rip,&module) &&
-                  (module==self || module==GetModuleHandleA("ucrtbase.dll"))) ||
+                  (module==self || module==GetModuleHandleA("ucrtbase.dll") ||
+                   module==GetModuleHandleA("libwinpthread-1.dll"))) ||
                  !module;
         if (ours) return fatal_exception(info);
     }

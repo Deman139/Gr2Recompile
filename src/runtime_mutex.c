@@ -8,7 +8,20 @@
 #include <errno.h>
 #include <time.h>
 typedef struct { int type; } GuestAttr;
-typedef struct { pthread_mutex_t native; } GuestMutex;
+typedef struct { uint32_t magic; pthread_mutex_t native; } GuestMutex;
+#define MUTEX_MAGIC UINT32_C(0x4d555458)
+/* A handle that is not a live mutex of ours (freed, overwritten, never initialized) is reported
+ * with the guest caller instead of faulting inside winpthreads without a report. */
+static GuestMutex *live(GuestMutex **mutex, void *caller) {
+    GuestMutex *m = *mutex;
+    if (m->magic != MUTEX_MAGIC) {
+        fprintf(stderr, "STOP: guest mutex at %p holds %p, not a live mutex (magic 0x%08x); caller %p\n",
+                (void *)mutex, (void *)m, (unsigned)m->magic, caller);
+        fflush(NULL);
+        __builtin_trap(); /* the fault report adds the stack */
+    }
+    return m;
+}
 static size_t created, locks, unlocks;
 static int32_t orbis_error(int e) {
     if (!e) return 0;
@@ -58,6 +71,7 @@ static ABI int32_t mutex_init(GuestMutex **out, GuestAttr **attr, const char *na
     if (!e) e = pthread_mutex_init(&mutex->native, &native_attr);
     pthread_mutexattr_destroy(&native_attr);
     if (e) { free(mutex); return orbis_error(e); }
+    mutex->magic = MUTEX_MAGIC;
     *out = mutex; ++created; return 0;
 }
 static pthread_mutex_t static_init = PTHREAD_MUTEX_INITIALIZER;
@@ -80,29 +94,29 @@ static int32_t ensure_mutex(GuestMutex **mutex) {
 static ABI int32_t mutex_lock(GuestMutex **mutex) {
     int32_t e = ensure_mutex(mutex);
     if (e) return e;
-    e = orbis_error(pthread_mutex_lock(&(*mutex)->native));
+    e = orbis_error(pthread_mutex_lock(&live(mutex, __builtin_return_address(0))->native));
     if (!e) ++locks;
     return e;
 }
 static ABI int32_t mutex_trylock(GuestMutex **mutex) {
     int32_t e = ensure_mutex(mutex);
     if (e) return e;
-    e = orbis_error(pthread_mutex_trylock(&(*mutex)->native));
+    e = orbis_error(pthread_mutex_trylock(&live(mutex, __builtin_return_address(0))->native));
     if (!e) ++locks;
     return e;
 }
 static ABI int32_t mutex_unlock(GuestMutex **mutex) {
     if (!mutex || (uintptr_t)*mutex == 2) return orbis_error(EINVAL);
     if ((uintptr_t)*mutex < 2) return orbis_error(EPERM);
-    int32_t e = orbis_error(pthread_mutex_unlock(&(*mutex)->native));
+    int32_t e = orbis_error(pthread_mutex_unlock(&live(mutex, __builtin_return_address(0))->native));
     if (!e) ++unlocks;
     return e;
 }
 static ABI int32_t mutex_destroy(GuestMutex **mutex) {
     if (!mutex || (uintptr_t)*mutex == 2) return orbis_error(EINVAL);
     if ((uintptr_t)*mutex < 2) return 0;
-    int e = pthread_mutex_destroy(&(*mutex)->native);
-    if (!e) { free(*mutex); *mutex = (GuestMutex *)(uintptr_t)2; }
+    int e = pthread_mutex_destroy(&live(mutex, __builtin_return_address(0))->native);
+    if (!e) { (*mutex)->magic = 0; free(*mutex); *mutex = (GuestMutex *)(uintptr_t)2; }
     return orbis_error(e);
 }
 static int deadline_after(struct timespec *end, uint64_t usec) {
@@ -118,7 +132,7 @@ static ABI int32_t mutex_timedlock(GuestMutex **mutex, uint32_t usec) {
     if (e) return e;
     struct timespec end;
     if (deadline_after(&end, usec)) return orbis_error(EINVAL);
-    e = timed_error(pthread_mutex_timedlock(&(*mutex)->native, &end));
+    e = timed_error(pthread_mutex_timedlock(&live(mutex, __builtin_return_address(0))->native, &end));
     if (!e) ++locks;
     return e;
 }
