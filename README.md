@@ -1,579 +1,96 @@
-# Killzone Shadow Fall for PC
+# Gravity Rush 2 for PC (work in progress)
 
-**English** | [Español](#español)
+A native Windows port of **Gravity Rush 2** (PS4, CUSA04943 v01.11), built on the
+[Killzone Shadow Fall PC port](https://github.com/lesca-191204/killzone-shadowfall-pc) (itself
+based on [gow3_pc](https://github.com/FelipePrado0/gow3_pc) and
+[bloodborne_pc](https://github.com/deadinside28/bloodborne_pc)): the game's x86-64 code runs
+directly on the CPU, a C runtime replaces the PS4 system libraries, and the
+[shadPS4](https://github.com/shadps4-emu/shadPS4) video core translates the graphics to Vulkan.
+[GR2fork](https://github.com/junminlee2004/GR2fork) (shadPS4 for Gravity Rush 2) is the reference
+for game-specific behaviour.
 
-[![Join the Ports Discord](https://img.shields.io/badge/Discord-Join%20the%20Ports%20Discord-5865F2?logo=discord&logoColor=white)](https://discord.gg/UYFcV5rbDw)
-[![Support the project and future ports](https://img.shields.io/badge/PayPal-Support%20the%20project%20%26%20future%20ports-00457C?logo=paypal&logoColor=white)](https://www.paypal.com/paypalme/SantiagoLescano577)
-[![Latest release](https://img.shields.io/github/v/release/lesca-191204/killzone-shadowfall-pc?label=Download&color=2ea44f)](../../releases/latest)
+**Status: not playable yet.** The game image links and every imported function resolves; the
+first runs are next. No game or firmware files are included.
 
-> 💬 **We have a Discord!** The community server is the place to **report problems**, tell us
-> **what you'd like to see next**, and **hear first about new ports** and how to support them.
-> 👉 **[discord.gg/UYFcV5rbDw](https://discord.gg/UYFcV5rbDw)**
->
-> ❤️ The ports are and will stay **free**. If you want to help, a PayPal donation is welcome but
-> completely optional.
+## What you need
 
-Native Windows port of **Killzone Shadow Fall** (PS4). The game's code runs directly on your CPU;
-graphics are translated to Vulkan in real time. **Public beta:** the whole campaign is playable,
-and it keeps improving with every report.
+- The game folder from your own PS4 (decrypted: `eboot.bin`, `sce_module`, `sce_sys`, the
+  `.psarc` files), with the 01.11 update merged in.
+- Decrypted firmware modules dumped from your console (the files shadPS4 takes in
+  `user/sys_modules`): `libSceNgs2.sprx` (required: the game's audio engine), and
+  `libSceJson2.sprx`, `libSceRtc.sprx`, `libSceFreeTypeOt.sprx`, `libSceFontFt.sprx`,
+  `libSceFont.sprx`.
+- Windows 10/11, a Vulkan 1.3 GPU, 16 GB RAM; MSYS2 CLANG64 to build
+  ([packaging/windows/README.md](packaging/windows/README.md)).
 
-> ⚠️ **No game files are included.** You need your own dumped copy of the game, **version 01.81**:
-> **CUSA00190** (the tested one) or another region (see [Game versions](#-game-versions)). This
-> project is not affiliated with Sony Interactive Entertainment or Guerrilla Games. Killzone is a
-> trademark of Sony Interactive Entertainment.
+## Build and run (MSYS2 CLANG64)
 
-<p align="center"><img src="docs/images/launcher.png" alt="The launcher" width="820"></p>
+```bash
+bash build.sh
+GR2_GAME=/d/Games/CUSA04943 \
+GR2_SYS_MODULES=/d/ps4/sys_modules bash gr2.sh
+```
 
-## 📥 Download and play
+The console output is also saved in `user/logs/gr2-<date>.log`.
 
-1. Download the latest zip from **[Releases](../../releases/latest)** and unzip it anywhere
-   (outside "Program Files").
-2. Open **Killzone Shadow Fall.exe**, choose your dump's folder (the one holding `eboot.bin`).
-3. Press **PLAY**. The launcher updates itself when a new version comes out, keeping your saves.
+## Launcher
 
-| | Minimum / recommended |
+`launcher/gr2_launcher.py` (Russian and English): the game folder (with an optional 01.11 update
+folder), the system modules folder (found by itself in a shadPS4 install beside the game), port
+graphics options, keyboard / mouse / controller mapping, readback and shader options, and
+shortcuts to saves, screenshots, logs and the cache. The banner shows the dump's `sce_sys/pic1.png`,
+or a picture of your choice (Game tab → Banner picture: a file, or a link the launcher downloads once
+into `user/banner`). From the source tree, in MSYS2 CLANG64:
+
+```bash
+pacman -S --needed mingw-w64-clang-x86_64-tk mingw-w64-clang-x86_64-python-pillow
+python launcher/gr2_launcher.py
+```
+
+A package players can run without MSYS2 or Python (`dist/Gravity Rush 2/Gravity Rush 2.exe`):
+`bash packaging/windows/package_gr2.sh` (needs a python.org Python; the icon is made once from
+your dump, as the script says).
+
+Steam Input (Steam Controller, gyro to mouse, ...): add `Gravity Rush 2 (Steam).bat` to Steam as a
+non-Steam game and turn Steam Input on in its controller settings. Unlike `Gravity Rush 2.bat` it
+keeps running until the launcher closes, so Steam keeps its virtual gamepad for the game (SDL sees
+an Xbox controller; the mouse look takes Steam's gyro-as-mouse).
+
+### 60 FPS and higher resolutions
+
+Launcher → Graphics → Frame rate → 60 FPS, and Game resolution → 2560 × 1440 or 3840 × 2160, use
+Junmin Lee's patches for 01.11 (resolution: the game itself draws at that size; 4K adds the 128 MiB
+of direct memory its note asks for, and the readback size limit grows with the pixel count), from
+[GR2fork](https://github.com/junminlee2004/GR2fork) (its
+[patch repository](https://github.com/junminlee2004/GoldHEN_Patch_Repository)). The launcher downloads
+the patch file once into `user/patches` and selects the patches in `user/patches.json`; nothing is
+bundled. At 60 FPS the game steps its time 1/60 s per frame: below 60 FPS it slows down. Any other
+shadPS4/GoldHEN XML file in `user/patches` that names the game's title ID works the same way
+(`patches.json`: `{"enabled": ["<file>/<patch name>"], "disabled": [...]}`).
+
+## What differs from the Killzone port
+
+| Part | Change |
 |---|---|
-| 🪟 System | Windows 10 (1903+) or 11, 64-bit |
-| 🎮 GPU | Vulkan 1.3 · **4-6 GB VRAM** for 1080p-1440p, **8 GB** for 1800p and 4K |
-| 🧠 RAM | 16 GB |
-| ✅ Tested on | Ryzen 7 5700 + RTX 2060 Super (8 GB): playable from start to finish |
-
-Not tested yet on AMD GPUs or Intel CPUs: reports are very welcome.
-
-## 🎮 Controls
-
-> 🦉 **The OWL drone on keyboard and mouse:** hold **Delete** and move the mouse. That is your
-> finger on the PS4 touchpad: swipe to choose the OWL's command, just like on the controller.
-> The game also reminds you for a few seconds when it starts.
-
-**Keyboard and mouse** (shooter-style defaults; change any key in the launcher → *Controls*):
-
-| Action | Key | | Action | Key |
-|---|---|---|---|---|
-| Move | **W A S D** | | Camera | **Mouse** (direct, 1:1) |
-| Fire (R2) | **Left click** | | Aim (L2) | **Right click** |
-| Jump / ✕ | **Space** | | ○ (crouch) | **C** |
-| □ (reload / use) | **R** | | △ (weapon) | **Q** |
-| L1 / R1 | **1 / 3** | | Sprint (L3) | **Left Shift** |
-| Melee (R3) | **F** | | D-pad | **Arrow keys** |
-| Options (pause) | **Enter** | | Touchpad click ← / → | **Tab / Backspace** |
-| 🦉 OWL (touchpad) | **Hold Delete + mouse** | | Free the cursor | **Left Alt** |
-
-**Controller:** Xbox, DualShock 4, DualSense and any SDL-compatible pad, with remappable buttons,
-stick dead zone, vibration and controller speaker volume.
-
-**Shortcuts while playing:**
-
-| Shortcut | What it does |
-|---|---|
-| **Insert** · **R3 + L2** | Opens the in-game menu (all the settings below) |
-| **Hold Share / View / Select (~1 s)** | Quick menu: **Resume · Settings · Exit game** (controller only) |
-| **Esc** · **Circle / B** | Closes the menu |
-| **L1 / R1** · **Q / E** | Switch menu tabs |
-| **F12** | Screenshot (`user\ps4\screenshots`) |
-| **Alt + F4** | Closes the game |
-
-## ✨ Features
-
-### 🎯 Direct mouse aim (1:1)
-
-The mouse turns the camera **directly**: no emulated stick, no dead zone, no response curve and no
-speed cap. In practice it plays almost exactly like a PC shooter.
-
-- **Sensitivity:** about **1** is recommended (higher values turn very fast).
-- **Fast turns (x1 to x12, x6 by default):** while the mouse moves, the game's turn speed limit is
-  raised so a quick 90° or 180° flick isn't held back. A controller keeps the game's own feel.
-- **Invert Y axis.**
-- ℹ️ *By the game's design, the camera turns at a different speed when you walk than when you
-  sprint, so walking without sprinting can still feel a little different. Sprinting and aiming
-  behave like a true 1:1 mouse.*
-- Change all of it in the launcher (*Controls*) or **live** in the in-game menu (*Controls* tab).
-
-### 🔭 Field of view (FOV)
-
-A **FOV slider from 80% to 150%** of the original (100% = as on PS4). Set it in the launcher
-(*Game* tab) or change it **live while playing** in the in-game menu (*Controls* tab): the view
-widens at once. Aiming zoom scales in the same proportion.
-
-| FOV 100% (PS4) | FOV 150% |
-|---|---|
-| ![FOV 100%](docs/images/fov-100.jpg) | ![FOV 150%](docs/images/fov-150.jpg) |
-
-### ⚙️ In-game menu (overlay)
-
-Press **Insert** (or **R3 + L2**) at any time. Almost every launcher option is now here, and **most
-apply at once**, without closing the game. Settings are saved automatically and the launcher shows
-the same values.
-
-<p align="center"><img src="docs/images/ingame-menu-controls.png" alt="In-game menu, Controls tab" width="560"></p>
-
-| Tab | Option | When it applies |
-|---|---|---|
-| 🎮 **Controls** | Mouse sensitivity, fast turns, invert Y | ⚡ Live |
-| | Field of view (FOV) | ⚡ Live |
-| | Vibration, stick dead zone, controller speaker | ⚡ Live |
-| | Hold Share for the quick menu, tips at startup | ⚡ Live |
-| | Camera shake (explosions, hits) | ⚡ Live |
-| | Button prompts: last device used / keyboard and mouse / PS4 | 🔄 Restart |
-| 🖼️ **Image** | Display mode (window / borderless / fullscreen), VSync | ⚡ Live |
-| | FSR 1 upscaling, sharpening (RCAS) and its strength | ⚡ Live |
-| | Upscaler **FSR 3.1 / DLSS** *(when the game started with one)* | ⚡ Live |
-| | **Frame generation** Off / FSR 3.1 / DLSS | ⚡ Live · 🔄 restart to turn it on from Off |
-| | Texture sharpness (LOD bias, -2 to +2) | ⚡ Live |
-| | Anisotropic filtering | 🔄 Restart |
-| | Effects: motion blur, depth of field, bloom, film grain | 🔄 Restart |
-| 🚀 **Performance** | Frame rate limit, frames queued, background shader compiling | ⚡ Live |
-| | GPU readback options (the 0.2.5 performance options) | 🔄 Restart |
-| 📊 **Overlay** | FPS, frame time, upscaler, GPU, CPU, RAM, VRAM · size, corner, opacity | ⚡ Live |
-
-- 🔄 **Apply and restart:** options marked *restart* show a button that closes the game and the
-  launcher starts it again by itself with the new settings (unsaved progress since your last
-  checkpoint is lost).
-- 🚪 **Exit game:** a button in the menu and in the quick menu closes the game cleanly; no keyboard
-  needed when you play from the couch or through Steam.
-- ℹ️ The in-game menu is in English for now.
-
-### 🚀 Performance
-
-- **0.3.0:** the threads that feed the GPU and stream the levels run at a higher Windows priority,
-  and on CPUs with **8 threads or fewer** the GPU command thread too: smoother frame pacing on
-  weaker CPUs when other programs compete for them.
-- **0.2.5:** *Advanced → Performance* keeps the GPU busy instead of waiting (about **+40-50% FPS**
-  in heavy scenes in our tests). **If you get a crash or a graphics error, turn those two options
-  off (one at a time)** and tell us.
-
-### 🖥️ Resolution, upscaling and frame generation
-
-- **Above 1080p with AMD FSR 3.1 or NVIDIA DLSS** (1440p, 1800p, 4K): the game renders at 1080p and
-  the upscaler takes it to your resolution; HUD, menus and videos are drawn sharp at full size.
-- **Sharp and stable:** sub-pixel jitter and the game's own per-pixel motion vectors, so the weapon,
-  moving objects and the camera are tracked correctly.
-- **Frame generation:** **AMD FSR 3.1** on any GPU, **NVIDIA DLSS** on GeForce RTX 40/50 (up to 4x
-  on RTX 50). Almost twice the frames on screen with sharp HUD and text.
-- Classic method (a game resolution patch) still under *Advanced*.
-
-### 🎚️ Upscaling quality modes
-
-*Launcher → Graphics → **FSR / DLSS quality***. The 3D scene is drawn **smaller** and FSR 3.1 or DLSS
-rebuild it up to your output resolution. **HUD, menus and videos stay sharp at full size.**
-
-| Mode | Scene at **1080p** output | **1440p** | **1800p** | **4K** |
-|---|---|---|---|---|
-| ⭐ **Native** (best quality) | 1080p | 1080p | 1080p | 1080p |
-| **Quality** | 720p | 960p | 1080p | 1080p |
-| **Balanced** | 630p | 836p | 1044p | 1080p |
-| **Performance** | 540p | 720p | 900p | 1080p |
-| **Ultra performance** | 360p | 480p | 600p | 720p |
-
-| ✅ Use it when | ❌ It won't help when |
-|---|---|
-| Your **graphics card is the limit**: modest GPU, or 1440p / 1800p / 4K with the GPU near 100% | Your **processor is the limit** (low FPS while the GPU is under 100%): fewer pixels don't help the CPU |
-| You want more FPS and accept a slightly softer image | Your GPU already holds the FPS you want: **Native** looks best |
-
-It needs **FSR 3.1 or DLSS** as the resolution method (*Advanced → Resolution method*) or frame
-generation on, and it is read when the game starts. **Insert → Image** shows the sizes in use
-(*"WxH scene, WxH output"*).
-
-### 🧩 Shader cache and precompiling
-
-The game's shaders are **compiled by your PC the first time each area needs them**, which is why a
-new zone can stutter or an effect can show up late. Every compiled shader is saved in the **cache**:
-**once you've played an area, it is ready** and loads fast the next time.
-
-| Where | Option | What it does |
-|---|---|---|
-| 🧰 Launcher → Advanced | **Precompile shaders at startup** *(on by default)* | Before the game opens, prepares **every shader already in your cache** on all your cores. The start takes longer (the first time with a big cache, more) and uses more memory meanwhile. |
-| 🎮 In game → Performance | **Compile new shaders in the background** | Live. Fewer stutters in **new** areas; an object or effect may appear a moment later. |
-
-- 💡 It helps most on PCs with a **not-so-fast CPU**: the work is done once at startup instead of
-  while you play, so there are far fewer hitches.
-- ⏳ **The first time can take a while** and areas you **never played** still compile as you reach
-  them; after that starts are quick. The more you play, the better it gets.
-
-### 🎬 Screen effects
-
-Turn off **motion blur, depth of field, bloom and film grain** (*Launcher → Graphics → Effects*, or
-*Insert → Image*): they apply **when the game starts** (use **Apply and restart** in the menu).
-**Camera shake** (explosions, hits) switches **live** in *Insert → Controls*. Weapon recoil stays.
-
-### ⌨️ Keyboard and mouse button icons
-
-The game's prompts can show **your keys** (or the mouse button) instead of PS4 buttons: **last
-device used** (default), **keyboard and mouse**, or **PS4**. Set it in the launcher (*Controls*) or
-*Insert → Controls → Button prompts*. 🔄 **The game uses the option it was opened with: restart to
-change it.** Sticks and the touchpad keep their PS4 icons.
-
-### 🧰 Launcher
-
-English and Spanish · dump check · automatic updates · display mode, window size, resolution,
-upscaler and its **quality mode**, frame generation, frame rate limit (30, 60, experimental 144 /
-240 / unlimited), VSync, anisotropic filtering, texture sharpness, FSR 1, **screen effects**,
-**shader precompile**, **button icons** · keyboard, mouse and controller mapping · FOV · quick links
-to saves, screenshots and logs · **Ports Discord** button.
-
-## 🗂️ Game versions
-
-| Release | Region | Status |
-|---|---|---|
-| CUSA00190 | USA | ✅ Tested (the port's reference) |
-| CUSA00191 | Latin America | ⚠️ Not tested, may work |
-| CUSA00002 | Europe | ⚠️ Not tested, may work (choose the language in the game's options) |
-| CUSA00085 | Japan | ⚠️ Not tested; Japanese texts may look wrong or be missing |
-
-- **Version 01.81 is required** in every region (base game or its update).
-- Saves are shared between regions: switching keeps them. No folder renaming or `param.sfo` edits.
-
-## 🐧 Linux and Steam Deck (Proton, not tested by us)
-
-1. Add **Killzone Shadow Fall.exe** to Steam as a *non-Steam game*.
-2. *Properties → Compatibility*: force Proton Experimental or GE-Proton.
-3. Start it from Steam, choose your dump's folder and press **PLAY**.
-
-Reports (distro or Steam Deck, Proton version, GPU) are welcome on Discord or in
-[issues](../../issues). A native Linux version (AppImage) will come once the game is fully stable.
-
-## ⚠️ Known issues
-
-- **Performance options (0.2.5):** they give about 40-50% more FPS, but if the game closes or
-  something looks wrong, turn off *Advanced → Performance* and try again before reporting.
-- **Mouse:** walking without sprinting turns at the game's own (slower) speed; see
-  [Direct mouse aim](#-direct-mouse-aim-11).
-- **First play:** some effects can show up a few frames late while their shader compiles; see
-  [Shader cache](#-shader-cache-and-precompiling).
-- **Above 60 FPS (experimental):** turn VSync off on a 60 Hz monitor.
-- The shader cache can take several GB ("Clear cache" in the launcher).
-- Multiplayer: offline only (Botzone).
-
-## 🗺️ Roadmap
-
-**🔜 Coming next**
-- 🖥️ **Ultrawide (21:9)** support: wider view (Hor+) with the HUD kept in place.
-- ✨ **FSR 4** upscaling.
-- 🎮 **Cheats**: debug menu and patches (e.g. unlocking every chapter).
-- 🧰 A **new, improved and more intuitive launcher**: it already has many options, and the new one
-  will present them far more clearly.
-
-**Later**
-- In-game menu in Spanish.
-- Native Linux version (AppImage), with Steam Deck in mind, once the game is fully stable.
-
-## 🐞 Reporting bugs
-
-Tell us on **[Discord](https://discord.gg/UYFcV5rbDw)** or open an [issue](../../issues) with what
-happened, where (chapter), your GPU, CPU and driver, and attach that session's folder from
-`user\logs\` (launcher **Logs** button). **Crash or graphics error?** First try with
-*Advanced → Performance* turned off and say whether it still happens.
-
-## 🛠️ Building from source
-
-As in the gow3_pc base ([instructions](packaging/windows/README.md)): MSYS2 CLANG64,
-`bash build.sh`, then `bash packaging/windows/package_kzsf.sh` for the zip (first,
-`packaging/windows/make_kzsf_icon.py <your dump>/sce_sys/icon0.png launcher/kzsf.ico`). For DLSS,
-build the bridge first with Visual Studio 2022 and the [NVIDIA DLSS SDK](https://github.com/NVIDIA/DLSS):
-`DLSS_SDK_ROOT=<checkout> bash packaging/windows/build_dlss_kzsf.sh`.
-
----
-
-## Español
-
-[![Unite al Discord de los Ports](https://img.shields.io/badge/Discord-Unite%20al%20Discord%20de%20los%20Ports-5865F2?logo=discord&logoColor=white)](https://discord.gg/UYFcV5rbDw)
-[![Apoyá el proyecto y futuros ports](https://img.shields.io/badge/PayPal-Apoy%C3%A1%20el%20proyecto%20y%20futuros%20ports-00457C?logo=paypal&logoColor=white)](https://www.paypal.com/paypalme/SantiagoLescano577)
-[![Última versión](https://img.shields.io/github/v/release/lesca-191204/killzone-shadowfall-pc?label=Descargar&color=2ea44f)](../../releases/latest)
-
-> 💬 **¡Tenemos Discord!** El servidor de la comunidad es el lugar para **reportar problemas**,
-> contarnos **qué te gustaría que agreguemos** y **enterarte antes que nadie de los nuevos ports**
-> y de cómo apoyarlos.
-> 👉 **[discord.gg/UYFcV5rbDw](https://discord.gg/UYFcV5rbDw)**
->
-> ❤️ Los ports son y seguirán siendo **gratuitos**. Si querés ayudar, una donación por PayPal se
-> agradece, pero es totalmente opcional.
-
-Port nativo para Windows de **Killzone Shadow Fall** (PS4). El código del juego corre directamente
-en tu CPU; los gráficos se traducen a Vulkan en tiempo real. **Beta pública:** se puede jugar la
-campaña completa, y mejora con cada reporte.
-
-> ⚠️ **No incluye archivos del juego.** Necesitás tu propia copia dumpeada del juego, **versión
-> 01.81**: **CUSA00190** (la probada) u otra región (ver [Versiones del juego](#️-versiones-del-juego)).
-> Este proyecto no está afiliado a Sony Interactive Entertainment ni a Guerrilla Games. Killzone es
-> una marca de Sony Interactive Entertainment.
-
-<p align="center"><img src="docs/images/launcher.png" alt="El launcher" width="820"></p>
-
-## 📥 Descargar y jugar
-
-1. Bajá el zip de la última versión en **[Releases](../../releases/latest)** y descomprimilo donde
-   quieras (fuera de "Archivos de programa").
-2. Abrí **Killzone Shadow Fall.exe** y elegí la carpeta de tu dump (la que tiene `eboot.bin`).
-3. Dale a **JUGAR**. El launcher se actualiza solo cuando sale una versión nueva, conservando tus
-   partidas.
-
-| | Mínimo / recomendado |
-|---|---|
-| 🪟 Sistema | Windows 10 (1903+) u 11 de 64 bits |
-| 🎮 GPU | Vulkan 1.3 · **4-6 GB de VRAM** para 1080p-1440p, **8 GB** para 1800p y 4K |
-| 🧠 RAM | 16 GB |
-| ✅ Probado en | Ryzen 7 5700 + RTX 2060 Super (8 GB): se juega completo de principio a fin |
-
-Todavía no fue probado en gráficas AMD ni en procesadores Intel: los reportes se agradecen mucho.
-
-## 🎮 Controles
-
-> 🦉 **El dron OWL con teclado y mouse:** mantené **Suprimir (Delete)** y mové el mouse. Es tu dedo
-> sobre el touchpad de PS4: deslizá para elegir la orden del OWL, igual que con el mando. El juego
-> también te lo recuerda unos segundos al empezar.
-
-**Teclado y mouse** (por defecto estilo shooter; cambiá cualquier tecla en el launcher → *Controles*):
-
-| Acción | Tecla | | Acción | Tecla |
-|---|---|---|---|---|
-| Moverse | **W A S D** | | Cámara | **Mouse** (directo, 1:1) |
-| Disparar (R2) | **Click izquierdo** | | Apuntar (L2) | **Click derecho** |
-| Saltar / ✕ | **Espacio** | | ○ (agacharse) | **C** |
-| □ (recargar / usar) | **R** | | △ (arma) | **Q** |
-| L1 / R1 | **1 / 3** | | Correr (L3) | **Shift izquierdo** |
-| Cuerpo a cuerpo (R3) | **F** | | Cruceta | **Flechas** |
-| Options (pausa) | **Enter** | | Click del touchpad ← / → | **Tab / Retroceso** |
-| 🦉 OWL (touchpad) | **Mantener Suprimir + mouse** | | Liberar el cursor | **Alt izquierdo** |
-
-**Mando:** Xbox, DualShock 4, DualSense y cualquier mando compatible con SDL, con botones
-remapeables, zona muerta de sticks, vibración y volumen del altavoz del mando.
-
-**Atajos mientras jugás:**
-
-| Atajo | Qué hace |
-|---|---|
-| **Insert** · **R3 + L2** | Abre el menú dentro del juego (todas las opciones de abajo) |
-| **Mantener Share / View / Select (~1 s)** | Menú rápido: **Continuar · Ajustes · Salir del juego** (solo mando) |
-| **Esc** · **Círculo / B** | Cierra el menú |
-| **L1 / R1** · **Q / E** | Cambia de pestaña en el menú |
-| **F12** | Captura de pantalla (`user\ps4\screenshots`) |
-| **Alt + F4** | Cierra el juego |
-
-## ✨ Funciones
-
-### 🎯 Mouse directo (1:1)
-
-El mouse gira la cámara **directamente**: sin stick emulado, sin zona muerta, sin curva de
-respuesta y sin tope de velocidad. En la práctica se juega casi igual que un shooter de PC.
-
-- **Sensibilidad:** se recomienda alrededor de **1** (valores altos giran muy rápido).
-- **Giros rápidos (x1 a x12, x6 por defecto):** mientras movés el mouse, se sube el límite de
-  velocidad de giro del juego para que un 90° o 180° rápido no se frene. Con mando se mantiene la
-  sensación original del juego.
-- **Invertir eje Y.**
-- ℹ️ *Por diseño del juego, la cámara gira a otra velocidad cuando caminás que cuando corrés, así
-  que caminar sin esprintar todavía puede sentirse un poco distinto. Corriendo y apuntando se
-  comporta como un mouse 1:1 de verdad.*
-- Todo se cambia en el launcher (*Controles*) o **en vivo** en el menú dentro del juego (pestaña
-  *Controls*).
-
-### 🔭 Campo de visión (FOV)
-
-Un **slider de FOV de 80% a 150%** del original (100% = como en PS4). Se ajusta en el launcher
-(pestaña *Juego*) o **en vivo mientras jugás** en el menú dentro del juego (pestaña *Controls*): la
-vista se abre al instante. El zoom al apuntar se escala en la misma proporción.
-
-| FOV 100% (PS4) | FOV 150% |
-|---|---|
-| ![FOV 100%](docs/images/fov-100.jpg) | ![FOV 150%](docs/images/fov-150.jpg) |
-
-### ⚙️ Menú dentro del juego (overlay)
-
-Apretá **Insert** (o **R3 + L2**) cuando quieras. Ahí está casi todo lo del launcher, y **la mayoría
-se aplica al instante**, sin cerrar el juego. Se guarda solo, y el launcher muestra los mismos valores.
-
-<p align="center"><img src="docs/images/ingame-menu-controls.png" alt="Menú dentro del juego, pestaña Controls" width="560"></p>
-
-| Pestaña | Opción | Cuándo se aplica |
-|---|---|---|
-| 🎮 **Controls** | Sensibilidad del mouse, giros rápidos, invertir Y | ⚡ En vivo |
-| | Campo de visión (FOV) | ⚡ En vivo |
-| | Vibración, zona muerta de sticks, altavoz del mando | ⚡ En vivo |
-| | Mantener Share para el menú rápido, consejos al iniciar | ⚡ En vivo |
-| | Temblor de cámara (explosiones, impactos) | ⚡ En vivo |
-| | Íconos de botones: último dispositivo / teclado y mouse / PS4 | 🔄 Reinicio |
-| 🖼️ **Image** | Modo de pantalla (ventana / sin bordes / completa), VSync | ⚡ En vivo |
-| | Reescalado FSR 1, nitidez (RCAS) y su intensidad | ⚡ En vivo |
-| | Reescalador **FSR 3.1 / DLSS** *(si el juego arrancó con uno)* | ⚡ En vivo |
-| | **Generación de frames** Apagada / FSR 3.1 / DLSS | ⚡ En vivo · 🔄 reinicio para encenderla desde apagada |
-| | Nitidez de texturas (LOD bias, de -2 a +2) | ⚡ En vivo |
-| | Filtrado anisotrópico | 🔄 Reinicio |
-| | Efectos: desenfoque de movimiento, profundidad de campo, bloom, grano | 🔄 Reinicio |
-| 🚀 **Performance** | Límite de FPS, cuadros en cola, compilación de shaders en segundo plano | ⚡ En vivo |
-| | Opciones de lectura de GPU (las de rendimiento de la 0.2.5) | 🔄 Reinicio |
-| 📊 **Overlay** | FPS, frametime, reescalador, GPU, CPU, RAM, VRAM · tamaño, esquina, opacidad | ⚡ En vivo |
-
-- 🔄 **Aplicar y reiniciar:** las opciones de *reinicio* muestran un botón que cierra el juego, y el
-  launcher lo vuelve a abrir solo con lo nuevo (se pierde lo no guardado desde el último punto de
-  control).
-- 🚪 **Salir del juego:** un botón en el menú y en el menú rápido cierra el juego bien; no hace falta
-  teclado si jugás desde el sillón o por Steam.
-- ℹ️ Por ahora el menú dentro del juego está en inglés.
-
-### 🚀 Rendimiento
-
-- **0.3.0:** los hilos que alimentan a la GPU y cargan los niveles corren con más prioridad en
-  Windows, y en procesadores de **8 hilos o menos** también el hilo de comandos de la GPU: un
-  ritmo de cuadros más parejo en CPUs más débiles cuando otros programas compiten por ellas.
-- **0.2.5:** *Avanzado → Rendimiento* hace que la GPU trabaje en vez de esperar (cerca de **+40-50%
-  de FPS** en escenas pesadas en nuestras pruebas). **Si tenés un crash o un error gráfico,
-  desactivá esas dos opciones (de a una)** y contanos.
-
-### 🖥️ Resolución, reescalado y generación de frames
-
-- **Más de 1080p con AMD FSR 3.1 o NVIDIA DLSS** (1440p, 1800p, 4K): el juego renderiza en 1080p y
-  el reescalador lo lleva a tu resolución; HUD, menús y videos se dibujan nítidos a tamaño completo.
-- **Nítido y estable:** jitter de subpíxel y los vectores de movimiento por píxel del propio juego,
-  así el arma, los objetos que se mueven y la cámara se siguen bien.
-- **Generación de frames:** **AMD FSR 3.1** en cualquier GPU, **NVIDIA DLSS** en GeForce RTX 40/50
-  (hasta 4x en RTX 50). Casi el doble de cuadros con HUD y textos nítidos.
-- El método clásico (parche de resolución del juego) sigue en *Avanzado*.
-
-### 🎚️ Calidades de reescalado
-
-*Launcher → Gráficos → **Calidad de FSR / DLSS***. La escena 3D se dibuja **más chica** y FSR 3.1 o
-DLSS la reconstruyen hasta tu resolución de salida. **HUD, menús y videos siguen nítidos a tamaño
-completo.**
-
-| Modo | Escena con salida **1080p** | **1440p** | **1800p** | **4K** |
-|---|---|---|---|---|
-| ⭐ **Nativa** (máxima calidad) | 1080p | 1080p | 1080p | 1080p |
-| **Calidad** | 720p | 960p | 1080p | 1080p |
-| **Equilibrado** | 630p | 836p | 1044p | 1080p |
-| **Rendimiento** | 540p | 720p | 900p | 1080p |
-| **Ultra rendimiento** | 360p | 480p | 600p | 720p |
-
-| ✅ Usalo cuando | ❌ No ayuda cuando |
-|---|---|
-| El límite es tu **placa de video**: GPU modesta, o 1440p / 1800p / 4K con la GPU cerca del 100% | El límite es tu **procesador** (pocos FPS con la GPU por debajo del 100%): menos píxeles no ayudan a la CPU |
-| Querés más FPS y aceptás una imagen algo más suave | Tu GPU ya sostiene los FPS que querés: **Nativa** es la que mejor se ve |
-
-Necesita **FSR 3.1 o DLSS** como método de resolución (*Avanzado → Método de resolución*) o la
-generación de frames activada, y se lee al iniciar el juego. **Insert → Image** muestra los tamaños
-en uso (*"WxH scene, WxH output"*).
-
-### 🧩 Caché de shaders y precompilado
-
-Los shaders del juego **los compila tu PC la primera vez que cada zona los necesita**, por eso una
-zona nueva puede dar tirones o un efecto puede aparecer tarde. Cada shader compilado se guarda en
-la **caché**: **una vez jugada una zona, queda lista** y carga rápido la próxima vez.
-
-| Dónde | Opción | Qué hace |
-|---|---|---|
-| 🧰 Launcher → Avanzado | **Precompilar shaders al iniciar** *(activada por defecto)* | Antes de abrir el juego prepara **todos los shaders que ya están en tu caché** con todos tus núcleos. El inicio tarda más (la primera vez con una caché grande, más) y usa más memoria mientras tanto. |
-| 🎮 En el juego → Performance | **Compile new shaders in the background** | En vivo. Menos tirones en zonas **nuevas**; un objeto o efecto puede aparecer un momento después. |
-
-- 💡 Ayuda sobre todo a PCs con un **procesador no muy rápido**: el trabajo se hace una vez al
-  iniciar en lugar de mientras jugás, así que hay muchos menos tirones.
-- ⏳ **La primera vez puede tardar** y las zonas que **nunca jugaste** se siguen compilando al llegar;
-  después los inicios son rápidos. Cuanto más jugás, mejor queda.
-
-### 🎬 Efectos de pantalla
-
-Desactivá **desenfoque de movimiento, profundidad de campo, bloom y grano** (*Launcher → Gráficos →
-Efectos*, o *Insert → Image*): se aplican **al iniciar el juego** (usá **Apply and restart** en el
-menú). El **temblor de cámara** (explosiones, impactos) cambia **en vivo** en *Insert → Controls*. El
-retroceso del arma se mantiene.
-
-### ⌨️ Íconos de teclado y mouse
-
-Los avisos del juego pueden mostrar **tus teclas** (o el botón del mouse) en vez de los botones de
-PS4: **último dispositivo usado** (por defecto), **teclado y mouse**, o **PS4**. Se elige en el
-launcher (*Controles*) o en *Insert → Controls → Button prompts*. 🔄 **El juego usa la opción con la
-que lo abriste: reiniciá para cambiarla.** Los sticks y el touchpad conservan el ícono de PS4.
-
-### 🧰 Launcher
-
-Inglés y español · verificación del dump · actualizaciones automáticas · modo de pantalla, tamaño
-de ventana, resolución, reescalador y su **modo de calidad**, generación de frames, límite de FPS
-(30, 60, experimentales 144 / 240 / sin límite), VSync, filtrado anisotrópico, nitidez de texturas,
-FSR 1, **efectos de pantalla**, **precompilado de shaders**, **íconos de botones** · controles de
-teclado, mouse y mando · FOV · accesos a partidas, capturas y logs · botón **Ports Discord**.
-
-## 🗂️ Versiones del juego
-
-| Versión | Región | Estado |
-|---|---|---|
-| CUSA00190 | EE. UU. | ✅ Probada (la referencia del port) |
-| CUSA00191 | Latinoamérica | ⚠️ No probada, puede funcionar |
-| CUSA00002 | Europa | ⚠️ No probada, puede funcionar (el idioma se elige en las opciones del juego) |
-| CUSA00085 | Japón | ⚠️ No probada; los textos en japonés pueden verse mal o faltar |
-
-- **Es obligatoria la versión 01.81** en cualquier región (juego base o su actualización).
-- Las partidas se comparten entre regiones. No hace falta renombrar carpetas ni editar `param.sfo`.
-
-## 🐧 Linux y Steam Deck (Proton, no probado por nosotros)
-
-1. Agregá **Killzone Shadow Fall.exe** a Steam como *juego que no es de Steam*.
-2. *Propiedades → Compatibilidad*: forzá Proton Experimental o GE-Proton.
-3. Abrilo desde Steam, elegí la carpeta de tu dump y dale a **JUGAR**.
-
-Se agradecen reportes (distro o Steam Deck, versión de Proton, GPU) en el Discord o en
-[issues](../../issues). Cuando el juego esté 100% estable va a salir una versión nativa para
-Linux (AppImage).
-
-## ⚠️ Problemas conocidos
-
-- **Opciones de rendimiento (0.2.5):** dan cerca de 40-50% más de FPS, pero si el juego se cierra
-  o algo se ve mal, desactivá *Avanzado → Rendimiento* y probá de nuevo antes de reportar.
-- **Mouse:** caminando sin correr, la cámara gira a la velocidad (más lenta) del propio juego; ver
-  [Mouse directo](#-mouse-directo-11).
-- **Primera partida:** algunos efectos pueden aparecer unos cuadros tarde mientras se compila su
-  shader; ver [Caché de shaders](#-caché-de-shaders-y-precompilado).
-- **Más de 60 FPS (experimental):** con un monitor de 60 Hz desactivá VSync.
-- La caché de shaders puede ocupar varios GB ("Borrar caché" en el launcher).
-- Multijugador: solo sin conexión (Botzone).
-
-## 🗺️ Próximamente
-
-**🔜 Lo que viene**
-- 🖥️ **Soporte ultrawide (21:9):** vista más ancha (Hor+) con el HUD en su lugar.
-- ✨ **FSR 4**.
-- 🎮 **Cheats**: menú debug y parches (por ejemplo desbloquear todos los capítulos).
-- 🧰 Un **launcher nuevo, mejorado e intuitivo**: ya tiene muchas opciones, y el nuevo las va a
-  presentar mucho más claras.
-
-**Más adelante**
-- Menú dentro del juego en español.
-- Versión nativa para Linux (AppImage), pensando en Steam Deck, cuando el juego esté 100% estable.
-
-## 🐞 Reportar errores
-
-Contanos en el **[Discord](https://discord.gg/UYFcV5rbDw)** o abrí un [issue](../../issues) con qué
-pasó, dónde (capítulo), tu GPU, CPU y driver, y adjuntá la carpeta de esa partida en `user\logs\`
-(botón **Logs** del launcher). **¿Crash o error gráfico?** Primero probá con *Avanzado → Rendimiento*
-desactivado y decí si sigue pasando.
-
-## 🛠️ Compilar desde el código
-
-Igual que la base gow3_pc ([instrucciones](packaging/windows/README.md)): MSYS2 CLANG64,
-`bash build.sh`, y después `bash packaging/windows/package_kzsf.sh` para el zip (antes,
-`packaging/windows/make_kzsf_icon.py <tu dump>/sce_sys/icon0.png launcher/kzsf.ico`). Para DLSS,
-compilá antes el puente con Visual Studio 2022 y el [SDK de NVIDIA DLSS](https://github.com/NVIDIA/DLSS):
-`DLSS_SDK_ROOT=<checkout> bash packaging/windows/build_dlss_kzsf.sh`.
-
----
-
-## 🙏 Credits / Créditos
-
-- **Lesca**: Killzone Shadow Fall port (dynamic module loader, PS4 clock fix, tessellation and
-  texture fixes, fonts, resolution patches, VRAM reduction, shader stutter fix, FSR/DLSS
-  calibration, jitter and motion vectors, frame generation, direct mouse aim, live FOV, in-game
-  menu and quick menu, launcher).
-- **Felipe Prado**: [gow3_pc / SpartanPort](https://github.com/FelipePrado0/SpartanPort), the base
-  of this port (its README is in [docs/gow3_pc](docs/gow3_pc/README.md)).
-- **Supermedo** and **deadinside28**: [bloodborne_pc](https://github.com/deadinside28/bloodborne_pc),
-  the original native port technique, and [uncharted_pc](https://github.com/Supermedo/uncharted_pc)
-  (mouse input layer, file read, FPU state and texture cache fixes, frame generation).
-- **HayatoG**: [iss_pc](https://github.com/HayatoG/iss_pc) (shader permutation and cache fixes,
-  driver pipeline cache, texture LOD bias).
-- **shadPS4 team**: the [shadPS4](https://github.com/shadps4-emu/shadPS4) video core (GPU and
-  shader translation to Vulkan).
-- **clearfeather**: startup crash fix for base 01.00 + update installs (file symlink stat, PR #31),
-  controller/audio suggestions and the controller quick menu idea (#49).
-- **AMD FidelityFX FSR 3.1** ([FSR-Vulkan](https://github.com/FireBurn/FSR-Vulkan)) and **NVIDIA
-  DLSS** ([DLSS SDK](https://github.com/NVIDIA/DLSS); NVIDIA's license is in `licenses\`).
-
-## 📄 License
-
-GNU GPL v2 or later ([LICENSE](LICENSE)). Third-party components keep their own licenses.
+| `scripts/link_modules.py` | Links decrypted firmware modules (`--system-dir`, `--system`) and modules from the game root (`sysdata/libSceSecure.prx`); plain ELF input; empty TLS segments get no module ID |
+| `run.py` | Links `libc`, `Fios2`, `JobManager`, `NpToolkit`, `libSceSecure` and the firmware modules; `GOW3_NATIVE_LIBS` leaves those libraries to the native code |
+| `src/runtime_fiber.c` | `libSceFiber` (the game's job system), ported from shadPS4 |
+| `src/runtime_hoststack.c` | Host functions called from small guest stacks (fiber contexts) run on a per-thread host stack (`GOW3_HOST_STACK_KB`, default 1024): FFmpeg, the Vulkan driver and Windows need far more stack than the PS4 libraries and overwrote the game's heap |
+| `src/runtime_eventflag.c` | Kernel event flags |
+| `src/runtime_gr2.c` | Other kernel/libc functions; offline network, content and sharing services; photo JPEG and Audio3d unavailable for now |
+| `src/runtime_services.c` | PSN dialogs and services answering as signed out |
+| `vk_rasterizer.cpp` | Draws with adjacency (the comic outline geometry shader, mistranslated: black streaks) are skipped unless `GOW3_GS_OUTLINE=1`; found by [HayatoG/gr2_pc](https://github.com/HayatoG/gr2_pc) |
+| `scripts/patches.py` | Games without a built-in patch file (Gravity Rush 2) get the third-party XML patches in `user/patches` that name their title ID and version |
+| `tools/check_imports.py` | Offline check that every import the host must serve is implemented |
+
+Check the imports after changing the runtime:
+
+```bash
+python scripts/prepare.py "$GAME" --out out && python scripts/link_modules.py "$GAME" --out out \
+  --modules libc.prx libSceFios2.prx libSceJobManager.prx libSceNpToolkit.prx sysdata/libSceSecure.prx \
+  --system-dir "$SYS" --system libSceNgs2.sprx libSceJson2.sprx libSceRtc.sprx libSceFreeTypeOt.sprx libSceFontFt.sprx libSceFont.sprx
+python tools/check_imports.py out/link.json --tolerate libSceFreeType
+```
+
+This project is not affiliated with Sony Interactive Entertainment. Gravity Rush is a trademark
+of Sony Interactive Entertainment. GPL-2.0-or-later, like the projects it builds on.
