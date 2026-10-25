@@ -47,23 +47,26 @@ The console output is also saved in `user/logs/gr2-<date>.log`.
 `launcher/gr2_launcher.py` (Russian and English): the game folder (with an optional 01.11 update
 folder), the system modules folder (found by itself in a shadPS4 install beside the game), port
 graphics options, keyboard / mouse / controller mapping, readback and shader options, and
-shortcuts to saves, screenshots, logs and the cache. The banner shows the dump's `sce_sys/pic1.png`,
-or a picture of your choice (Game tab → Banner picture: a file, or a link the launcher downloads once
-into `user/banner`). From the source tree, in MSYS2 CLANG64:
+shortcuts to saves, screenshots, logs and the cache. The banner picture is `launcher/banner.jpg`.
+
+`bash build.sh` also makes **`Gravity Rush 2.exe`** in the project folder
+(`packaging/windows/launcher_exe.c`): it starts the launcher with the MSYS2 CLANG64 Python, without
+a console window, and stays open until the launcher closes, so Windows, the taskbar and Steam treat
+it as one program. Its icon is the game's (made from `sce_sys/icon0.png` once the launcher knows the
+game folder: rebuild after choosing it), else the port's own. The launcher needs these packages:
 
 ```bash
 pacman -S --needed mingw-w64-clang-x86_64-tk mingw-w64-clang-x86_64-python-pillow
-python launcher/gr2_launcher.py
 ```
 
 A package players can run without MSYS2 or Python (`dist/Gravity Rush 2/Gravity Rush 2.exe`):
 `bash packaging/windows/package_gr2.sh` (needs a python.org Python; the icon is made once from
 your dump, as the script says).
 
-Steam Input (Steam Controller, gyro to mouse, ...): add `Gravity Rush 2 (Steam).bat` to Steam as a
-non-Steam game and turn Steam Input on in its controller settings. Unlike `Gravity Rush 2.bat` it
-keeps running until the launcher closes, so Steam keeps its virtual gamepad for the game (SDL sees
-an Xbox controller; the mouse look takes Steam's gyro-as-mouse).
+Steam Input (Steam Controller, gyro to mouse, ...): add `Gravity Rush 2.exe` to Steam as a non-Steam
+game and turn Steam Input on in its controller settings. It keeps running until the launcher closes,
+so Steam keeps its virtual gamepad for the game (SDL sees an Xbox controller; the mouse look takes
+Steam's gyro-as-mouse).
 
 ### 60 FPS and higher resolutions
 

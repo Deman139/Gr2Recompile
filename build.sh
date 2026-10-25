@@ -2,6 +2,33 @@
 set -euo pipefail
 cd -- "$(dirname -- "$0")"
 mkdir -p out
+# "Gravity Rush 2.exe" (packaging/windows/launcher_exe.c): the launcher as a Windows program, with
+# the game's own icon once the launcher knows the game folder (launcher/gr2.ico), else the port's.
+# A failure here only warns: the game itself is built.
+build_launcher_exe() {
+    local py icon=launcher/gr2_port.ico game rc_tool
+    py=$(command -v python || true)
+    if [[ ! -f launcher/gr2.ico && -n $py && -f user/launcher.json ]]; then
+        game=$("$py" -c "import json; print(json.load(open('user/launcher.json', encoding='utf-8')).get('game_dir', ''))" 2>/dev/null || true)
+        if [[ -n $game && -f $game/sce_sys/icon0.png ]]; then
+            "$py" packaging/windows/make_game_icon.py "$game/sce_sys/icon0.png" launcher/gr2.ico >/dev/null 2>&1 || true
+        fi
+    fi
+    [[ -f launcher/gr2.ico ]] && icon=launcher/gr2.ico
+    rc_tool=$(command -v windres || command -v llvm-windres || true)
+    if [[ -z $rc_tool ]]; then echo 'Gravity Rush 2.exe skipped: no windres' >&2; return 0; fi
+    local pydir=''
+    [[ -n $py ]] && pydir=$(cygpath -w "$(dirname "$py")" | sed 's/\\/\\\\/g')
+    printf '#define GR2_PYTHON_DIR L"%s"\n' "$pydir" > out/launcher_exe_config.h
+    printf '1 ICON "%s"\n' "$(cygpath -m "$PWD/$icon")" > out/launcher_exe.rc
+    if "$rc_tool" out/launcher_exe.rc -O coff -o out/launcher_exe_res.o &&
+       clang -O2 -municode -mwindows -include out/launcher_exe_config.h packaging/windows/launcher_exe.c \
+             out/launcher_exe_res.o -o "Gravity Rush 2.exe"; then
+        echo "Built $PWD/Gravity Rush 2.exe (icon: $icon)"
+    else
+        echo 'Gravity Rush 2.exe could not be built (the game was): start launcher/gr2_launcher.py instead' >&2
+    fi
+}
 # This port's changes to FSR-Vulkan (gpu/patches/fsr-vulkan), applied to the submodule's working
 # tree once. A tree holding an older version of them (renamed or edited patches) is reset first.
 apply_fsr_patches() {
@@ -62,6 +89,7 @@ MINGW*|MSYS*)
     fi
     cp out/gpu/gr2-probe.exe out/gpu/gr2-gpu-capabilities.exe out/
     echo "Built $PWD/out/gr2-probe.exe"
+    build_launcher_exe
     exit 0
     ;;
 esac

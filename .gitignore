@@ -28,3 +28,5 @@ out_package.log
 /play/
 # Gravity Rush 2 port: the icon made from the player's own dump (packaging/windows/package_gr2.sh)
 launcher/gr2.ico
+# Built by build.sh (packaging/windows/launcher_exe.c)
+/Gravity Rush 2.exe
