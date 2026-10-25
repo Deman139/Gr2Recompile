@@ -235,6 +235,17 @@ def main():
                                                 PORT.parent / 'CUSA04943'))
     if not (game / 'eboot.bin').is_file():
         fail(f'No eboot.bin in {game} (set GR2_GAME_DIR).')
+    # DLC: <game>/addcont/<TITLE_ID>/<label>/ (shadPS4's layout; unlock-key .pkg files dropped into
+    # the game folder are unpacked there first). GR2_DLC=0 starts the game without them.
+    if env.get('GR2_DLC', '1') != '0' and 'GR2_ADDONS' not in env:
+        import addcont
+        title_id = addcont.game_title_id(game)
+        if title_id:
+            addcont.install_packages(game, title_id, log=lambda m: print(m, flush=True))
+            addons = addcont.find_addons(game, title_id)
+            env['GR2_ADDONS'] = addcont.environment_value(addons)
+            print(f'DLC: {len(addons)}' + ''.join(f'\n  {label}: {title}' for label, _f, title in addons),
+                  flush=True)
     update_view = None
     if env.get('GR2_PATCH_DIR'):
         import game_update

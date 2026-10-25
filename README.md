@@ -25,6 +25,11 @@ The simplest way: copy the game into `game/` (or `game/CUSA04943/`) and the modu
 `sys_modules/` next to the launcher; the launcher, `gr2.sh` and `run.py` find them there. A path
 typed or chosen in the launcher (or `GR2_GAME` / `GR2_SYS_MODULES`) takes precedence.
 
+DLC (costumes, *The Ark of Time – Raven's Choice*): drop the unlock-key `.pkg` files into the game
+folder. They are unpacked into `<game>/addcont/<TITLE_ID>/<label>/` (the layout shadPS4 reads, so
+its add-on folder can be `<game>/addcont`) and the packages removed (`scripts/addcont.py`). The
+game sees them as installed; `GR2_DLC=0` starts without them.
+
 - Windows 10/11, a Vulkan 1.3 GPU, 16 GB RAM; MSYS2 CLANG64 to build. In the **MSYS2 CLANG64**
   shell:
 

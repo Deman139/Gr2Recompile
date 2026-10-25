@@ -1,5 +1,8 @@
 /* Offline AppContent provider for the configured base-game profile.
- * No package/DLC mounting, downloads, entitlement or license emulation. */
+ * Add-ons (DLC) come from GR2_ADDONS, set by run.py from <game>/addcont/<TITLE_ID>/<label>/ (the
+ * folders shadPS4 reads): "LABEL=host folder|LABEL=host folder". They are reported installed, as
+ * shadPS4 does; an add-on's folder is mounted at /addcontN when the game asks. No downloads; the
+ * entitlement key is zero (unlock-key DLC carries no data to decrypt). */
 #include "runtime.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -10,7 +13,46 @@
 #define BUSY ((int32_t)0x80d90003)
 static unsigned refs, initialized, configured;
 static uint32_t parameters[5];
-static unsigned queries, lists;
+static unsigned queries, lists, key_queries;
+
+#define MAX_ADDONS 32
+#define LABEL_SIZE 17
+#define STATUS_INSTALLED 4
+#define NOT_FOUND ((int32_t)0x80d90005)
+#define NO_ENTITLEMENT ((int32_t)0x80d90007)
+static struct { char label[LABEL_SIZE]; char host[512]; int mounted; } addons[MAX_ADDONS];
+static unsigned addon_count;
+typedef struct { char label[LABEL_SIZE]; char padding[3]; uint32_t status; } AddcontInfo;
+_Static_assert(sizeof(AddcontInfo) == 24, "SceAppContentAddcontInfo is 24 bytes");
+
+static void load_addons(void) {
+    addon_count = 0;
+    const char *spec = getenv("GR2_ADDONS");
+    while (spec && *spec && addon_count < MAX_ADDONS) {
+        const char *end = strchr(spec, '|');
+        size_t length = end ? (size_t)(end - spec) : strlen(spec);
+        const char *eq = memchr(spec, '=', length);
+        size_t label = eq ? (size_t)(eq - spec) : length;
+        if (label && label < LABEL_SIZE) {
+            memcpy(addons[addon_count].label, spec, label);
+            addons[addon_count].label[label] = 0;
+            size_t host = eq ? length - label - 1 : 0;
+            if (host >= sizeof(addons[0].host)) host = 0;
+            memcpy(addons[addon_count].host, eq ? eq + 1 : "", host);
+            addons[addon_count].host[host] = 0;
+            addons[addon_count].mounted = -1;
+            printf("Runtime: AppContent add-on %s (%s)\n", addons[addon_count].label,
+                   host ? addons[addon_count].host : "no folder");
+            ++addon_count;
+        }
+        spec = end ? end + 1 : NULL;
+    }
+}
+static int find_addon(const void *label) {
+    for (unsigned i = 0; i < addon_count; ++i)
+        if (!strncmp((const char *)label, addons[i].label, LABEL_SIZE - 1)) return (int)i;
+    return -1;
+}
 void runtime_content_configure(const uint32_t values[5]) {
     if (refs || initialized || (values[0]!=1 && values[0]!=3)) {
         fputs("ERROR: invalid or late content profile\n",stderr); exit(1);
@@ -55,7 +97,8 @@ static ABI int32_t content_init(const unsigned char *init,unsigned char *boot) {
     /* Only the reserved-zero init profile is implemented. */
     for (unsigned i=0;i<32;++i) if (init[i]) return PARAMETER;
     memset(boot,0,40); initialized=1;
-    puts("Runtime: AppContent initialized; offline base-game profile, no mounted add-ons");
+    load_addons();
+    printf("Runtime: AppContent initialized; offline base-game profile, %u add-on(s)\n", addon_count);
     return 0;
 }
 static void require_initialized(void) {
@@ -71,11 +114,23 @@ static ABI int32_t param_int(uint32_t id,int32_t *out) {
 }
 static ABI int32_t addon_list(uint32_t service,void *list,uint32_t capacity,uint32_t *hits) {
     require_initialized();
-    (void)service; /* every service label (Killzone asks for several) has no add-ons */
     if ((!capacity || !list) && !hits) return PARAMETER;
-    /* No add-ons are mounted by this provider. Never touch unused list slots. */
-    if (hits) *hits=0;
-    ++lists; return 0;
+    /* The add-ons belong to the game's own service (label 0), as in shadPS4; other service labels
+     * have none. Without a list only the count is wanted. Never touch unused list slots. */
+    uint32_t count = service == 0 ? addon_count : 0, written = 0;
+    if (list && capacity) {
+        AddcontInfo *out = list;
+        for (; written < count && written < capacity; ++written) {
+            memset(&out[written], 0, sizeof(out[written]));
+            memcpy(out[written].label, addons[written].label, LABEL_SIZE);
+            out[written].status = STATUS_INSTALLED;
+        }
+    } else {
+        written = count;
+    }
+    if (hits) *hits = written;
+    if (lists++ < 4) printf("Runtime: AppContent add-on list (service %u): %u\n", service, written);
+    return 0;
 }
 /* Temporary data lives in /temp0 (runtime_file.c maps it to the user directory). */
 static ABI int32_t temp_mount(uint32_t option,char *mount_point) {
@@ -91,16 +146,31 @@ static ABI int32_t temp_space(const char *mount_point,uint64_t *kb) {
     if (!mount_point || !kb) return PARAMETER;
     *kb=1024*1024; return 0; /* 1 GiB free */
 }
-/* No add-on is installed or entitled. */
+/* An add-on's folder is mounted at /addcontN (N: its place in the list). */
 static ABI int32_t addon_mount(uint32_t service,const void *label,char *mount_point) {
-    (void)service; (void)mount_point;
     require_initialized();
-    return label ? (int32_t)0x80d90005 : PARAMETER; /* NOT_FOUND */
+    if (!label || !mount_point || service > 7) return PARAMETER;
+    int i = service == 0 ? find_addon(label) : -1;
+    if (i < 0 || !addons[i].host[0]) return NOT_FOUND;
+    char guest[24];
+    snprintf(guest, sizeof(guest), "/addcont%u", (unsigned)i % MAX_ADDONS);
+    if (addons[i].mounted < 0) {
+        if (runtime_file_mount(guest, addons[i].host)) return NOT_FOUND;
+        addons[i].mounted = i;
+        printf("Runtime: AppContent add-on %s mounted at %s\n", addons[i].label, guest);
+    }
+    memcpy(mount_point, guest, strlen(guest) + 1);
+    return 0;
 }
 static ABI int32_t entitlement_key(uint32_t service,const void *label,void *key) {
-    (void)service;
     require_initialized();
-    return label && key ? (int32_t)0x80d90007 : PARAMETER; /* DRM_NO_ENTITLEMENT */
+    if (!label || !key) return PARAMETER;
+    int found = service == 0 ? find_addon(label) : -1;
+    if (key_queries++ < 8)
+        printf("Runtime: AppContent entitlement key %.16s: %s\n", (const char *)label, found < 0 ? "not entitled" : "entitled");
+    if (found < 0) return NO_ENTITLEMENT;
+    memset(key, 0, 16);
+    return 0;
 }
 uintptr_t runtime_content_resolve(const char *name) {
     if (!strcmp(name,"buYbeLOGWmA#libSceAppContent")) return (uintptr_t)temp_mount;
@@ -116,5 +186,6 @@ uintptr_t runtime_content_resolve(const char *name) {
     return 0;
 }
 void runtime_content_report(void) {
-    printf("Runtime: AppContent references=%u, initialized=%u, parameter queries=%u, list queries=%u\n",refs,initialized,queries,lists);
+    printf("Runtime: AppContent references=%u, initialized=%u, parameter queries=%u, list queries=%u, add-ons=%u, key queries=%u\n",
+           refs,initialized,queries,lists,addon_count,key_queries);
 }

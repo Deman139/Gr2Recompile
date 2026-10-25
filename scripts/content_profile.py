@@ -12,11 +12,11 @@ def prepare(game, out, sku='full'):
     if any(type(v) is not int or not 0<=v<=0xffffffff for v in params):
         raise ValueError('invalid user-defined parameter')
     profile=dict(title_id=values.get('TITLE_ID'),sku=sku,sku_source='explicit probe setting',
-                 user_params=params, mounted_addons=[],boot_attr=0)
+                 user_params=params,boot_attr=0)
     out.mkdir(parents=True,exist_ok=True)
     (out/'content.bin').write_bytes(struct.pack('<8s5I',b'G3CONT01',{'full':3,'trial':1}[sku],*params))
     (out/'content-profile.json').write_text(json.dumps(profile,indent=2)+'\n')
-    print(f'AppContent profile: SKU={sku} (probe setting), user params={params}, mounted add-ons=0')
+    print(f'AppContent profile: SKU={sku} (probe setting), user params={params}')
 
 if __name__=='__main__':
     p=argparse.ArgumentParser(description=__doc__)

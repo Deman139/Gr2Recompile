@@ -3,6 +3,15 @@
 #include <stdint.h>
 #include <string.h>
 #include <stdio.h>
+#include <stdlib.h>
+static char mounted_guest[64], mounted_host[512];
+int runtime_file_mount(const char *guest, const char *host) {
+    snprintf(mounted_guest, sizeof(mounted_guest), "%s", guest);
+    snprintf(mounted_host, sizeof(mounted_host), "%s", host);
+    return 0;
+}
+typedef int32_t (ABI *Mount)(uint32_t,const void *,char *);
+typedef int32_t (ABI *Key)(uint32_t,const void *,void *);
 typedef int32_t (ABI *Module)(uint16_t);
 typedef int32_t (ABI *Init)(const void *,void *);
 typedef int32_t (ABI *Param)(uint32_t,int32_t *);
@@ -58,6 +67,33 @@ int main(int argc,char **argv) {
     assert((uint32_t)init(initial,b.boot)==0x80d90003);
     assert(unload(0xb4)==0 && (uint32_t)loaded(0xb4)==0x805a1001);
     assert(load(0xb4)==0 && init(initial,b.boot)==0 && unload(0xb4)==0);
-    puts("PASS: AppContent lifecycle, profile and output boundaries");
+
+    /* Add-ons from GR2_ADDONS (run.py): listed installed for service 0, entitled, mountable. */
+    Mount mount=GET(Mount,"VANhIWcqYak#libSceAppContent");
+    Key key=GET(Key,"XTWR0UXvcgs#libSceAppContent");
+    assert(mount && key);
+#ifdef _WIN32
+    _putenv("GR2_ADDONS=ACEUCROWXXXXXXXX=/dlc/crow|ACEUKIT17XXXXXXX=/dlc/kit17|TOOLONGLABEL0123456789=/x");
+#else
+    setenv("GR2_ADDONS","ACEUCROWXXXXXXXX=/dlc/crow|ACEUKIT17XXXXXXX=/dlc/kit17|TOOLONGLABEL0123456789=/x",1);
+#endif
+    assert(load(0xb4)==0 && init(initial,b.boot)==0);
+    assert(list(0,NULL,0,&h.hits)==0 && h.hits==2);
+    assert(list(1,NULL,0,&h.hits)==0 && h.hits==0);
+    struct { char label[17]; char pad[3]; uint32_t status; } info[3];
+    memset(info,0xaa,sizeof(info));
+    assert(list(0,info,1,&h.hits)==0 && h.hits==1 && !strcmp(info[0].label,"ACEUCROWXXXXXXXX") && info[0].status==4);
+    assert((unsigned char)info[1].label[0]==0xaa);
+    assert(list(0,info,3,&h.hits)==0 && h.hits==2 && !strcmp(info[1].label,"ACEUKIT17XXXXXXX"));
+    assert((unsigned char)info[2].label[0]==0xaa);
+    struct { char data[17]; char pad[3]; } label={"ACEUKIT17XXXXXXX",{0}}, other={"ACEUNONEXXXXXXXX",{0}};
+    unsigned char k[16]; memset(k,0xaa,sizeof(k));
+    assert(key(0,&label,k)==0 && k[0]==0 && k[15]==0);
+    assert((uint32_t)key(0,&other,k)==0x80d90007);
+    char point[16];
+    assert(mount(0,&label,point)==0 && !strcmp(point,"/addcont1") && !strcmp(mounted_host,"/dlc/kit17"));
+    assert((uint32_t)mount(0,&other,point)==0x80d90005);
+    assert(unload(0xb4)==0);
+    puts("PASS: AppContent lifecycle, profile, add-ons and output boundaries");
     return 0;
 }

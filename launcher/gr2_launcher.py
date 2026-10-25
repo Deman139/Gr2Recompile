@@ -94,6 +94,7 @@ TEXTS = {
                         'libSceJson2, libSceRtc, libSceFreeTypeOt, libSceFontFt и libSceFont используются, если есть. '
                         'Если поле пустое, берётся папка sys_modules рядом с лаунчером: просто скопируй файлы .sprx туда.',
         'open_builtin': 'Открыть папку {name}',
+        'dlc_found': 'DLC ({n}): {names}',
         'using_builtin': ' (папка {name} рядом с лаунчером)',
         'browse': 'Обзор…', 'choose_game': 'Выбери папку игры (с eboot.bin)',
         'choose_update': 'Выбери папку обновления', 'choose_modules': 'Выбери папку с модулями (.sprx)',
@@ -219,6 +220,7 @@ TEXTS = {
                         'libSceRtc, libSceFreeTypeOt, libSceFontFt and libSceFont are used when present. With the '
                         'field empty, the sys_modules folder next to the launcher is used: just copy the .sprx files there.',
         'open_builtin': 'Open the {name} folder',
+        'dlc_found': 'DLC ({n}): {names}',
         'using_builtin': ' (the {name} folder next to the launcher)',
         'browse': 'Browse…', 'choose_game': 'Choose the game folder (the one with eboot.bin)',
         'choose_update': 'Choose the update folder', 'choose_modules': 'Choose the modules folder (.sprx)',
@@ -482,6 +484,27 @@ def builtin_game_dir():
 def builtin_modules_dir():
     return next((c for c in (MODULES_HOME, MODULES_HOME / 'sys_modules')
                  if (c / REQUIRED_MODULES[0]).is_file()), None)
+
+
+def game_addons(game_dir):
+    """The DLC of the game folder (scripts/addcont.py: <game>/addcont/<TITLE_ID>/<label>/, the
+    layout shadPS4 reads), after unpacking unlock-key .pkg files dropped into the game folder."""
+    if not game_dir:
+        return []
+    try:
+        import addcont
+        title_id = addcont.game_title_id(game_dir)
+        if not title_id:
+            return []
+        addcont.install_packages(game_dir, title_id, log=lambda _message: None)
+        return addcont.find_addons(game_dir, title_id)
+    except Exception:  # noqa: BLE001 - DLC never stops the launcher
+        return []
+
+
+def addon_name(title):
+    import re
+    return re.sub(r'^Gravity Rush\S*\s*2\s*[-–:]\s*', '', title).strip() or title
 
 
 def game_dir_of(settings):
@@ -1228,6 +1251,9 @@ class Launcher:
         modules_ok, modules_message, partial = check_modules(modules_dir)
         if game_dir and not self.settings.get('game_dir'):
             message += tr('using_builtin', name='game')
+        addons = game_addons(game_dir) if ok else []
+        if addons:
+            message += '\n' + tr('dlc_found', n=len(addons), names=', '.join(addon_name(t) for _l, _f, t in addons))
         if modules_dir and not self.settings.get('modules_dir') and Path(modules_dir) in (MODULES_HOME, MODULES_HOME / 'sys_modules'):
             modules_message += tr('using_builtin', name='sys_modules')
         self.game_ok = ok and modules_ok
