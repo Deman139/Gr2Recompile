@@ -17,7 +17,7 @@ Everything the port writes lives in user/ beside the launcher:
 
 Frozen with PyInstaller (packaging/windows/package_gr2.sh), the same executable also runs run.py
 (`--run`) and the preparation scripts (`--script`), so players need no Python. The artwork
-(banner, icon) comes from the player's game folder: nothing of the game ships.
+(banner) ships as launcher/banner.jpg; the window icon comes from the player's game folder.
 """
 import json
 import os
@@ -106,14 +106,6 @@ TEXTS = {
         'modules_ok': 'Модули: {found} из {total}.',
         'modules_partial': ' Нет: {names} (порт использует свои версии).',
         'tools': 'Папки и обслуживание',
-        'banner_heading': 'Картинка сверху',
-        'banner_help': 'Своя картинка для шапки лаунчера: файл (JPG, PNG, WebP) или ссылка на картинку в '
-                       'интернете — лаунчер скачает её один раз в user/banner. Без неё берётся фон из '
-                       'дампа игры (sce_sys/pic1.png).',
-        'banner_file': 'Файл…', 'banner_link': 'По ссылке…', 'banner_reset': 'Как в игре',
-        'banner_game': 'фон из дампа игры', 'choose_banner': 'Выбери картинку для шапки',
-        'banner_link_title': 'Картинка по ссылке', 'banner_link_prompt': 'Ссылка на картинку (http… .jpg / .png):',
-        'banner_loading': 'Скачиваю картинку…', 'banner_failed': 'Не удалось скачать картинку: {error}',
         'open_saves': 'Сохранения', 'open_shots': 'Скриншоты', 'open_logs': 'Логи', 'clear_cache': 'Очистить кэш',
         'cache_size': 'Кэш: {size}. Создаётся заново во время игры (первый запуск и новые места дольше).',
         'clear_confirm': 'Будут удалены кэш шейдеров и подготовленный образ игры ({size}).\n'
@@ -234,14 +226,6 @@ TEXTS = {
         'modules_ok': 'Modules: {found} of {total}.',
         'modules_partial': ' Missing: {names} (the port uses its own versions).',
         'tools': 'Folders and maintenance',
-        'banner_heading': 'Banner picture',
-        'banner_help': 'Your own picture for the launcher banner: a file (JPG, PNG, WebP) or a link to a '
-                       'picture on the web, which the launcher downloads once into user/banner. Without one '
-                       'the game dump\'s background (sce_sys/pic1.png) is used.',
-        'banner_file': 'File…', 'banner_link': 'From a link…', 'banner_reset': 'Game picture',
-        'banner_game': 'the game dump\'s background', 'choose_banner': 'Choose a picture for the banner',
-        'banner_link_title': 'Picture from a link', 'banner_link_prompt': 'Link to a picture (http… .jpg / .png):',
-        'banner_loading': 'Downloading the picture…', 'banner_failed': 'Could not download the picture: {error}',
         'open_saves': 'Saved games', 'open_shots': 'Screenshots', 'open_logs': 'Logs', 'clear_cache': 'Clear cache',
         'cache_size': 'Cache: {size}. It is rebuilt while playing (the first start and new areas take longer).',
         'clear_confirm': 'The shader cache and the prepared game image ({size}) will be deleted.\n'
@@ -476,18 +460,19 @@ def find_modules_folder(game_dir):
 # Settings.
 
 GRAPHICS_DEFAULTS = {
-    'display_mode': 'windowed', 'vsync': '1', 'anisotropy': '0', 'rcas': '0', 'fsr1': '0',
-    'mip_lod_bias': '0', 'show_fps': '0', 'vibration': '100', 'async_shaders': '1',
-    'stale_readback': '1', 'deferred_readback': '1', 'frames_queued': '1',
+    'display_mode': 'windowed', 'vsync': '1', 'anisotropy': '16', 'rcas': '0', 'fsr1': '0',
+    'mip_lod_bias': '0', 'show_fps': '1', 'vibration': '100', 'async_shaders': '1',
+    'stale_readback': '0', 'deferred_readback': '1', 'frames_queued': '1',
 }
 LAUNCHER_DEFAULTS = {'game_dir': '', 'update_dir': '', 'modules_dir': '', 'language': '',
-                     'window_size': '1920x1080', 'key_map': {}, 'pad_map': {}, 'mouse_look': True,
-                     'mouse_sens': 1.0, 'mouse_invert': False, 'pad_dead_zone': 0, 'pad_speaker': 100,
+                     'window_size': '3840x2160', 'key_map': {}, 'pad_map': {}, 'mouse_look': True,
+                     'mouse_sens': 1.0, 'mouse_invert': False, 'pad_dead_zone': 6, 'pad_speaker': 100,
                      'smart_pending': True, 'precompile': False, 'readback_max_kb': 2048, 'menu_key': 'F12',
-                     'banner_image': '', 'gs_outline': False, 'fps': '30', 'game_resolution': '1920x1080',
-                     'perf_diag': False, 'perf_crowd': 'full', 'perf_particles': False,
+                     'gs_outline': True, 'fps': '60', 'game_resolution': '3840x2160',
+                     'perf_diag': True, 'perf_crowd': 'full', 'perf_particles': False,
                      'perf_shadows': False, 'perf_haze': False, 'no_gpu_copies': False}
-BANNER_DIR = USER_DIR / 'banner'
+# The banner picture shipped with the launcher.
+BANNER_FILE = PORT_DIR / 'launcher' / 'banner.jpg'
 # Frame rate patches: Junmin Lee's GoldHEN/shadPS4 patch file for Gravity Rush 2 01.11 (the GR2fork
 # repository; not bundled), downloaded once into user/patches, where run.py's patches.py finds it;
 # user/patches.json enables the chosen one and disables the rest of that file (its other patches
@@ -589,36 +574,6 @@ def prepare_game_patches(fps, resolution, extras=()):
     return extra_dmem
 
 
-def is_link(value):
-    return isinstance(value, str) and value.lower().startswith(('http://', 'https://'))
-
-
-def banner_cache_path(url):
-    """Where a banner picture downloaded from `url` is kept (user/banner/<hash>.<ext>)."""
-    import hashlib
-    from urllib.parse import urlparse
-    ext = Path(urlparse(url).path).suffix.lower()
-    if ext not in ('.jpg', '.jpeg', '.png', '.webp', '.bmp', '.gif'):
-        ext = '.img'
-    return BANNER_DIR / (hashlib.sha1(url.encode('utf-8')).hexdigest()[:16] + ext)
-
-
-def download_banner(url):
-    """Downloads a banner picture once; returns its file. Raises OSError/ValueError on failure."""
-    import urllib.request
-    target = banner_cache_path(url)
-    if target.is_file() and target.stat().st_size:
-        return target
-    request = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'})
-    with urllib.request.urlopen(request, timeout=30) as response:
-        data = response.read(32 * 1024 * 1024 + 1)
-    if not data or len(data) > 32 * 1024 * 1024:
-        raise ValueError('empty or larger than 32 MB')
-    BANNER_DIR.mkdir(parents=True, exist_ok=True)
-    partial = target.with_suffix(target.suffix + '.part')
-    partial.write_bytes(data)
-    partial.replace(target)
-    return target
 WINDOW_SIZES = ('1280x720', '1600x900', '1920x1080', '2560x1440', '3840x2160')
 DISPLAY_MODES = ('windowed', 'borderless', 'fullscreen')
 ANISOTROPY = ('0', '2', '4', '8', '16')
@@ -994,47 +949,15 @@ class Launcher:
     # -- banner -----------------------------------------------------------------------------
 
     def banner_source(self):
-        """The banner picture: the player's own (a file, or a link downloaded once into user/banner),
-        else the game's background (sce_sys/pic1.png, else pic0.png). None: the plain banner."""
-        chosen = self.settings.get('banner_image') or ''
-        if is_link(chosen):
-            cached = banner_cache_path(chosen)
-            if cached.is_file():
-                return cached
-            self.fetch_banner(chosen)
-        elif chosen and Path(chosen).is_file():
-            return Path(chosen)
+        """The banner picture: the launcher's own (launcher/banner.jpg), else the game's background
+        (sce_sys/pic1.png, else pic0.png). None: the plain banner."""
+        if BANNER_FILE.is_file():
+            return BANNER_FILE
         game = self.settings.get('game_dir')
         if not game:
             return None
         return next((Path(game) / 'sce_sys' / n for n in ('pic1.png', 'pic0.png')
                      if (Path(game) / 'sce_sys' / n).is_file()), None)
-
-    def fetch_banner(self, url):
-        """Downloads the banner picture in the background, then redraws the banner."""
-        if self.images.get('banner_fetching') == url or self.images.get('banner_failed') == url:
-            return
-        self.images['banner_fetching'] = url
-
-        def done(error):
-            self.images.pop('banner_fetching', None)
-            if error:
-                self.images['banner_failed'] = url
-            self.images.pop('banner_key', None)
-            if self.banner.winfo_exists():
-                self.draw_banner()
-            note = getattr(self, 'banner_note', None)
-            if note is not None and note.winfo_exists():
-                note.configure(text=tr('banner_failed', error=error) if error else '', fg=ERROR)
-
-        def work():
-            try:
-                download_banner(url)
-                error = None
-            except Exception as exc:  # noqa: BLE001  (network, HTTP or file errors: shown to the player)
-                error = str(exc) or exc.__class__.__name__
-            self.root.after(0, lambda: done(error))
-        threading.Thread(target=work, daemon=True).start()
 
     def load_art(self):
         """The banner picture (see banner_source), fitted to the banner and darkened left."""
@@ -1204,52 +1127,7 @@ class Launcher:
             self.button(tools, text, command).pack(side='left', padx=(0, self.px(8)))
         self.cache_note = self.note(parent, '')
         self.refresh_cache_size()
-
-        self.heading(parent, tr('banner_heading'), pady=(22, 6))
-        row = tk.Frame(parent, bg=PANEL)
-        row.pack(fill='x')
-        self.banner_label = tk.Label(row, text=self.banner_text(), bg=FIELD, fg=TEXT, anchor='w',
-                                     font=self.font(10), padx=self.px(10), pady=self.px(7))
-        self.banner_label.pack(side='left', fill='x', expand=True)
-        for text, command in ((tr('banner_file'), self.choose_banner), (tr('banner_link'), self.link_banner),
-                              (tr('banner_reset'), lambda: self.set_banner(''))):
-            self.button(row, text, command).pack(side='left', padx=(self.px(8), 0))
-        self.note(parent, tr('banner_help'))
-        self.banner_note = self.note(parent, '', color=ERROR)
         self.refresh_game()
-
-    def banner_text(self):
-        chosen = self.settings.get('banner_image') or ''
-        return chosen or '— ' + tr('banner_game')
-
-    def set_banner(self, value):
-        self.settings['banner_image'] = value
-        save_launcher(self.settings)
-        self.images.pop('banner_key', None)
-        self.images.pop('banner_failed', None)
-        if getattr(self, 'banner_label', None) is not None and self.banner_label.winfo_exists():
-            self.banner_label.configure(text=self.banner_text())
-        if getattr(self, 'banner_note', None) is not None and self.banner_note.winfo_exists():
-            self.banner_note.configure(text=tr('banner_loading') if is_link(value) and
-                                       not banner_cache_path(value).is_file() else '', fg=MUTED)
-        self.draw_banner()
-
-    def choose_banner(self):
-        current = self.settings.get('banner_image') or ''
-        path = self.filedialog.askopenfilename(
-            title=tr('choose_banner'), parent=self.root,
-            initialdir=str(Path(current).parent) if current and not is_link(current) else None,
-            filetypes=[('Images', '*.jpg *.jpeg *.png *.webp *.bmp *.gif'), ('*', '*.*')])
-        if path:
-            self.set_banner(str(Path(path)))
-
-    def link_banner(self):
-        from tkinter import simpledialog
-        current = self.settings.get('banner_image') or ''
-        url = simpledialog.askstring(tr('banner_link_title'), tr('banner_link_prompt'), parent=self.root,
-                                     initialvalue=current if is_link(current) else '')
-        if url and url.strip():
-            self.set_banner(url.strip())
 
     def refresh_cache_size(self):
         def measure():
@@ -1592,7 +1470,7 @@ class Launcher:
             return
         self.graphics = dict(GRAPHICS_DEFAULTS)
         save_graphics(self.graphics)
-        keep = {k: self.settings[k] for k in ('game_dir', 'update_dir', 'modules_dir', 'language', 'banner_image')}
+        keep = {k: self.settings[k] for k in ('game_dir', 'update_dir', 'modules_dir', 'language') if k in self.settings}
         self.settings = {**LAUNCHER_DEFAULTS, 'key_map': {}, 'pad_map': {}, **keep}
         save_launcher(self.settings)
         self.show_tab('advanced')

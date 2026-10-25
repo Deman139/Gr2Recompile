@@ -42,7 +42,7 @@ dest="out/gr2-stage/$name"
 rm -rf -- out/gr2-stage
 mkdir -p "$dest/bin" "$dest/launcher"
 cp -r "out/gr2-pyi-dist/$name/." "$dest/"
-cp launcher/gr2.ico "$dest/launcher/"
+cp launcher/gr2.ico launcher/banner.jpg "$dest/launcher/"
 # The game executable without debug information (out/ keeps the symbols for crash reports).
 llvm-strip --strip-debug -o "$dest/bin/GravityRush2.exe" out/gr2-probe.exe
 # Every DLL it loads from the CLANG64 tree (SDL3, FFmpeg, Vulkan loader, ...).
