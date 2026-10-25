@@ -138,7 +138,9 @@ def gr2_modules(env, game, data):
     native = ['libSceSecure'] if 'sysdata/libSceSecure.prx' in modules else []
     # Modules from the game root are ones the game also loads itself (sceKernelLoadStartModule).
     env['GR2_STATIC_MODULES'] = ';'.join('/app0/' + m for m in modules if '/' in m)
-    folder = Path(env.get('GR2_SYS_MODULES', data / 'sys_modules'))
+    folder = Path(env.get('GR2_SYS_MODULES') or next(
+        (c for c in (PORT / 'sys_modules', PORT / 'sys_modules' / 'sys_modules', data / 'sys_modules')
+         if (c / 'libSceNgs2.sprx').is_file()), data / 'sys_modules'))
     wanted = env.get('GR2_SYSTEM_MODULES', ' '.join(SYSTEM_MODULES)).split()
     found = [m for m in wanted if (folder / m).is_file()]
     missing = [m for m in REQUIRED_SYSTEM_MODULES if m in wanted and m not in found]
@@ -227,7 +229,10 @@ def main():
         sys.exit(20)
     missing = parse_cpu_features(features.stdout)
 
-    game = Path(env.get('GR2_GAME_DIR', PORT.parent / 'CUSA04943'))
+    # Default: the game folder next to the port (game/ or game/CUSA04943/), else ../CUSA04943.
+    builtin = [PORT / 'game'] + sorted(p.parent for p in (PORT / 'game').glob('*/eboot.bin'))
+    game = Path(env.get('GR2_GAME_DIR') or next((c for c in builtin if (c / 'eboot.bin').is_file()),
+                                                PORT.parent / 'CUSA04943'))
     if not (game / 'eboot.bin').is_file():
         fail(f'No eboot.bin in {game} (set GR2_GAME_DIR).')
     update_view = None

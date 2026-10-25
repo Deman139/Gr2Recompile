@@ -8,8 +8,13 @@ mkdir -p out
 build_launcher_exe() {
     local py icon=launcher/gr2_port.ico game rc_tool
     py=$(command -v python || true)
-    if [[ ! -f launcher/gr2.ico && -n $py && -f user/launcher.json ]]; then
-        game=$("$py" -c "import json; print(json.load(open('user/launcher.json', encoding='utf-8')).get('game_dir', ''))" 2>/dev/null || true)
+    if [[ ! -f launcher/gr2.ico && -n $py ]]; then
+        game=''
+        [[ -f user/launcher.json ]] &&
+            game=$("$py" -c "import json; print(json.load(open('user/launcher.json', encoding='utf-8')).get('game_dir', ''))" 2>/dev/null || true)
+        if [[ -z $game ]]; then
+            for c in game game/*/; do [[ -f ${c%/}/sce_sys/icon0.png ]] && { game=${c%/}; break; }; done
+        fi
         if [[ -n $game && -f $game/sce_sys/icon0.png ]]; then
             "$py" packaging/windows/make_game_icon.py "$game/sce_sys/icon0.png" launcher/gr2.ico >/dev/null 2>&1 || true
         fi

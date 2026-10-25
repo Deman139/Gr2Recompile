@@ -30,3 +30,8 @@ out_package.log
 launcher/gr2.ico
 # Built by build.sh (packaging/windows/launcher_exe.c)
 /Gravity Rush 2.exe
+# The player's own game dump and PS4 modules, copied into the built-in folders (only the notes ship)
+/game/*
+!/game/README.txt
+/sys_modules/*
+!/sys_modules/README.txt

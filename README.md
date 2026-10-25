@@ -20,6 +20,11 @@ notes below). No game or firmware files are included.
   `user/sys_modules`): `libSceNgs2.sprx` (required: the game's audio engine), and
   `libSceJson2.sprx`, `libSceRtc.sprx`, `libSceFreeTypeOt.sprx`, `libSceFontFt.sprx`,
   `libSceFont.sprx`.
+
+The simplest way: copy the game into `game/` (or `game/CUSA04943/`) and the modules into
+`sys_modules/` next to the launcher; the launcher, `gr2.sh` and `run.py` find them there. A path
+typed or chosen in the launcher (or `GR2_GAME` / `GR2_SYS_MODULES`) takes precedence.
+
 - Windows 10/11, a Vulkan 1.3 GPU, 16 GB RAM; MSYS2 CLANG64 to build. In the **MSYS2 CLANG64**
   shell:
 
@@ -45,7 +50,8 @@ The console output is also saved in `user/logs/gr2-<date>.log`.
 ## Launcher
 
 `launcher/gr2_launcher.py` (Russian and English): the game folder (with an optional 01.11 update
-folder), the system modules folder (found by itself in a shadPS4 install beside the game), port
+folder) and the system modules folder, as editable path fields (empty: the built-in `game/` and
+`sys_modules/` folders, or a shadPS4 install beside the game), port
 graphics options, keyboard / mouse / controller mapping, readback and shader options, and
 shortcuts to saves, screenshots, logs and the cache. The banner picture is `launcher/banner.jpg`.
 

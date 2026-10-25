@@ -51,6 +51,10 @@ ldd "$dest/bin/GravityRush2.exe" | awk '/\/clang64\/bin\// {print $3}' | sort -u
 done
 cp -r scripts "$dest/"
 cp run.py LICENSE README.md "$dest/"
+# Empty folders the player may copy the game and the PS4 modules into (the launcher finds them).
+mkdir -p "$dest/game" "$dest/sys_modules"
+cp game/README.txt "$dest/game/"
+cp sys_modules/README.txt "$dest/sys_modules/"
 find "$dest" -name __pycache__ -prune -exec rm -r {} +
 # No game files, no firmware modules and nothing a player made (saves, caches, settings, logs).
 forbidden=$(find "$dest" \( -iname eboot.bin -o -iname sce_module -o -iname sce_sys -o -iname savedata \

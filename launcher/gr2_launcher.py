@@ -83,13 +83,18 @@ TEXTS = {
         'play': 'ИГРАТЬ', 'playing': 'В ИГРЕ', 'preparing': 'Запуск…',
         'game_folder': 'Папка игры',
         'game_folder_help': f'Папка твоего дампа PS4 (eboot.bin, sce_module, sce_sys и файлы .psarc). '
-                            f'Нужна версия {GAME_VERSION}: обновление, влитое в папку игры, или отдельной папкой ниже.',
+                            f'Нужна версия {GAME_VERSION}: обновление, влитое в папку игры, или отдельной папкой ниже. '
+                            f'Путь можно вставить в поле (Enter — применить) или выбрать кнопкой. Если поле пустое, '
+                            f'берётся папка game рядом с лаунчером: просто скопируй файлы игры туда.',
         'update_folder': 'Папка обновления',
         'update_folder_help': f'Твой дамп не версии {GAME_VERSION}: выбери папку обновления {GAME_VERSION}.',
         'modules_folder': 'Системные модули PS4',
         'modules_help': 'Расшифрованные модули прошивки, сдампленные с твоей консоли (те же файлы, что shadPS4 '
                         'берёт из user/sys_modules). Обязателен libSceNgs2.sprx (звуковой движок игры); '
-                        'libSceJson2, libSceRtc, libSceFreeTypeOt, libSceFontFt и libSceFont используются, если есть.',
+                        'libSceJson2, libSceRtc, libSceFreeTypeOt, libSceFontFt и libSceFont используются, если есть. '
+                        'Если поле пустое, берётся папка sys_modules рядом с лаунчером: просто скопируй файлы .sprx туда.',
+        'open_builtin': 'Открыть папку {name}',
+        'using_builtin': ' (папка {name} рядом с лаунчером)',
         'browse': 'Обзор…', 'choose_game': 'Выбери папку игры (с eboot.bin)',
         'choose_update': 'Выбери папку обновления', 'choose_modules': 'Выбери папку с модулями (.sprx)',
         'no_folder': 'Папка игры ещё не выбрана.',
@@ -203,13 +208,18 @@ TEXTS = {
         'game_folder': 'Game folder',
         'game_folder_help': f'The folder of your PS4 dump (eboot.bin, sce_module, sce_sys and the .psarc files). '
                             f'Version {GAME_VERSION} is needed: the update merged into the game folder, or as a '
-                            f'separate folder below.',
+                            f'separate folder below. Paste a path into the field (Enter applies it) or browse. '
+                            f'With the field empty, the game folder next to the launcher is used: just copy the '
+                            f'game files there.',
         'update_folder': 'Update folder',
         'update_folder_help': f'Your dump is not version {GAME_VERSION}: choose the folder of update {GAME_VERSION}.',
         'modules_folder': 'PS4 system modules',
         'modules_help': 'Decrypted firmware modules dumped from your console (the files shadPS4 takes from '
                         'user/sys_modules). libSceNgs2.sprx is required (the game\'s audio engine); libSceJson2, '
-                        'libSceRtc, libSceFreeTypeOt, libSceFontFt and libSceFont are used when present.',
+                        'libSceRtc, libSceFreeTypeOt, libSceFontFt and libSceFont are used when present. With the '
+                        'field empty, the sys_modules folder next to the launcher is used: just copy the .sprx files there.',
+        'open_builtin': 'Open the {name} folder',
+        'using_builtin': ' (the {name} folder next to the launcher)',
         'browse': 'Browse…', 'choose_game': 'Choose the game folder (the one with eboot.bin)',
         'choose_update': 'Choose the update folder', 'choose_modules': 'Choose the modules folder (.sprx)',
         'no_folder': 'No game folder chosen yet.',
@@ -454,6 +464,43 @@ def find_modules_folder(game_dir):
         parent = Path(game_dir).parent
         candidates += [parent / 'sys_modules'] + sorted(parent.glob('*/user/sys_modules'))
     return next((str(c) for c in candidates if (c / REQUIRED_MODULES[0]).is_file()), '')
+
+
+# Folders next to the launcher the player may simply copy the files into; a path typed or chosen
+# in the launcher takes precedence. GAME_HOME may hold the game directly or one folder down
+# (game/CUSA04943/eboot.bin); MODULES_HOME holds the .sprx files.
+GAME_HOME = PORT_DIR / 'game'
+MODULES_HOME = PORT_DIR / 'sys_modules'
+
+
+def builtin_game_dir():
+    if (GAME_HOME / 'eboot.bin').is_file():
+        return GAME_HOME
+    return next((p.parent for p in sorted(GAME_HOME.glob('*/eboot.bin'))), None)
+
+
+def builtin_modules_dir():
+    return next((c for c in (MODULES_HOME, MODULES_HOME / 'sys_modules')
+                 if (c / REQUIRED_MODULES[0]).is_file()), None)
+
+
+def game_dir_of(settings):
+    """The game folder to use: the one set in the launcher, else the built-in game folder."""
+    chosen = settings.get('game_dir') or ''
+    if chosen:
+        return chosen
+    found = builtin_game_dir()
+    return str(found) if found else ''
+
+
+def modules_dir_of(settings):
+    """The modules folder to use: the one set in the launcher, else the built-in sys_modules
+    folder, else one found next to the port or a shadPS4 install beside the game."""
+    chosen = settings.get('modules_dir') or ''
+    if chosen:
+        return chosen
+    found = builtin_modules_dir()
+    return str(found) if found else find_modules_folder(game_dir_of(settings))
 
 
 # ---------------------------------------------------------------------------------------------
@@ -718,8 +765,8 @@ def game_environment(settings, graphics, needs_update):
     menu_key = settings.get('menu_key') if settings.get('menu_key') in MENU_KEYS else 'F12'
     readback = settings.get('readback_max_kb', 2048)
     env.update({
-        'GR2_GAME_DIR': settings['game_dir'],
-        'GR2_SYS_MODULES': settings['modules_dir'],
+        'GR2_GAME_DIR': game_dir_of(settings),
+        'GR2_SYS_MODULES': modules_dir_of(settings),
         'GR2_DATA_DIR': str(USER_DIR),
         'GR2_USER_DIR': str(PS4_DIR),
         'GR2_CONFIG': str(SETTINGS_FILE),
@@ -801,11 +848,11 @@ class Launcher:
         self.root, self.tk, self.ttk = root, tk, ttk
         self.filedialog, self.messagebox = filedialog, messagebox
         self.settings = load_launcher()
-        if not self.settings.get('modules_dir'):
-            found = find_modules_folder(self.settings.get('game_dir'))
-            if found:
-                self.settings['modules_dir'] = found
-                save_launcher(self.settings)
+        for folder in (GAME_HOME, MODULES_HOME):
+            try:
+                folder.mkdir(exist_ok=True)
+            except OSError:
+                pass
         self.graphics = load_graphics()
         self.process = None
         self.capturing = None
@@ -953,7 +1000,7 @@ class Launcher:
         (sce_sys/pic1.png, else pic0.png). None: the plain banner."""
         if BANNER_FILE.is_file():
             return BANNER_FILE
-        game = self.settings.get('game_dir')
+        game = game_dir_of(self.settings)
         if not game:
             return None
         return next((Path(game) / 'sce_sys' / n for n in ('pic1.png', 'pic0.png')
@@ -1088,21 +1135,59 @@ class Launcher:
         self.settings[key] = value
         save_launcher(self.settings)
 
-    def folder_row(self, parent, value, command):
+    def folder_row(self, parent, value, command, on_edit=None, builtin=None):
+        """A path field (typed or pasted; Enter or leaving the field applies it), Browse, and for
+        the game and modules folders a button that opens the built-in folder."""
         row = self.tk.Frame(parent, bg=PANEL)
         row.pack(fill='x')
-        label = self.tk.Label(row, text=value or '—', bg=FIELD, fg=TEXT, anchor='w', font=self.font(10),
-                              padx=self.px(10), pady=self.px(7))
-        label.pack(side='left', fill='x', expand=True)
+        entry = self.tk.Entry(row, bg=FIELD, fg=TEXT, insertbackground=TEXT, relief='flat', font=self.font(10),
+                              highlightthickness=1, highlightbackground=FIELD, highlightcolor=ACCENT)
+        entry.insert(0, value or '')
+        entry.pack(side='left', fill='x', expand=True, ipady=self.px(6), ipadx=self.px(6))
+        if on_edit:
+            applied = {'text': value or ''}
+
+            def apply(_event=None):
+                text = entry.get().strip().strip('"')
+                if text != applied['text']:
+                    applied['text'] = text
+                    on_edit(text)
+            entry.bind('<Return>', apply)
+            entry.bind('<FocusOut>', apply)
         self.button(row, tr('browse'), command).pack(side='left', padx=(self.px(8), 0))
-        return label
+        if builtin is not None:
+            self.button(row, tr('open_builtin', name=builtin.name),
+                        lambda: (builtin.mkdir(exist_ok=True), open_folder(builtin))).pack(side='left', padx=(self.px(8), 0))
+        return entry
+
+    def set_entry(self, entry, text):
+        if entry is not None and entry.winfo_exists():
+            entry.delete(0, 'end')
+            entry.insert(0, text or '')
+
+    def set_folder(self, key, text):
+        """A path typed into a folder field: applied as chosen with Browse (empty: built-in folder)."""
+        folder = Path(text) if text else None
+        if key == 'game_dir' and folder and not (folder / 'eboot.bin').is_file():
+            folder = next((p.parent for p in sorted(folder.glob('*/eboot.bin'))), folder)
+        if key == 'modules_dir' and folder and not (folder / REQUIRED_MODULES[0]).is_file() and \
+                (folder / 'sys_modules' / REQUIRED_MODULES[0]).is_file():
+            folder = folder / 'sys_modules'
+        self.settings[key] = str(folder) if folder else ''
+        save_launcher(self.settings)
+        if key == 'game_dir':
+            self.images.pop('banner_key', None)
+            self.set_window_icon()
+            self.draw_banner()
+        self.refresh_game()
 
     # -- game tab ---------------------------------------------------------------------------
 
     def game_tab(self, parent):
         tk = self.tk
         self.heading(parent, tr('game_folder'))
-        self.game_entry = self.folder_row(parent, self.settings['game_dir'], self.choose_game)
+        self.game_entry = self.folder_row(parent, self.settings['game_dir'], self.choose_game,
+                                          lambda text: self.set_folder('game_dir', text), GAME_HOME)
         self.note(parent, tr('game_folder_help'))
         self.update_frame = tk.Frame(parent, bg=PANEL)
         self.update_frame.pack(fill='x')
@@ -1111,7 +1196,8 @@ class Launcher:
         self.game_status.pack(fill='x', pady=(self.px(10), 0))
 
         self.heading(parent, tr('modules_folder'), pady=(20, 6))
-        self.modules_entry = self.folder_row(parent, self.settings['modules_dir'], self.choose_modules)
+        self.modules_entry = self.folder_row(parent, self.settings['modules_dir'], self.choose_modules,
+                                             lambda text: self.set_folder('modules_dir', text), MODULES_HOME)
         self.note(parent, tr('modules_help'))
         self.modules_status = tk.Label(parent, text='', bg=PANEL, font=self.font(10, 'bold'), anchor='w',
                                        justify='left', wraplength=self.px(820))
@@ -1137,24 +1223,30 @@ class Launcher:
         threading.Thread(target=measure, daemon=True).start()
 
     def refresh_game(self):
-        ok, message, needs_update, other = check_game(self.settings['game_dir'], self.settings['update_dir'])
-        modules_ok, modules_message, partial = check_modules(self.settings['modules_dir'])
+        game_dir, modules_dir = game_dir_of(self.settings), modules_dir_of(self.settings)
+        ok, message, needs_update, other = check_game(game_dir, self.settings['update_dir'])
+        modules_ok, modules_message, partial = check_modules(modules_dir)
+        if game_dir and not self.settings.get('game_dir'):
+            message += tr('using_builtin', name='game')
+        if modules_dir and not self.settings.get('modules_dir') and Path(modules_dir) in (MODULES_HOME, MODULES_HOME / 'sys_modules'):
+            modules_message += tr('using_builtin', name='sys_modules')
         self.game_ok = ok and modules_ok
         self.needs_update = needs_update
         if getattr(self, 'game_status', None) is not None and self.game_status.winfo_exists():
             self.game_status.configure(text=('✓  ' if ok else '✕  ') + message,
                                        fg=(WARN if other else OK) if ok else
-                                       (WARN if needs_update or not self.settings['game_dir'] else ERROR))
+                                       (WARN if needs_update or not game_dir else ERROR))
             for child in self.update_frame.winfo_children():
                 child.destroy()
             if needs_update:
                 self.heading(self.update_frame, tr('update_folder'), pady=(16, 6))
-                self.folder_row(self.update_frame, self.settings['update_dir'], self.choose_update)
+                self.folder_row(self.update_frame, self.settings['update_dir'], self.choose_update,
+                                lambda text: self.set_folder('update_dir', text))
                 self.note(self.update_frame, tr('update_folder_help'))
         if getattr(self, 'modules_status', None) is not None and self.modules_status.winfo_exists():
             self.modules_status.configure(text=('✓  ' if modules_ok else '✕  ') + modules_message,
                                           fg=(WARN if partial else OK) if modules_ok else
-                                          (WARN if not self.settings['modules_dir'] else ERROR))
+                                          (WARN if not modules_dir else ERROR))
         self.update_play_state()
 
     def choose_game(self):
@@ -1166,17 +1258,8 @@ class Launcher:
         # The eboot.bin may be one level down (a folder holding CUSA04943/).
         if not (folder / 'eboot.bin').is_file():
             folder = next((p.parent for p in sorted(folder.glob('*/eboot.bin'))), folder)
-        self.settings['game_dir'] = str(folder)
-        if not self.settings.get('modules_dir'):
-            self.settings['modules_dir'] = find_modules_folder(str(folder))
-            if self.modules_entry.winfo_exists():
-                self.modules_entry.configure(text=self.settings['modules_dir'] or '—')
-        save_launcher(self.settings)
-        self.images.pop('banner_key', None)
-        self.set_window_icon()
-        self.draw_banner()
-        self.game_entry.configure(text=str(folder))
-        self.refresh_game()
+        self.set_entry(self.game_entry, str(folder))
+        self.set_folder('game_dir', str(folder))
 
     def choose_update(self):
         folder = self.filedialog.askdirectory(title=tr('choose_update'), parent=self.root,
@@ -1194,10 +1277,8 @@ class Launcher:
         folder = Path(folder)
         if not (folder / REQUIRED_MODULES[0]).is_file() and (folder / 'sys_modules' / REQUIRED_MODULES[0]).is_file():
             folder = folder / 'sys_modules'
-        self.settings['modules_dir'] = str(folder)
-        save_launcher(self.settings)
-        self.modules_entry.configure(text=str(folder))
-        self.refresh_game()
+        self.set_entry(self.modules_entry, str(folder))
+        self.set_folder('modules_dir', str(folder))
 
     def clear_cache(self):
         if self.process is not None:
@@ -1490,8 +1571,8 @@ class Launcher:
     def play(self):
         if self.process is not None:
             return
-        ok, message, needs_update, _ = check_game(self.settings['game_dir'], self.settings['update_dir'])
-        modules_ok, modules_message, _ = check_modules(self.settings['modules_dir'])
+        ok, message, needs_update, _ = check_game(game_dir_of(self.settings), self.settings['update_dir'])
+        modules_ok, modules_message, _ = check_modules(modules_dir_of(self.settings))
         if not ok or not modules_ok:
             self.messagebox.showwarning(APP_NAME, f'{message if not ok else modules_message}\n\n{tr("fix_folder")}',
                                         parent=self.root)
@@ -1576,7 +1657,7 @@ class Launcher:
 
     def set_window_icon(self):
         """The game's icon (sce_sys/icon0.png) on the launcher window, when Pillow can read it."""
-        game = self.settings.get('game_dir')
+        game = game_dir_of(self.settings)
         if not game:
             return
         try:

@@ -17,6 +17,13 @@ set -euo pipefail
 cd -- "$(dirname -- "$0")"
 GR2_GAME=${GR2_GAME:-${GR2_GAME_DIR:-}}
 GR2_SYS_MODULES=${GR2_SYS_MODULES:-}
+# Default: the game/ and sys_modules/ folders next to this script (the game may be one folder down).
+if [[ -z $GR2_GAME ]]; then
+    for c in game game/*/; do [[ -f ${c%/}/eboot.bin ]] && { GR2_GAME=$PWD/${c%/}; break; }; done
+fi
+if [[ -z $GR2_SYS_MODULES ]]; then
+    for c in sys_modules sys_modules/sys_modules; do [[ -f $c/libSceNgs2.sprx ]] && { GR2_SYS_MODULES=$PWD/$c; break; }; done
+fi
 if [[ -z $GR2_GAME || ! -f $GR2_GAME/eboot.bin ]]; then
     echo "Set GR2_GAME to the Gravity Rush 2 folder with eboot.bin." >&2; exit 1
 fi
