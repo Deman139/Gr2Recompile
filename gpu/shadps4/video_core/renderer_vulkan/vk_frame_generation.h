@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
-// gow3: frame generation (Gow3Settings::frame_gen, GOW3_FRAME_GEN), from uncharted_pc
+// gr2: frame generation (Gr2Settings::frame_gen, GR2_FRAME_GEN), from uncharted_pc
 // (bbport). From two finished frames of the game (UI included) it makes the frame in between;
 // the Presenter shows it before the game's frame, evenly paced. The depth and motion vectors
 // are taken where the temporal upscaler runs (TemporalUpscaler::RunScaled, Killzone's scene
 // depth and camera motion), and the picture without UI right after the upscale.
 //  - FSR 3.1 frame interpolation (FireBurn/FSR-Vulkan, native Vulkan): any GPU, 2x.
-//  - DLSS Frame Generation (gow3_dlss.dll with nvngx_dlssg.dll): GeForce RTX 40 2x,
+//  - DLSS Frame Generation (gr2_dlss.dll with nvngx_dlssg.dll): GeForce RTX 40 2x,
 //    RTX 50 up to 4x; elsewhere it falls back to FSR 3.1.
 //
 // Killzone presents frame N (its display copy) at the start of frame N+1, and the presenter
@@ -51,7 +51,7 @@ public:
     FrameGenerator(const Instance& instance, Scheduler& scheduler);
     ~FrameGenerator();
 
-    /// Switched on in the settings (Gow3Settings::frame_gen), with a provider that can run.
+    /// Switched on in the settings (Gr2Settings::frame_gen), with a provider that can run.
     [[nodiscard]] bool Wanted() const;
     /// Frames generated per game frame with the current settings (output images needed).
     [[nodiscard]] u32 GeneratedCount() const;

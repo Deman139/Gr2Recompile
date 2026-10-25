@@ -5,13 +5,13 @@
 # Run from an MSYS2 CLANG64 shell after `bash build.sh`. Freezing uses a Windows Python 3.10+
 # (python.org; WINPYTHON overrides) and a private venv in out/pyenv.
 # The icon is made from the player's own dump once (it is not in the repository):
-#   python packaging/windows/make_kzsf_icon.py "<game>/sce_sys/icon0.png" launcher/gr2.ico
+#   python packaging/windows/make_game_icon.py "<game>/sce_sys/icon0.png" launcher/gr2.ico
 # No game files and no PS4 system modules ship: the player points the launcher at their own.
 set -euo pipefail
 cd -- "$(dirname -- "$0")/../.."
 source ./msys2-env.sh
-[[ -f out/gow3-probe.exe ]] || { echo 'Build first: bash build.sh' >&2; exit 1; }
-[[ -f launcher/gr2.ico ]] || { echo 'launcher/gr2.ico is missing: python packaging/windows/make_kzsf_icon.py <game>/sce_sys/icon0.png launcher/gr2.ico' >&2; exit 1; }
+[[ -f out/gr2-probe.exe ]] || { echo 'Build first: bash build.sh' >&2; exit 1; }
+[[ -f launcher/gr2.ico ]] || { echo 'launcher/gr2.ico is missing: python packaging/windows/make_game_icon.py <game>/sce_sys/icon0.png launcher/gr2.ico' >&2; exit 1; }
 version=$(sed -n "s/^VERSION = '\(.*\)'/\1/p" launcher/gr2_launcher.py)
 name='Gravity Rush 2'
 
@@ -44,13 +44,13 @@ mkdir -p "$dest/bin" "$dest/launcher"
 cp -r "out/gr2-pyi-dist/$name/." "$dest/"
 cp launcher/gr2.ico "$dest/launcher/"
 # The game executable without debug information (out/ keeps the symbols for crash reports).
-llvm-strip --strip-debug -o "$dest/bin/GravityRush2.exe" out/gow3-probe.exe
+llvm-strip --strip-debug -o "$dest/bin/GravityRush2.exe" out/gr2-probe.exe
 # Every DLL it loads from the CLANG64 tree (SDL3, FFmpeg, Vulkan loader, ...).
 ldd "$dest/bin/GravityRush2.exe" | awk '/\/clang64\/bin\// {print $3}' | sort -u | while read -r dll; do
     cp -u "$dll" "$dest/bin/"
 done
 cp -r scripts "$dest/"
-cp run.py LICENSE README_GR2.md "$dest/"
+cp run.py LICENSE README.md "$dest/"
 find "$dest" -name __pycache__ -prune -exec rm -r {} +
 # No game files, no firmware modules and nothing a player made (saves, caches, settings, logs).
 forbidden=$(find "$dest" \( -iname eboot.bin -o -iname sce_module -o -iname sce_sys -o -iname savedata \

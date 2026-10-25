@@ -1,6 +1,6 @@
-"""Makes the Killzone Shadow Fall icon (.ico, every Windows size) from the game's own cover
+"""Makes the Gravity Rush 2 icon (.ico, every Windows size) from the game's own cover
 (sce_sys/icon0.png of the player's dump). Needs Pillow.
-usage: make_kzsf_icon.py <icon0.png> <out.ico>"""
+usage: make_game_icon.py <icon0.png> <out.ico>"""
 import sys
 from PIL import Image, ImageDraw
 

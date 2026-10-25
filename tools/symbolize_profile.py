@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Names the host frames of a GOW3_PROFILE report (src/profiler_win.c).
+"""Names the host frames of a GR2_PROFILE report (src/profiler_win.c).
 
 Usage: symbolize_profile.py REPORT [EXE] > named.txt
-Frames written as "gow3-probe.exe+0xOFFSET" get "function (file:line)" from llvm-symbolizer
+Frames written as "gr2-probe.exe+0xOFFSET" get "function (file:line)" from llvm-symbolizer
 (the executable carries DWARF from -g); other modules and guest offsets stay as they are.
 """
 import os
@@ -12,7 +12,7 @@ import struct
 import subprocess
 import sys
 
-FRAME = re.compile(r"^(\s+)(gow3-probe\.exe)\+0x([0-9a-fA-F]+)\s*$")
+FRAME = re.compile(r"^(\s+)(gr2-probe\.exe)\+0x([0-9a-fA-F]+)\s*$")
 
 
 def image_base(path):
@@ -24,7 +24,7 @@ def image_base(path):
 
 def main():
     report = sys.argv[1]
-    exe = sys.argv[2] if len(sys.argv) > 2 else os.path.join(os.path.dirname(__file__), "..", "out", "gow3-probe.exe")
+    exe = sys.argv[2] if len(sys.argv) > 2 else os.path.join(os.path.dirname(__file__), "..", "out", "gr2-probe.exe")
     symbolizer = shutil.which("llvm-symbolizer") or r"C:\msys64\clang64\bin\llvm-symbolizer.exe"
     base = image_base(exe)
     with open(report, encoding="utf-8", errors="replace") as f:

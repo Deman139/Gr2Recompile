@@ -1,4 +1,4 @@
-// gow3: see log.h.
+// gr2: see log.h.
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -8,7 +8,7 @@
 namespace Common::Log {
 static Level threshold() {
     static const Level level = [] {
-        const char* v = std::getenv("GOW3_GPU_LOG");
+        const char* v = std::getenv("GR2_GPU_LOG");
         if (!v) return Level::warn;
         static const char* names[] = {"trace", "debug", "info", "warning", "error", "critical"};
         for (int i = 0; i < 6; ++i)
@@ -20,7 +20,7 @@ static Level threshold() {
 bool ShouldLog(Level level) { return level >= threshold(); }
 bool AllowSite(std::atomic<unsigned>& count, const char* file, int line) {
     static const unsigned limit = [] {
-        const char* v = std::getenv("GOW3_GPU_LOG_REPEATS");
+        const char* v = std::getenv("GR2_GPU_LOG_REPEATS");
         return v ? unsigned(std::strtoul(v, nullptr, 10)) : 20u;
     }();
     if (!limit) return true;

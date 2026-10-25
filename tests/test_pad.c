@@ -9,8 +9,8 @@
 static int capture;
 static int vibration_percent=100;
 static uint16_t rumble_low, rumble_high;
-int gow3gpu_overlay_captures_input(void) { return capture; }
-int gow3gpu_vibration_percent(void) { return vibration_percent; }
+int gr2gpu_overlay_captures_input(void) { return capture; }
+int gr2gpu_vibration_percent(void) { return vibration_percent; }
 
 static bool SDLCALL record_rumble(void *userdata, uint16_t low, uint16_t high) {
     (void)userdata;
@@ -44,11 +44,11 @@ static void pump(void) { SDL_UpdateJoysticks(); SDL_UpdateGamepads(); }
 int main(void) {
     const char *tmp=getenv("TMPDIR") ? getenv("TMPDIR") : getenv("TEMP") ? getenv("TEMP") : "/tmp";
     char path[1024];
-    snprintf(path,sizeof(path),"%s/gow3-pad-test-XXXXXX",tmp);
+    snprintf(path,sizeof(path),"%s/gr2-pad-test-XXXXXX",tmp);
     int fd=mkstemp(path);
     assert(fd>=0);
     close(fd);
-    setenv("GOW3_PAD_FILE",path,1);
+    setenv("GR2_PAD_FILE",path,1);
     setenv("SDL_VIDEODRIVER","dummy",1);
     /* Only the virtual test controller is a gamepad, whatever is plugged in. */
     SDL_SetHint(SDL_HINT_GAMECONTROLLER_IGNORE_DEVICES_EXCEPT,"0x1d50/0x6189");
@@ -130,7 +130,7 @@ int main(void) {
     desc.nbuttons=SDL_GAMEPAD_BUTTON_COUNT;
     desc.button_mask=(1u<<SDL_GAMEPAD_BUTTON_COUNT)-1;
     desc.axis_mask=(1u<<SDL_GAMEPAD_AXIS_COUNT)-1;
-    desc.name="gow3 test controller";
+    desc.name="gr2 test controller";
     desc.vendor_id=0x1d50;
     desc.product_id=0x6189;
     desc.ntouchpads=1;

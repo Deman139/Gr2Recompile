@@ -9,7 +9,7 @@
 #include <type_traits>
 #include <vector>
 
-#include "gow3_toggles.h"
+#include "gr2_toggles.h"
 #include "common/debug.h"
 #include "common/types.h"
 #include "core/emulator_settings.h"
@@ -53,7 +53,7 @@ public:
                             });
     }
 
-    /// gow3: a write fault from a GOW3_NOWAIT_WRITES instruction (from iss_pc): the pages become
+    /// gr2: a write fault from a GR2_NOWAIT_WRITES instruction (from iss_pc): the pages become
     /// CPU modified (writable, uploaded later) without the GPU data being read back first. Under
     /// the region lock, so the GPU side never sees them both GPU and CPU modified.
     void MarkRegionAsCpuModifiedNoReadback(VAddr dirty_cpu_addr, u64 query_size) {
@@ -66,7 +66,7 @@ public:
                             });
     }
 
-    /// gow3: see RegionManager::ExtendWriteFault.
+    /// gr2: see RegionManager::ExtendWriteFault.
     void ExtendWriteFault(VAddr window_addr, u64 size) {
         IteratePages<false>(window_addr, size,
                             [](RegionManager* manager, u64 offset, size_t size) {
@@ -114,12 +114,12 @@ public:
                             auto&& on_upload) {
         IteratePages<true>(query_cpu_range, query_size,
                            [&func, is_written](RegionManager* manager, u64 offset, size_t size) {
-                               // gow3: read-only bindings skip the region lock when no page
+                               // gr2: read-only bindings skip the region lock when no page
                                // in range is CPU-modified. A guest write sets its bit in the
                                // fault handler before the store, and the draw that uses the
                                // data reaches this thread through the submission queue lock.
                                if (!is_written &&
-                                   !Gow3Toggle::Disabled(Gow3Toggle::LockFreeUploadCheck) &&
+                                   !Gr2Toggle::Disabled(Gr2Toggle::LockFreeUploadCheck) &&
                                    !manager->template IsRegionModified<Type::CPU>(offset, size)) {
                                    return;
                                }

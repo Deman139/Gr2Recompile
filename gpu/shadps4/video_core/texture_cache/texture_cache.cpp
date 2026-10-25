@@ -5,8 +5,8 @@
 #include <xxhash.h>
 #include "video_core/amdgpu/liverpool.h"
 
-#include "gow3_toggles.h"
-#include "gow3_copy.h"
+#include "gr2_toggles.h"
+#include "gr2_copy.h"
 #include "common/assert.h"
 #include "common/debug.h"
 #include "common/div_ceil.h"
@@ -101,8 +101,8 @@ void TextureCache::RetireReadbacks() {
                 // gr2: large copies are written back on the copy threads in 512 KiB parts: Gravity
                 // Rush 2 publishes ~6 MiB a frame at 4K, a single memcpy on the GPU thread.
                 constexpr u64 Part = 512_KB;
-                if (entry.size >= 4 * Part && Gow3Copy::Enabled()) {
-                    Gow3Copy::ParallelFor((entry.size + Part - 1) / Part, [&](std::size_t i) {
+                if (entry.size >= 4 * Part && Gr2Copy::Enabled()) {
+                    Gr2Copy::ParallelFor((entry.size + Part - 1) / Part, [&](std::size_t i) {
                         const u64 offset = i * Part;
                         Core::Memory::Instance()->TryWriteBacking(
                             std::bit_cast<u8*>(entry.address + offset), entry.payload.mapped + offset,
@@ -127,10 +127,10 @@ void TextureCache::RetireReadbacks() {
 // drained the GPU (0.6-1.5 s of every 5 s on the GPU thread at 4K, wherever the wait moved).
 // CPU accesses keep the page rule (their faults are per page), and so does everything when CPU
 // reads wait for the copies (stale readbacks off: read-protected pages would fault in the host
-// copies). GOW3_READBACK_PAGE_WAIT=1 restores the page rule everywhere.
+// copies). GR2_READBACK_PAGE_WAIT=1 restores the page rule everywhere.
 static bool ByteExact(ReadbackSource source, bool stale) {
     static const bool page_rule = [] {
-        const char* env = std::getenv("GOW3_READBACK_PAGE_WAIT");
+        const char* env = std::getenv("GR2_READBACK_PAGE_WAIT");
         return env && env[0] == '1';
     }();
     if (page_rule || !stale) return false;
@@ -149,9 +149,9 @@ bool TextureCache::ResolveReadbacks(VAddr address, u64 size, bool assume_locks,
         // gr2: CPU reads too when CPU reads wait for the copies (stale readbacks off). Gravity
         // Rush 2 reads 8 bytes every frame from the page that ends a 64x60 motion-blur tile image
         // (GPU-only data, 0x500001800): that false-shared page drained the GPU each frame (about
-        // a third of the time at 4K 60 FPS). GOW3_READBACK_RELEASE=0 turns this off.
+        // a third of the time at 4K 60 FPS). GR2_READBACK_RELEASE=0 turns this off.
         static const bool release_reads = [] {
-            const char* env = std::getenv("GOW3_READBACK_RELEASE");
+            const char* env = std::getenv("GR2_READBACK_RELEASE");
             return !env || env[0] != '0';
         }();
         unsigned released = 0;
@@ -184,7 +184,7 @@ bool TextureCache::ResolveReadbacks(VAddr address, u64 size, bool assume_locks,
                 }
             }
         }
-        Gow3Stats::Timer readback_timer{Gow3Stats::t_readback_wait};
+        Gr2Stats::Timer readback_timer{Gr2Stats::t_readback_wait};
         if (diag) {
             // gr2: what each wait was for (the first 48 waits of a run).
             static std::atomic<unsigned> shown{0};
@@ -228,7 +228,7 @@ void TextureCache::CancelReadbacks(VAddr address, u64 size) {
     });
 }
 
-// gow3 (GOW3_PERF_DIAG): a request PartialHeightViews answered with a taller cached image.
+// gr2 (GR2_PERF_DIAG): a request PartialHeightViews answered with a taller cached image.
 void TextureCache::NotePartialView(const ImageInfo& request, const ImageInfo& used,
                                    BindingType binding) {
     ++partial_views;
@@ -248,7 +248,7 @@ void TextureCache::NotePartialView(const ImageInfo& request, const ImageInfo& us
     ++slot->count;
 }
 
-// gow3 (GOW3_PERF_DIAG): every 5 s, the images FindImage created most often. Takes `mutex`
+// gr2 (GR2_PERF_DIAG): every 5 s, the images FindImage created most often. Takes `mutex`
 // (held by FindImage), so it runs before ProcessDownloadImages takes readback_mutex.
 void TextureCache::ReportImageCreates() {
     const auto now = std::chrono::steady_clock::now();
@@ -290,14 +290,14 @@ void TextureCache::ReportImageCreates() {
     partial_views = 0;
 }
 
-// gow3: every copy is recorded first and the GPU is waited for once. A wait per image (as
+// gr2: every copy is recorded first and the GPU is waited for once. A wait per image (as
 // before) left the GPU mostly idle in God of War III's gameplay, at about 2 FPS.
 void TextureCache::ProcessDownloadImages() {
-    // GOW3_DUMP_TRIGGER: once that file exists, the images at GOW3_TRACE_ADDR are written raw
-    // to GOW3_DIAG_DIR (DiagDumpImage) and the file is removed. Checked at every end of pipe.
-    static const char* dump_trigger = std::getenv("GOW3_DUMP_TRIGGER");
+    // GR2_DUMP_TRIGGER: once that file exists, the images at GR2_TRACE_ADDR are written raw
+    // to GR2_DIAG_DIR (DiagDumpImage) and the file is removed. Checked at every end of pipe.
+    static const char* dump_trigger = std::getenv("GR2_DUMP_TRIGGER");
     static const u64 dump_addr = [] {
-        const char* env = std::getenv("GOW3_TRACE_ADDR");
+        const char* env = std::getenv("GR2_TRACE_ADDR");
         return env ? std::strtoull(env, nullptr, 16) : 0ull;
     }();
     if (dump_trigger && dump_addr && std::remove(dump_trigger) == 0) {
@@ -506,7 +506,7 @@ void TextureCache::DiagDumpImage(ImageId image_id, const char* tag) {
     scheduler.Finish();
     download.Invalidate();
     static int sequence = 0;
-    const char* dir = std::getenv("GOW3_DIAG_DIR");
+    const char* dir = std::getenv("GR2_DIAG_DIR");
     const char* dir_path = dir && *dir ? dir : "out/diag";
     std::error_code ec;
     std::filesystem::create_directories(dir_path, ec);
@@ -524,7 +524,7 @@ void TextureCache::DiagDumpImage(ImageId image_id, const char* tag) {
     }
 }
 
-// gow3: images sharing guest memory (aliases), ported from cuesta4/shadPS4 (eltutz) commit
+// gr2: images sharing guest memory (aliases), ported from cuesta4/shadPS4 (eltutz) commit
 // 189ca3b6. A write to one is copied into the others before they are read, as on the PS4,
 // where they are the same memory.
 static bool Covers(const Extent3D& extent, const ImageInfo& info) {
@@ -658,14 +658,14 @@ void TextureCache::InvalidateAlias(Image& image) {
 
 void TextureCache::TraceImage(const char* event, const Image& image) {
     static const bool enabled = [] {
-        const char* env = std::getenv("GOW3_TRACE_IMAGES");
+        const char* env = std::getenv("GR2_TRACE_IMAGES");
         return env && env[0] == '1';
     }();
     static std::atomic<unsigned> logged{0};
-    // GOW3_TRACE_ADDR=<hex>: every event of images at that guest address (uses that differ from
+    // GR2_TRACE_ADDR=<hex>: every event of images at that guest address (uses that differ from
     // the previous logged one, so per-draw lookups do not flood).
     static const u64 trace_addr = [] {
-        const char* env = std::getenv("GOW3_TRACE_ADDR");
+        const char* env = std::getenv("GR2_TRACE_ADDR");
         return env ? std::strtoull(env, nullptr, 16) : 0ull;
     }();
     if (trace_addr && image.info.guest_address == trace_addr) {
@@ -883,7 +883,7 @@ std::tuple<ImageId, int, int> TextureCache::ResolveOverlap(const ImageInfo& imag
     if (image_info.guest_address == cache_image.info.guest_address) {
         const u32 lhs_block_size = image_info.num_bits * image_info.guest_samples;
         const u32 rhs_block_size = cache_image.info.num_bits * cache_image.info.guest_samples;
-        // gow3: the top rows of a cached image with the same layout. God of War III reads its
+        // gr2: the top rows of a cached image with the same layout. God of War III reads its
         // frame buffers as R8G8B8A8Uint with a height that changes every frame during Rage of
         // Sparta and weapon effects; as a "pool allocation" below, each read created and uploaded
         // a new ~8 MB image (FPS 120 -> 40).
@@ -900,13 +900,13 @@ std::tuple<ImageId, int, int> TextureCache::ResolveOverlap(const ImageInfo& imag
             const std::string_view numeric = vk::componentNumericFormat(format, 0);
             return numeric == "UINT" || numeric == "SINT";
         };
-        // Killzone: off by default (a God of War III pattern); GOW3_PARTIAL_HEIGHT_VIEWS=1 turns it
-        // on. GOW3_PERF_DIAG's "Image creates" lines show whether a game recreates such images.
+        // Killzone: off by default (a God of War III pattern); GR2_PARTIAL_HEIGHT_VIEWS=1 turns it
+        // on. GR2_PERF_DIAG's "Image creates" lines show whether a game recreates such images.
         static const bool partial_views_enabled = [] {
-            const char* value = std::getenv("GOW3_PARTIAL_HEIGHT_VIEWS");
+            const char* value = std::getenv("GR2_PARTIAL_HEIGHT_VIEWS");
             return value && value[0] == '1';
         }();
-        if (partial_views_enabled && !Gow3Toggle::Disabled(Gow3Toggle::PartialHeightViews) &&
+        if (partial_views_enabled && !Gr2Toggle::Disabled(Gr2Toggle::PartialHeightViews) &&
             (binding == BindingType::Texture || binding == BindingType::Storage) && native_reads &&
             a.pixel_format != b.pixel_format && is_integer(a.pixel_format) &&
             lhs_block_size == rhs_block_size && a.pitch == b.pitch && a.tile_mode == b.tile_mode &&
@@ -1192,7 +1192,7 @@ ImageId TextureCache::FindImage(ImageDesc& desc, bool exact_fmt) {
         cached.format == info.pixel_format && cached.type == info.type &&
         cached.exact_fmt == exact_fmt && cached.binding == desc.type &&
         cached.needs_native == desc.needs_native && cached.levels == info.resources.levels && cached.layers == info.resources.layers &&
-        !Gow3Toggle::Disabled(Gow3Toggle::FindImageCache)) {
+        !Gr2Toggle::Disabled(Gr2Toggle::FindImageCache)) {
         Image& image = slot_images[cached.image_id];
         image.tick_accessed_last = scheduler.CurrentTick();
         TouchImage(image);
@@ -1233,7 +1233,7 @@ ImageId TextureCache::FindImage(ImageDesc& desc, bool exact_fmt) {
         image_id = cache_id;
     }
 
-    // gow3 (GOW3_PERF_DIAG): what was cached here, read before overlap resolution may free it.
+    // gr2 (GR2_PERF_DIAG): what was cached here, read before overlap resolution may free it.
     const bool diag = Vulkan::WaitDiagnostics::Enabled();
     CreateStat created{info.guest_address, info.size.width, info.size.height, 1, info.pixel_format,
                        desc.type, image_ids.empty() ? "nothing cached" : "overlap unresolved"};
@@ -1378,13 +1378,13 @@ ImageId TextureCache::FindImageFromRange(VAddr address, size_t size, bool ensure
     return {};
 }
 
-/// gow3: GOW3_READBACK_MAX_KB: linear images larger than this are not copied back to RAM.
+/// gr2: GR2_READBACK_MAX_KB: linear images larger than this are not copied back to RAM.
 /// Gravity Rush 2 renders full-screen linear targets (1920x1080, up to 16 MiB) the CPU never
 /// reads, while the GPU waits for each copy before it reuses their memory as a buffer (12 FPS);
 /// the small linear images it does read back still go. 0 or unset: no limit (Killzone).
 bool TextureCache::ReadbackSizeAllowed(const Image& image) {
     static const u64 limit = [] {
-        const char* env = std::getenv("GOW3_READBACK_MAX_KB");
+        const char* env = std::getenv("GR2_READBACK_MAX_KB");
         const long kb = env ? std::strtol(env, nullptr, 10) : 0;
         return kb > 0 ? u64(kb) * 1024 : u64{0};
     }();
@@ -1397,7 +1397,7 @@ bool TextureCache::ReadbackSizeAllowed(const Image& image) {
     std::scoped_lock lock{logged_mutex};
     if (logged.size() < 32 && std::ranges::find(logged, image.info.guest_address) == logged.end()) {
         logged.push_back(image.info.guest_address);
-        std::printf("GPU: linear image 0x%llx %ux%u (%llu KiB) stays on the GPU (GOW3_READBACK_MAX_KB)\n",
+        std::printf("GPU: linear image 0x%llx %ux%u (%llu KiB) stays on the GPU (GR2_READBACK_MAX_KB)\n",
                     (unsigned long long)image.info.guest_address, image.info.size.width,
                     image.info.size.height, (unsigned long long)(size >> 10));
     }
@@ -1422,7 +1422,7 @@ ImageView& TextureCache::FindTexture(ImageId image_id, const ImageDesc& desc, Vi
     if (desc.type == BindingType::Storage) {
         PublishAliasWrite(image_id);
     }
-    if (memo && !Gow3Toggle::Disabled(Gow3Toggle::TextureViewMemo)) {
+    if (memo && !Gr2Toggle::Disabled(Gr2Toggle::TextureViewMemo)) {
         if (memo->image_id == image_id && memo->backing == image.backing && memo->view_id) {
             return slot_image_views[memo->view_id];
         }
@@ -1513,7 +1513,7 @@ void TextureCache::RefreshImage(Image& image) {
     }
     ResolveReadbacks(image.info.guest_address, image.info.guest_size, true,
                      ReadbackSource::ImageRefresh);
-    Gow3Stats::Timer timer{Gow3Stats::t_refresh};
+    Gr2Stats::Timer timer{Gr2Stats::t_refresh};
 
     RENDERER_TRACE;
     TRACE_HINT(fmt::format("{:x}:{:x}", image.info.guest_address, image.info.guest_size));
@@ -1543,7 +1543,7 @@ void TextureCache::RefreshImage(Image& image) {
     const bool is_gpu_modified = True(image.flags & ImageFlagBits::GpuModified);
     const bool is_gpu_dirty = True(image.flags & ImageFlagBits::GpuDirty);
 
-    Gow3Stats::image_upload_bytes.fetch_add(image.info.guest_size, std::memory_order_relaxed);
+    Gr2Stats::image_upload_bytes.fetch_add(image.info.guest_size, std::memory_order_relaxed);
     boost::container::small_vector<vk::BufferImageCopy, 14> image_copies;
     for (u32 m = 0; m < num_mips; m++) {
         const u32 width = std::max(image.info.size.width >> m, 1u);
@@ -1617,7 +1617,7 @@ vk::Sampler TextureCache::GetSampler(const AmdGpu::Sampler& sampler,
 }
 
 void TextureCache::RegisterImage(ImageId image_id) {
-    Gow3Stats::images_registered.fetch_add(1, std::memory_order_relaxed);
+    Gr2Stats::images_registered.fetch_add(1, std::memory_order_relaxed);
     Image& image = slot_images[image_id];
     ASSERT_MSG(False(image.flags & ImageFlagBits::Registered),
                "Trying to register an already registered image");
@@ -1790,17 +1790,17 @@ void TextureCache::UntrackImageTail(ImageId image_id) {
 }
 
 void TextureCache::GarbageCollectImages() {
-    Gow3Stats::Timer gc_timer{Gow3Stats::t_gc};
+    Gr2Stats::Timer gc_timer{Gr2Stats::t_gc};
     if (instance.CanReportMemoryUsage()) {
         total_used_memory = instance.GetDeviceMemoryUsage();
-        // gow3: on integrated GPUs (Steam Deck) the usage covers system-memory heaps holding
+        // gr2: on integrated GPUs (Steam Deck) the usage covers system-memory heaps holding
         // much more than images (buffers backing guest memory), and the startup budget left
         // ~1 GB after its 8 GB system reserve: usage stayed above the critical mark, so the
         // collector evicted images used two or three frames ago on every submission and wrote
         // GPU-written ones back. Compare with the driver's current budget instead.
-        // GOW3_GC_BUDGET_MB=N: this rule with a fixed budget on any GPU (tests on a desktop).
+        // GR2_GC_BUDGET_MB=N: this rule with a fixed budget on any GPU (tests on a desktop).
         static const u64 forced_budget = [] {
-            const char* env = std::getenv("GOW3_GC_BUDGET_MB");
+            const char* env = std::getenv("GR2_GC_BUDGET_MB");
             return env ? std::strtoull(env, nullptr, 10) << 20 : 0;
         }();
         if (instance.IsIntegrated() || forced_budget) {
@@ -1812,7 +1812,7 @@ void TextureCache::GarbageCollectImages() {
             }
         }
     }
-    // gow3: where device memory goes, every 10 s (images by guest size, buffer arena blocks).
+    // gr2: where device memory goes, every 10 s (images by guest size, buffer arena blocks).
     if (const auto now = std::chrono::steady_clock::now(); now - vram_report_time >= std::chrono::seconds(10)) {
         vram_report_time = now;
         std::printf("VRAM: device usage %llu MiB; %u images %llu MiB; buffer arena %llu MiB "
@@ -1889,7 +1889,7 @@ void TextureCache::GarbageCollectImages() {
         ResolveReadbacks(image.info.guest_address, image.info.guest_size, true,
                          ReadbackSource::CacheCleanup);
         if (download) {
-            // gow3: synchronously, while the image still protects its pages. A deferred
+            // gr2: synchronously, while the image still protects its pages. A deferred
             // write-back landed after FreeImage had unprotected them, over whatever the game
             // had meanwhile stored there (e.g. its heap after unloading an area).
             DownloadImageMemory(image_id, true);
@@ -1920,7 +1920,7 @@ void TextureCache::GarbageCollectImages() {
         configure(true);
         lru_cache.ForEachItemBelow(gc_tick - ticks_to_destroy, clean_up);
     }
-    // gow3: evictions under memory pressure, at most every 5 s (GOW3_FRAME_STATS or not).
+    // gr2: evictions under memory pressure, at most every 5 s (GR2_FRAME_STATS or not).
     if (pressured || gc_downloads != 0) {
         const auto now = std::chrono::steady_clock::now();
         if (now - gc_report_time >= std::chrono::seconds(5)) {

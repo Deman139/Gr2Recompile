@@ -1,0 +1,446 @@
+#include "gr2_write_log.h"
+// gr2: glue between the C loader and the vendored shadPS4 video core.
+#include "gr2_overlay.h"
+#include "gr2_png.h"
+#include "gr2_settings.h"
+#include "gr2_copy.h"
+#ifndef _WIN32
+#include <sys/resource.h>
+#endif
+#include "gr2_toggles.h"
+#include "gr2_guest_image.h"
+#include <algorithm>
+#include <atomic>
+#include <condition_variable>
+#include <boost/asio/io_context.hpp>
+#include "common/polyfill_thread.h"
+#include "video_core/renderdoc.h"
+#include <cstring>
+#include <mutex>
+#include <string>
+#include <chrono>
+#include <thread>
+#include <vector>
+#include <SDL3/SDL.h>
+#include "../gr2gpu.h"
+#include "common/elf_info.h"
+#include "common/logging/log.h"
+#include "core/libraries/kernel/orbis_error.h"
+#include "core/libraries/libs.h"
+#include "core/memory.h"
+#include "core/signals.h"
+#include "sdl_window.h"
+#include "video_core/renderer_vulkan/vk_rasterizer.h"
+
+extern "C" {
+// runtime_memory.c
+int runtime_memory_is_mapped(uintptr_t address, uint64_t size);
+int runtime_memory_write_backing(uintptr_t address, const void* data, uint64_t size);
+uint64_t runtime_memory_clamp(uintptr_t address, uint64_t size);
+int runtime_memory_region(uintptr_t address, uintptr_t* start, uintptr_t* end, int* mapped);
+void runtime_memory_gpu_protect(uintptr_t address, uint64_t size, int read, int write);
+typedef void (*RuntimeGpuRange)(uintptr_t address, uint64_t size);
+// runtime_kernel.c: one clock for guest and GPU timestamps
+uint64_t runtime_process_time_us(void);
+uint64_t runtime_process_time_counter(void);
+uint64_t runtime_tsc_frequency(void);
+uint64_t runtime_read_tsc(void);
+int32_t* runtime_errno(void);
+void runtime_memory_set_gpu_hooks(RuntimeGpuRange map, RuntimeGpuRange unmap, RuntimeGpuRange invalidate);
+// runtime.c: exit counters (and the ISA site report), as on the guest's own exit
+void runtime_report(void);
+[[noreturn]] void runtime_terminate(int code);
+}
+
+Frontend::WindowSDL* g_window = nullptr;
+
+namespace Libraries::GnmDriver { void RegisterLib(Core::Loader::SymbolsResolver* sym); }
+namespace Libraries::AvPlayer { void RegisterLib(Core::Loader::SymbolsResolver* sym); }
+namespace Libraries::VideoOut { void RegisterLib(Core::Loader::SymbolsResolver* sym); }
+namespace Libraries::Kernel { void RegisterEventQueue(Core::Loader::SymbolsResolver* sym); }
+
+namespace {
+struct Symbol {
+    std::string nid, library, module;
+    u64 address;
+};
+std::vector<Symbol> g_symbols;
+u32 g_sdk_version;
+} // namespace
+
+namespace Core::Loader {
+void SymbolsResolver::AddSymbol(const char* nid, const char* library, const char* module, SymbolType,
+                                u64 address) {
+    g_symbols.push_back({nid, library, module, address});
+}
+} // namespace Core::Loader
+
+// ElfInfo's fields are private to Core::Emulator; the port fills them here.
+namespace Core {
+class Emulator {
+public:
+    static void FillElfInfo(const Gr2GpuConfig& config) {
+        auto& info = Common::ElfInfo::Instance();
+        info.initialized = true;
+        info.game_serial = config.serial ? config.serial : "UNKNOWN";
+        info.title = config.title ? config.title : "";
+        info.sdk_ver = config.sdk_version;
+        info.psf_attributes.raw = config.psf_attributes;
+    }
+};
+
+void MemoryManager::SetRasterizer(Vulkan::Rasterizer* rasterizer_) {
+    rasterizer = rasterizer_;
+    // Existing guest mappings are replayed by the runtime when hooks are installed.
+    runtime_memory_set_gpu_hooks(
+        [](uintptr_t address, uint64_t size) {
+            auto* r = Memory::Instance()->GetRasterizer();
+            r->RegisterMemory(address, size);
+            r->MapMemory(address, size);
+        },
+        [](uintptr_t address, uint64_t size) { Memory::Instance()->GetRasterizer()->UnmapMemory(address, size); },
+        [](uintptr_t address, uint64_t size) {
+            Memory::Instance()->GetRasterizer()->InvalidateMemory(address, size);
+        });
+}
+void MemoryManager::InvalidateMemory(VAddr address, u64 size) {
+    if (rasterizer) rasterizer->InvalidateMemory(address, size);
+}
+u64 MemoryManager::ClampRangeSize(VAddr virtual_addr, u64 size) {
+    return runtime_memory_clamp(virtual_addr, size);
+}
+static void CopySparseSerial(VAddr source, u8* dest, u64 size) {
+    while (size) {
+        uintptr_t start = 0, end = 0;
+        int mapped = 0;
+        if (!runtime_memory_region(source, &start, &end, &mapped)) {
+            end = source + size;
+        }
+        const u64 n = std::min<u64>(size, end - source);
+        if (mapped) std::memcpy(dest, reinterpret_cast<const void*>(source), n);
+        else std::memset(dest, 0, n);
+        source += n; dest += n; size -= n;
+    }
+}
+void MemoryManager::CopySparseMemory(VAddr source, u8* dest, u64 size) {
+    // gr2: large uploads (streaming) are split across the copy threads.
+    constexpr u64 Chunk = 512 * 1024;
+    if (size < 4 * Chunk || !Gr2Copy::Enabled()) {
+        return CopySparseSerial(source, dest, size);
+    }
+    Gr2Copy::ParallelFor((size + Chunk - 1) / Chunk, [&](std::size_t i) {
+        const u64 offset = i * Chunk;
+        CopySparseSerial(source + offset, dest + offset, std::min(Chunk, size - offset));
+    });
+}
+bool MemoryManager::TryWriteBacking(void* address, const void* data, u64 size) {
+    Gr2WriteLog::Note(reinterpret_cast<uintptr_t>(address), data, size, Gr2WriteLog::Backing);
+    const bool written = runtime_memory_write_backing(reinterpret_cast<uintptr_t>(address), data, size) != 0;
+    // The write skipped page tracking: textures over it must reload (#138).
+    // ponytail: fence and label writes (<= 8 bytes) never hold texels, so they are left out;
+    // every one would send all texture bindings through the locked path.
+    if (written && rasterizer && size > 8) {
+        rasterizer->GetTextureCache().NoteBackingWrite(reinterpret_cast<VAddr>(address), size);
+    }
+    return written;
+}
+void AddressSpace::Protect(VAddr virtual_addr, u64 size, MemoryPermission perms) {
+    Gr2Stats::Timer timer{Gr2Stats::t_protect};
+    const u64 pages = (size + 4095) / 4096;
+    Gr2Stats::protect_calls.fetch_add(1, std::memory_order_relaxed);
+    Gr2Stats::protect_pages.fetch_add(pages, std::memory_order_relaxed);
+    if (!True(perms & MemoryPermission::Write)) {
+        Gr2Stats::protect_revoke_calls.fetch_add(1, std::memory_order_relaxed);
+        Gr2Stats::protect_revoke_pages.fetch_add(pages, std::memory_order_relaxed);
+    }
+    runtime_memory_gpu_protect(virtual_addr, size, True(perms & MemoryPermission::Read),
+                               True(perms & MemoryPermission::Write));
+}
+boost::icl::interval_set<VAddr> AddressSpace::GetUsableRegions() {
+    boost::icl::interval_set<VAddr> set;
+    set += boost::icl::interval<VAddr>::right_open(0x2'0000'0000ULL, 0x8'0000'0000ULL); // PS4 system-managed
+    set += boost::icl::interval<VAddr>::right_open(0x10'0000'0000ULL, 0xfc'0000'0000ULL);
+    return set;
+}
+} // namespace Core
+
+// Kernel services the vendored libraries call directly.
+namespace Libraries::Kernel {
+u64 PS4_SYSV_ABI sceKernelGetTscFrequency() { return runtime_tsc_frequency(); }
+u64 PS4_SYSV_ABI sceKernelReadTsc() { return runtime_read_tsc(); }
+u64 PS4_SYSV_ABI sceKernelGetProcessTime() { return runtime_process_time_us(); }
+u64 PS4_SYSV_ABI sceKernelGetProcessTimeCounter() { return runtime_process_time_counter(); }
+u64 PS4_SYSV_ABI sceKernelGetProcessTimeCounterFrequency() { return 1'000'000'000; }
+s32 PS4_SYSV_ABI sceKernelIsNeoMode() { return 0; } // base PS4
+s32 PS4_SYSV_ABI sceKernelGetCompiledSdkVersion(s32* ver) {
+    if (!ver) return ORBIS_KERNEL_ERROR_EINVAL;
+    *ver = s32(g_sdk_version);
+    return ORBIS_OK;
+}
+s32 PS4_SYSV_ABI sceKernelUsleep(u32 microseconds) {
+    std::this_thread::sleep_for(std::chrono::microseconds(microseconds));
+    return ORBIS_OK;
+}
+} // namespace Libraries::Kernel
+
+namespace {
+// SDL video must be driven from one thread: the window lives on its own host thread.
+std::thread g_window_thread;
+std::mutex g_window_mutex;
+std::condition_variable g_window_cv;
+bool g_window_ready;
+} // namespace
+
+u32 Gr2DisplayRefreshHz() {
+    static const u32 hz = [] {
+        const SDL_DisplayMode* mode = SDL_GetCurrentDisplayMode(SDL_GetPrimaryDisplay());
+        const u32 rate = mode && mode->refresh_rate > 0 ? u32(mode->refresh_rate + 0.5f) : 60;
+        std::printf("GPU: vblank follows the display refresh rate, %u Hz\n", rate);
+        return std::max<u32>(rate, 60);
+    }();
+    return hz;
+}
+
+#ifdef GR2_PGO_GENERATE
+#ifdef __clang__
+extern "C" int __llvm_profile_write_file(void);
+extern "C" void __llvm_profile_reset_counters(void);
+static void __gcov_dump(void) { __llvm_profile_write_file(); }
+static void __gcov_reset(void) { __llvm_profile_reset_counters(); }
+#else
+extern "C" void __gcov_dump(void);
+extern "C" void __gcov_reset(void);
+#endif
+// Instrumented build (GR2_PGO=generate): the game often ends through _exit (watchdog, guest
+// exit), which skips the profile write at exit. Write every 30 s and reset: the files sum the
+// intervals.
+static void StartProfileWriter() {
+    std::thread([] {
+        Common::SetCurrentThreadName("gr2:pgo");
+        for (;;) {
+            std::this_thread::sleep_for(std::chrono::seconds(30));
+            __gcov_dump();
+            __gcov_reset();
+            std::printf("PGO: profile written\n");
+        }
+    }).detach();
+}
+#endif
+
+extern "C" int gr2gpu_init(const Gr2GpuConfig* config) {
+    Gr2Settings::Load();
+#ifdef GR2_PGO_GENERATE
+    StartProfileWriter();
+#endif
+    g_sdk_version = config->sdk_version;
+#ifdef _WIN32
+    if (config->user_dir && !std::getenv("GR2_GPU_USER_DIR")) _putenv_s("GR2_GPU_USER_DIR", config->user_dir);
+#else
+    if (config->user_dir) setenv("GR2_GPU_USER_DIR", config->user_dir, 0);
+#endif
+    Core::Emulator::FillElfInfo(*config);
+    const std::string title = config->title ? config->title : "God of War III";
+    const s32 width = config->width, height = config->height;
+    g_window_thread = std::thread([title, width, height] {
+        Common::SetCurrentThreadName("gr2:window");
+        auto* window = new Frontend::WindowSDL(width, height, title.c_str());
+        {
+            std::scoped_lock lock{g_window_mutex};
+            g_window = window;
+            g_window_ready = true;
+        }
+        g_window_cv.notify_all();
+        while (window->PollEvents()) {
+            SDL_Delay(2);
+        }
+        LOG_INFO(Frontend, "Window closed by user");
+        runtime_report();
+        std::fflush(stdout);
+        std::fflush(stderr);
+        // gr2: no DLL shutdown (runtime_terminate). ExitProcess ran the drivers' detach code
+        // while their threads were already gone, and the Direct3D shader cache (D3DSCache.dll)
+        // faulted there: an error report after a normal close.
+        runtime_terminate(0);
+    });
+    g_window_thread.detach();
+    {
+        std::unique_lock lock{g_window_mutex};
+        g_window_cv.wait(lock, [] { return g_window_ready; });
+    }
+    Core::Loader::SymbolsResolver resolver;
+    // GnmDriver creates the presenter that the VideoOut present thread uses.
+    Libraries::GnmDriver::RegisterLib(&resolver);
+    Libraries::VideoOut::RegisterLib(&resolver);
+    return 0;
+}
+
+namespace Libraries::Kernel { void StartKernelService(); }
+extern "C" void gr2gpu_register_kernel(void) {
+    Libraries::Kernel::StartKernelService();
+    Core::Loader::SymbolsResolver resolver;
+    Libraries::Kernel::RegisterEventQueue(&resolver);
+    Libraries::AvPlayer::RegisterLib(&resolver);
+}
+
+extern "C" uintptr_t gr2gpu_resolve(const char* scoped_nid) {
+    const char* hash = std::strchr(scoped_nid, '#');
+    const size_t length = hash ? size_t(hash - scoped_nid) : std::strlen(scoped_nid);
+    for (const auto& symbol : g_symbols) {
+        if (symbol.nid.size() == length && !std::memcmp(symbol.nid.data(), scoped_nid, length)) {
+            return uintptr_t(symbol.address);
+        }
+    }
+    return 0;
+}
+
+extern "C" void gr2gpu_set_guest_image(const void* base) {
+    Gr2GuestImage::base.store(reinterpret_cast<std::uintptr_t>(base));
+}
+
+extern "C" int gr2gpu_handle_fault(void* ucontext, void* address) {
+    return Core::Signals::Instance()->DispatchAccessViolation(ucontext, address) ? 1 : 0;
+}
+
+extern "C" unsigned gr2gpu_symbol_count(void) {
+    return unsigned(g_symbols.size());
+}
+
+// Kernel service thread: runs boost::asio timers for equeue timer events.
+namespace Libraries::Kernel {
+boost::asio::io_context io_context;
+static std::mutex m_asio_req;
+static std::condition_variable_any cv_asio_req;
+static std::atomic<u32> asio_requests;
+static std::jthread service_thread;
+
+void KernelSignalRequest() {
+    std::unique_lock lock{m_asio_req};
+    ++asio_requests;
+    cv_asio_req.notify_one();
+}
+
+static void KernelServiceThread(std::stop_token stoken) {
+    Common::SetCurrentThreadName("gr2:kernel_service");
+    while (!stoken.stop_requested()) {
+        {
+            std::unique_lock lock{m_asio_req};
+            cv_asio_req.wait(lock, stoken, [] { return asio_requests != 0; });
+        }
+        if (stoken.stop_requested()) break;
+        io_context.run();
+        io_context.restart();
+        asio_requests = 0;
+    }
+}
+
+void StartKernelService() {
+    service_thread = std::jthread{KernelServiceThread};
+}
+
+int* PS4_SYSV_ABI __Error() {
+    return runtime_errno();
+}
+} // namespace Libraries::Kernel
+
+// RenderDoc capture hooks: not used by the port. Screenshots (F12) are taken by the presenter:
+// the game's frame without the overlay.
+namespace VideoCore {
+namespace {
+std::atomic<u32> screenshot_requests{0};
+}
+void LoadRenderDoc() {}
+void StartCapture() {}
+void EndCapture() {}
+void TriggerCapture() {}
+void SetOutputDir(const std::filesystem::path&, const std::string&) {}
+bool IsRenderDocLoaded() { return false; }
+void RequestScreenshot(ScreenshotRequest request) {
+    if (request != ScreenshotRequest::None) {
+        screenshot_requests.fetch_add(1, std::memory_order_relaxed);
+    }
+}
+u32 ConsumeGameOnlyScreenshotRequests() {
+    return screenshot_requests.exchange(0, std::memory_order_acq_rel);
+}
+u32 ConsumeWithOverlaysScreenshotRequests() { return 0; }
+ScreenshotRequests ConsumeScreenshotRequests() {
+    return {.game_only_count = ConsumeGameOnlyScreenshotRequests(), .with_overlays_count = 0};
+}
+} // namespace VideoCore
+
+extern "C" int gr2gpu_vibration_percent(void) {
+    return Gr2Settings::Get().vibration.load(std::memory_order_relaxed);
+}
+
+extern "C" void gr2gpu_input_settings(Gr2InputSettings* out) {
+    const auto& s = Gr2Settings::Get();
+    out->mouse_sens = s.mouse_sens.load(std::memory_order_relaxed);
+    out->mouse_turn_boost = float(s.mouse_turn_boost.load(std::memory_order_relaxed));
+    out->mouse_invert = s.mouse_invert.load(std::memory_order_relaxed) ? 1 : 0;
+    out->pad_dead_zone = float(s.pad_dead_zone.load(std::memory_order_relaxed)) / 100.0f;
+    out->quick_menu = s.quick_menu.load(std::memory_order_relaxed) ? 1 : 0;
+    out->prompt_style = s.prompt_style.load(std::memory_order_relaxed);
+}
+
+extern "C" int gr2gpu_pad_speaker_percent(void) {
+    return Gr2Settings::Get().pad_speaker.load(std::memory_order_relaxed);
+}
+
+extern "C" void gr2gpu_quick_menu_open(void) {
+    Gr2Overlay::OpenQuickMenu();
+}
+
+extern "C" void gr2gpu_fov_register(float* cell) {
+    Gr2Overlay::SetFovCell(cell);
+}
+
+extern "C" unsigned gr2gpu_post_effects_off(void) {
+    const auto& s = Gr2Settings::Get();
+    return (s.startup_motion_blur ? 0u : 1u) | (s.startup_depth_of_field ? 0u : 2u) |
+           (s.startup_bloom ? 0u : 4u) | (s.startup_film_grain ? 0u : 8u);
+}
+
+extern "C" void gr2gpu_camera_shake_register(int* cell) {
+    Gr2Overlay::SetShakeCell(cell);
+}
+
+extern "C" int gr2gpu_overlay_captures_input(void) {
+    return Gr2Overlay::CapturesInput() ? 1 : 0;
+}
+
+extern "C" int gr2gpu_text_input_begin(const char* initial, const char* prompt) {
+    if (!g_window) return 0;
+    g_window->BeginTextInput(initial ? initial : "", prompt ? prompt : "Text");
+    return 1;
+}
+
+extern "C" int gr2gpu_choice_begin(const char* title, const char* const* items, const char* const* images,
+                                    int count, int focus) {
+    if (!g_window || count <= 0) return 0;
+    // Pictures are decoded here, on the game's thread, before the list is shown.
+    std::vector<Gr2Png::Image> pictures(count);
+    for (int i = 0; images && i < count; ++i) {
+        if (images[i] && !Gr2Png::LoadRgba(images[i], pictures[i])) {
+            LOG_WARNING(Lib_SaveDataDialog, "save list: no picture from {}", images[i]);
+        }
+    }
+    Gr2Overlay::BeginChoice(title ? title : "", std::vector<std::string>(items, items + count),
+                             std::move(pictures), focus);
+    return 1;
+}
+
+extern "C" int gr2gpu_choice_poll(void) {
+    return Gr2Overlay::PollChoice();
+}
+
+extern "C" int gr2gpu_text_input_poll(char* out, uint64_t size) {
+    if (!g_window) return 2;
+    std::string text;
+    const int state = g_window->PollTextInput(text);
+    if (size) {
+        const size_t n = std::min<size_t>(text.size(), size - 1);
+        std::memcpy(out, text.data(), n);
+        out[n] = 0;
+    }
+    return state;
+}

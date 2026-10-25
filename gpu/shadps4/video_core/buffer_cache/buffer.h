@@ -43,7 +43,7 @@ constexpr vk::BufferUsageFlags ReadFlags =
 constexpr vk::BufferUsageFlags AllFlags =
     ReadFlags | vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eStorageBuffer;
 
-/// gow3: prints the VMA buffers alive by name for the VRAM report.
+/// gr2: prints the VMA buffers alive by name for the VRAM report.
 void ReportBufferMemory();
 
 struct UniqueBuffer {

@@ -8,7 +8,7 @@
 #include <string>
 #include <optional>
 
-#include "gow3_copy.h"
+#include "gr2_copy.h"
 
 #include <deque>
 #include <boost/container/small_vector.hpp>
@@ -37,7 +37,7 @@ class StagingBufferPool;
 
 namespace VideoCore {
 
-/// gow3: who asked for the arena blocks being made resident (VRAM report).
+/// gr2: who asked for the arena blocks being made resident (VRAM report).
 inline thread_local const char* residency_tag = "other";
 struct ResidencyTag {
     const char* previous;
@@ -45,7 +45,7 @@ struct ResidencyTag {
     ~ResidencyTag() { residency_tag = previous; }
 };
 
-/// gow3: who binds the next written buffer (GOW3_WRITTEN_BINDINGS diagnostic, from iss_pc): a
+/// gr2: who binds the next written buffer (GR2_WRITTEN_BINDINGS diagnostic, from iss_pc): a
 /// short kind and, for shader bindings, the program hash. Set by the caller of ObtainBuffer on its
 /// thread.
 struct WrittenBindingSource {
@@ -60,7 +60,7 @@ class PageManager;
 
 class BufferCache {
     static constexpr u64 ADDRESS_SPACE_BITS = 40;
-    // gow3: arena pages are 4 GiB unless the driver's buffer size limit is lower (AMD's
+    // gr2: arena pages are 4 GiB unless the driver's buffer size limit is lower (AMD's
     // Windows driver: 2 GiB); an arena spans up to two pages, so they shrink to half the limit.
     static constexpr u64 MAX_ARENA_PAGE_BITS = 32;
     static constexpr u64 MIN_ARENA_PAGE_BITS = 30;
@@ -68,13 +68,13 @@ class BufferCache {
     static constexpr u64 MIN_BLOCK_SIZE = 16_KB;
 
 public:
-    /// gow3: arena block memory allocated in device / system memory (VRAM report).
+    /// gr2: arena block memory allocated in device / system memory (VRAM report).
     [[nodiscard]] u64 ResidentDeviceBytes() const { return resident_device_bytes; }
     [[nodiscard]] u64 ResidentFallbackBytes() const { return resident_fallback_bytes; }
-    /// gow3: prints the arena blocks by 256 MiB guest region (VRAM report).
+    /// gr2: prints the arena blocks by 256 MiB guest region (VRAM report).
     void ReportResidency() const;
 
-    /// Read-only bindings up to this size are copied into a stream buffer (gow3: public for
+    /// Read-only bindings up to this size are copied into a stream buffer (gr2: public for
     /// the draw pipeline's constant ring).
     static constexpr u64 STREAM_THRESHOLD = 16_KB;
 
@@ -111,10 +111,10 @@ public:
     /// Invalidates any buffer in the logical page range.
     void InvalidateMemory(VAddr device_addr, u64 size, bool assume_locks = false);
 
-    /// gow3: a guest write fault at `device_addr` was handled; unprotect its neighbourhood.
+    /// gr2: a guest write fault at `device_addr` was handled; unprotect its neighbourhood.
     void ExtendWriteFault(VAddr device_addr);
 
-    /// gow3: a write fault from a GOW3_NOWAIT_WRITES instruction (from iss_pc): the page becomes
+    /// gr2: a write fault from a GR2_NOWAIT_WRITES instruction (from iss_pc): the page becomes
     /// writable at once, without reading the GPU data back (no GPU wait); the GPU bytes there are
     /// dropped and the page is uploaded from the CPU copy. Only for pages the game refills while
     /// it never reads what the GPU wrote there. Guest threads.
@@ -169,9 +169,9 @@ private:
     bool SynchronizeMemory(const Buffer* arena, VAddr device_addr, u32 size, bool is_written,
                            bool is_texel_buffer);
 
-    /// gow3: batched small copies on the copy threads (Gow3Copy::QueueCopy).
-    static void RunGuestCopy(const Gow3Copy::Item& item);
-    void SmallGuestCopy(const Gow3Copy::Item& item);
+    /// gr2: batched small copies on the copy threads (Gr2Copy::QueueCopy).
+    static void RunGuestCopy(const Gr2Copy::Item& item);
+    void SmallGuestCopy(const Gr2Copy::Item& item);
 
     const Buffer* UploadCopies(const Buffer* arena, std::span<vk::BufferCopy> copies,
                                size_t total_size_bytes);
@@ -180,7 +180,7 @@ private:
 
     const Vulkan::Instance& instance;
     Vulkan::Scheduler& scheduler;
-    // gow3: texel buffer ranges known not to alias an image, per image registry generation.
+    // gr2: texel buffer ranges known not to alias an image, per image registry generation.
     struct ImageMiss {
         VAddr address = 0;
         u32 size = 0;
@@ -197,7 +197,7 @@ private:
     StreamBuffer stream_buffer;
     Buffer gds_buffer;
     RangeSet gpu_modified_ranges;
-    /// gow3: a no-wait write left GPU-written bytes in a CPU modified page (NoWaitWrite).
+    /// gr2: a no-wait write left GPU-written bytes in a CPU modified page (NoWaitWrite).
     std::atomic<bool> pages_shared_with_gpu{false};
 
     std::unique_ptr<FaultManager> fault_manager;
@@ -224,9 +224,9 @@ private:
     IntervalList<Backing> resident_ranges;
 
     u32 arena_memory_type_index{};
-    /// gow3: memory type (system RAM) for arena blocks once device memory is exhausted.
+    /// gr2: memory type (system RAM) for arena blocks once device memory is exhausted.
     std::optional<u32> arena_fallback_type_index;
-    /// gow3: arena block memory allocated so far (device, fallback) and the next report mark.
+    /// gr2: arena block memory allocated so far (device, fallback) and the next report mark.
     u64 resident_device_bytes{};
     u64 resident_fallback_bytes{};
     u64 resident_report_mark{};

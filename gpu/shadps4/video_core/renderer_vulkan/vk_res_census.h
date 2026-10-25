@@ -11,7 +11,7 @@
 
 namespace Vulkan {
 
-/// gow3 (Killzone): GOW3_RES_CENSUS=1 with a render resolution patch looks for what still
+/// gr2 (Killzone): GR2_RES_CENSUS=1 with a render resolution patch looks for what still
 /// assumes 1080p (the source of lighting flicker and shadows that trail the camera above
 /// 1080p): viewports and scissors of the 1080p family (1920x1080, 960x540, ...) on targets of
 /// another size, compute dispatches sized for 1920/1080, and 1080p-family values (1920, 1080,
@@ -20,8 +20,8 @@ namespace Vulkan {
 class ResCensus {
 public:
     ResCensus() {
-        const char* on = std::getenv("GOW3_RES_CENSUS");
-        const char* patches = std::getenv("GOW3_PATCHES");
+        const char* on = std::getenv("GR2_RES_CENSUS");
+        const char* patches = std::getenv("GR2_PATCHES");
         if (!on || on[0] != '1' || !patches) {
             return;
         }

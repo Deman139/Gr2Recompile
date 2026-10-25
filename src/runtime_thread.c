@@ -47,7 +47,7 @@ typedef struct GuestThread {
     char name[32];
     int detached, finished, joined, host_owned;
 #ifdef _WIN32
-    gow3_jmp_buf exit_jump; /* no SEH unwinding through guest frames */
+    gr2_jmp_buf exit_jump; /* no SEH unwinding through guest frames */
 #else
     jmp_buf exit_jump;
 #endif
@@ -251,11 +251,11 @@ static void set_host_name(const char *name) {
 }
 /* Threads the game creates with a high PS4 priority (below 400: brbDriver/brbClient sound,
  * SceFios I/O, TempData) run above normal on the host, so audio and streaming keep up on CPUs
- * with few threads (SpartanPort 4b843a7). GOW3_THREAD_PRIORITIES=0: all at normal priority. */
+ * with few threads (SpartanPort 4b843a7). GR2_THREAD_PRIORITIES=0: all at normal priority. */
 enum { HIGH_GUEST_PRIO = 400 };
 static void set_host_priority(const char *name,int guest_prio) {
     static int enabled=-1;
-    if (enabled<0) { const char *v=getenv("GOW3_THREAD_PRIORITIES"); enabled=!v || v[0]!='0'; }
+    if (enabled<0) { const char *v=getenv("GR2_THREAD_PRIORITIES"); enabled=!v || v[0]!='0'; }
     if (!enabled || guest_prio>=HIGH_GUEST_PRIO) return;
 #ifdef _WIN32
     if (!SetThreadPriority(GetCurrentThread(),THREAD_PRIORITY_ABOVE_NORMAL))
@@ -265,8 +265,8 @@ static void set_host_priority(const char *name,int guest_prio) {
 #endif
 }
 #ifdef _WIN32
-#define exit_setjmp(t) gow3_setjmp((t)->exit_jump)
-#define exit_longjmp(t) gow3_longjmp((t)->exit_jump,1)
+#define exit_setjmp(t) gr2_setjmp((t)->exit_jump)
+#define exit_longjmp(t) gr2_longjmp((t)->exit_jump,1)
 #else
 #define exit_setjmp(t) setjmp((t)->exit_jump)
 #define exit_longjmp(t) longjmp((t)->exit_jump,1)
@@ -274,12 +274,12 @@ static void set_host_priority(const char *name,int guest_prio) {
 /* Guest threads start with the PS4's FPU state: MXCSR 0x9fc0 (the value sceFiber uses for a fresh
  * FPU state: flush to zero, denormals are zero) and the x87 control word 0x037f, instead of the
  * host's 0x1f80, so physics and other float code compute as on the console (uncharted_pc 0cf1277).
- * GOW3_GUEST_MXCSR=<hex> picks another value; GOW3_GUEST_MXCSR=1f80 is the old host default. */
+ * GR2_GUEST_MXCSR=<hex> picks another value; GR2_GUEST_MXCSR=1f80 is the old host default. */
 void runtime_set_guest_fpu(void) {
     static unsigned value=0x9fc0;
     static int once;
     if (!once) {
-        const char *env=getenv("GOW3_GUEST_MXCSR");
+        const char *env=getenv("GR2_GUEST_MXCSR");
         if (env) value=(unsigned)strtoul(env,NULL,16);
         once=1;
         printf("Runtime: guest MXCSR 0x%x\n",value);

@@ -1,4 +1,4 @@
-// gow3: SDL3 window for the Vulkan swapchain (X11 or Wayland).
+// gr2: SDL3 window for the Vulkan swapchain (X11 or Wayland).
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -6,13 +6,13 @@
 #include "common/assert.h"
 #include "common/logging/log.h"
 #include "sdl_window.h"
-#include "gow3_overlay.h"
-#include "gow3_graphics.h"
-#include "gow3_settings.h"
+#include "gr2_overlay.h"
+#include "gr2_graphics.h"
+#include "gr2_settings.h"
 
 namespace {
-// gow3 (Killzone): mouse input for runtime_pad.c, ported from uncharted_pc. The window thread adds
-// the motion, buttons and wheel of its events; the pad sampling takes them (gow3gpu_mouse_sample).
+// gr2 (Killzone): mouse input for runtime_pad.c, ported from uncharted_pc. The window thread adds
+// the motion, buttons and wheel of its events; the pad sampling takes them (gr2gpu_mouse_sample).
 std::mutex mouse_mutex;
 float mouse_dx{}, mouse_dy{};
 int mouse_wheel{};
@@ -32,11 +32,11 @@ u32 MouseBit(u8 button) {
 }
 } // namespace
 
-extern "C" void gow3gpu_mouse_configure(int look) {
+extern "C" void gr2gpu_mouse_configure(int look) {
     mouse_look = look != 0;
 }
 
-extern "C" int gow3gpu_mouse_sample(float* dx, float* dy, uint32_t* buttons, int* wheel) {
+extern "C" int gr2gpu_mouse_sample(float* dx, float* dy, uint32_t* buttons, int* wheel) {
     std::scoped_lock lock{mouse_mutex};
     *dx = mouse_dx;
     *dy = mouse_dy;
@@ -66,8 +66,8 @@ WindowSDL::WindowSDL(s32 width_, s32 height_, const char* title) : width{width_}
     window = SDL_CreateWindowWithProperties(props);
     SDL_DestroyProperties(props);
     ASSERT_MSG(window, "Failed to create window: {}", SDL_GetError());
-    // gow3: the game's own icon (run.py converts sce_sys/icon0.png to BMP, SDL's built-in format).
-    if (const char* icon_path = std::getenv("GOW3_WINDOW_ICON")) {
+    // gr2: the game's own icon (run.py converts sce_sys/icon0.png to BMP, SDL's built-in format).
+    if (const char* icon_path = std::getenv("GR2_WINDOW_ICON")) {
         if (SDL_Surface* icon = SDL_LoadBMP(icon_path)) {
             SDL_SetWindowIcon(window, icon);
             SDL_DestroySurface(icon);
@@ -93,13 +93,13 @@ WindowSDL::WindowSDL(s32 width_, s32 height_, const char* title) : width{width_}
     } else {
         UNREACHABLE_MSG("Unsupported SDL video driver {}", driver ? driver : "(none)");
     }
-    // gow3: GOW3_FULLSCREEN=1 (older launchers) still asks for fullscreen.
-    if (const char* fullscreen = std::getenv("GOW3_FULLSCREEN"); fullscreen && fullscreen[0] == '1' &&
-        Gow3Settings::Get().display_mode == Gow3Graphics::Windowed) {
-        Gow3Settings::Get().display_mode = Gow3Graphics::Borderless;
+    // gr2: GR2_FULLSCREEN=1 (older launchers) still asks for fullscreen.
+    if (const char* fullscreen = std::getenv("GR2_FULLSCREEN"); fullscreen && fullscreen[0] == '1' &&
+        Gr2Settings::Get().display_mode == Gr2Graphics::Windowed) {
+        Gr2Settings::Get().display_mode = Gr2Graphics::Borderless;
     }
-    ApplyDisplayMode(Gow3Settings::Get().display_mode);
-    // gow3: the game has no mouse; the in-game menu draws its own cursor (Gow3Overlay::SetOpen).
+    ApplyDisplayMode(Gr2Settings::Get().display_mode);
+    // gr2: the game has no mouse; the in-game menu draws its own cursor (Gr2Overlay::SetOpen).
     SDL_HideCursor();
     int w = 0, h = 0;
     SDL_GetWindowSizeInPixels(window, &w, &h);
@@ -112,18 +112,18 @@ WindowSDL::WindowSDL(s32 width_, s32 height_, const char* title) : width{width_}
 // mode. Window thread only (SDL). The swapchain follows the size events.
 void WindowSDL::ApplyDisplayMode(int mode) {
     display_mode = mode;
-    if (mode == Gow3Graphics::Windowed) {
+    if (mode == Gr2Graphics::Windowed) {
         SDL_SetWindowFullscreen(window, false);
     } else {
         const SDL_DisplayMode* desktop = SDL_GetDesktopDisplayMode(SDL_GetDisplayForWindow(window));
-        const bool exclusive = mode == Gow3Graphics::Fullscreen && desktop;
+        const bool exclusive = mode == Gr2Graphics::Fullscreen && desktop;
         if (!SDL_SetWindowFullscreenMode(window, exclusive ? desktop : nullptr)) {
             LOG_WARNING(Frontend, "Fullscreen mode: {}", SDL_GetError());
         }
         SDL_SetWindowFullscreen(window, true);
     }
     SDL_SyncWindow(window);
-    std::printf("Window: %s\n", Gow3Graphics::DisplayModeNames[mode]);
+    std::printf("Window: %s\n", Gr2Graphics::DisplayModeNames[mode]);
 }
 
 WindowSDL::~WindowSDL() {
@@ -148,7 +148,7 @@ void WindowSDL::UpdateTextTitle() {
     const std::string title = text_active ? base_title + " \u2014 " + text_prompt + ": " + text + "_  (Enter = OK, Esc = cancel)"
                                           : base_title;
     SDL_SetWindowTitle(window, title.c_str());
-    Gow3Overlay::SetTextEntry(text_active, text_prompt, text);
+    Gr2Overlay::SetTextEntry(text_active, text_prompt, text);
 }
 
 bool WindowSDL::PollEvents() {
@@ -162,9 +162,9 @@ bool WindowSDL::PollEvents() {
         }
     }
     if (!text_active) {
-        Gow3Overlay::UpdateTextInput(window);
+        Gr2Overlay::UpdateTextInput(window);
     }
-    if (const int mode = Gow3Settings::Get().display_mode; mode != display_mode) {
+    if (const int mode = Gr2Settings::Get().display_mode; mode != display_mode) {
         ApplyDisplayMode(mode);
     }
     // Mouse look holds the cursor in the window (relative mode) while the game has the focus; the
@@ -172,7 +172,7 @@ bool WindowSDL::PollEvents() {
     // the touchpad, runtime_pad.c) give it back.
     {
         const bool* keys = SDL_GetKeyboardState(nullptr);
-        const bool want = mouse_look && window_focused && !text_active && !Gow3Overlay::CapturesInput() &&
+        const bool want = mouse_look && window_focused && !text_active && !Gr2Overlay::CapturesInput() &&
                           !(keys && (keys[SDL_SCANCODE_LALT] || keys[SDL_SCANCODE_DELETE]));
         if (want != mouse_captured) {
             SDL_SetWindowRelativeMouseMode(window, want);
@@ -214,7 +214,7 @@ bool WindowSDL::PollEvents() {
             UpdateTextTitle();
             continue;
         }
-        if (Gow3Overlay::HandleEvent(event)) {
+        if (Gr2Overlay::HandleEvent(event)) {
             continue;
         }
         switch (event.type) {

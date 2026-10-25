@@ -1,7 +1,7 @@
 /* Narrow, explicit PS4 libc contracts. No automatic success stubs. */
 #define _CRT_RAND_S
 #include "runtime.h"
-#include "gpu/gow3gpu.h"
+#include "gpu/gr2gpu.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -209,14 +209,14 @@ static const char *canonical_name(const char *name, char out[128]) {
     snprintf(out,128,"%.*s#libkernel",(int)(posix-name),name);
     return out;
 }
-/* GOW3_NATIVE_LIBS (comma-separated library names, e.g. "libSceNgs2,libSceFont"): libraries
+/* GR2_NATIVE_LIBS (comma-separated library names, e.g. "libSceNgs2,libSceFont"): libraries
  * served by a firmware module linked into the image (link_modules.py --system). The host
  * runtime never resolves their imports, so the native exports bind instead. */
 static int native_library(const char *name) {
     static char *libraries;
     static int loaded;
     if (!loaded) {
-        const char *value=getenv("GOW3_NATIVE_LIBS");
+        const char *value=getenv("GR2_NATIVE_LIBS");
         if (value && *value) {
             size_t n=strlen(value);
             libraries=malloc(n+3);
@@ -308,7 +308,7 @@ uintptr_t runtime_resolve(const char *name, int is_data) {
     if (audio3d) return audio3d;
     uintptr_t gr2 = runtime_gr2_resolve(name);
     if (gr2) return gr2;
-    return gow3gpu_resolve(name);
+    return gr2gpu_resolve(name);
 }
 static const struct { const char *nid, *symbol; } import_names[]={
 #include "import_names.inc"

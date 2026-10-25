@@ -1,12 +1,12 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
-#ifndef GOW3_SCENE_RES_HOOK_H
-#define GOW3_SCENE_RES_HOOK_H
+#ifndef GR2_SCENE_RES_HOOK_H
+#define GR2_SCENE_RES_HOOK_H
 #include <stdint.h>
 #include <string.h>
 #include "signature.h"
 
 /* Killzone Shadow Fall CUSA00190 v01.81: the 3D scene at a smaller size than the display, for the
- * upscaler's quality modes (GOW3_RENDER_RES). The display size (device 0x3a3fa68 +0x3be8/+0x3bec,
+ * upscaler's quality modes (GR2_RENDER_RES). The display size (device 0x3a3fa68 +0x3be8/+0x3bec,
  * set from the init rectangle at 0x8e6256) stays 1920x1080: the UI, menus, movies and loading
  * screen are drawn with it, which is what the old resolution patch shrank along with the scene.
  *
@@ -14,9 +14,9 @@
  * 0x50a670, and each caller copies the display size there with "mov r32,[reg+0x3be8/0x3bec]":
  * boot (0x8e6470), the two target re-creations (0x50f930, 0x50fc43) and level load (0xdc5120).
  * Each load becomes "mov r32,imm32; nop". */
-enum { GOW3_SCENE_SIZE_SITES = 4 };
-typedef struct { const char *name; Gow3Signature site; int width_first; } Gow3SceneSizeSite;
-static const Gow3SceneSizeSite gow3_scene_size_sites[GOW3_SCENE_SIZE_SITES] = {
+enum { GR2_SCENE_SIZE_SITES = 4 };
+typedef struct { const char *name; Gr2Signature site; int width_first; } Gr2SceneSizeSite;
+static const Gr2SceneSizeSite gr2_scene_size_sites[GR2_SCENE_SIZE_SITES] = {
     /* mov eax,[rbx+0x3be8]; mov ecx,[rbx+0x3bec] */
     {"boot", {"8b 83 e8 3b 00 00 8b 8b ec 3b 00 00 c7 85 48 ff ff ff ff ff ff ff", 0}, 0},
     /* mov ecx,[rax+0x3be8]; mov eax,[rax+0x3bec] */
@@ -26,7 +26,7 @@ static const Gow3SceneSizeSite gow3_scene_size_sites[GOW3_SCENE_SIZE_SITES] = {
 };
 
 /* The two loads replaced in place: eax/ecx get the width/height the site's own order gives them. */
-static inline void gow3_scene_size_write(unsigned char *at, int width_first, uint32_t width, uint32_t height) {
+static inline void gr2_scene_size_write(unsigned char *at, int width_first, uint32_t width, uint32_t height) {
     const unsigned char first = width_first ? 0xb9 : 0xb8, second = width_first ? 0xb8 : 0xb9;
     at[0] = first;  memcpy(at + 1, &width, 4);  at[5] = 0x90;  /* mov ecx|eax, width */
     at[6] = second; memcpy(at + 7, &height, 4); at[11] = 0x90; /* mov eax|ecx, height */
@@ -37,12 +37,12 @@ static inline void gow3_scene_size_write(unsigned char *at, int width_first, uin
  * game's own half-width mode (multiplayer at 60 Hz) halves w right after, in those copies only:
  * the original rectangle is the UI's reference (0xd94eef). The stub does the same for a full-display
  * rectangle {0,0,1920,1080}, which becomes {0,0,w,h}, then replays the 10 bytes it replaced. */
-enum { GOW3_SCENE_RECT_HOOK_LENGTH = 10 };
-static const Gow3Signature gow3_scene_rect_site = {"48 8b 75 c0 80 7e 10 00 74 70 4b 8b 8c 2f f0 01 00 00", 0};
+enum { GR2_SCENE_RECT_HOOK_LENGTH = 10 };
+static const Gr2Signature gr2_scene_rect_site = {"48 8b 75 c0 80 7e 10 00 74 70 4b 8b 8c 2f f0 01 00 00", 0};
 
 /* Returns the stub's length, or 0 when a branch back is out of rel32 range. rax and the flags are
  * free here (both paths overwrite them before reading). */
-static inline unsigned gow3_scene_rect_build_stub(unsigned char *out, uintptr_t out_address, uintptr_t site,
+static inline unsigned gr2_scene_rect_build_stub(unsigned char *out, uintptr_t out_address, uintptr_t site,
                                                   uint32_t width, uint32_t height) {
     unsigned n = 0;
     for (int copy = 0; copy < 2; ++copy) {
@@ -66,7 +66,7 @@ static inline unsigned gow3_scene_rect_build_stub(unsigned char *out, uintptr_t 
     const unsigned char replay[8] = {0x48, 0x8b, 0x75, 0xc0, 0x80, 0x7e, 0x10, 0x00}; /* mov rsi,[rbp-0x40]; cmp byte [rsi+0x10],0 */
     memcpy(out + n, replay, 8); n += 8;
     const int64_t to_half = (int64_t)(site + 10 + 0x70) - (int64_t)(out_address + n + 6); /* the original jz target */
-    const int64_t to_resume = (int64_t)(site + GOW3_SCENE_RECT_HOOK_LENGTH) - (int64_t)(out_address + n + 6 + 5);
+    const int64_t to_resume = (int64_t)(site + GR2_SCENE_RECT_HOOK_LENGTH) - (int64_t)(out_address + n + 6 + 5);
     if (to_half < INT32_MIN || to_half > INT32_MAX || to_resume < INT32_MIN || to_resume > INT32_MAX) return 0;
     const int32_t z = (int32_t)to_half, r = (int32_t)to_resume;
     out[n++] = 0x0f; out[n++] = 0x84; memcpy(out + n, &z, 4); n += 4; /* jz 0x50fed1 */

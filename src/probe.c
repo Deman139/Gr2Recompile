@@ -18,7 +18,7 @@
 #include "postfx_hook.h"
 #include "scene_res_hook.h"
 #include "prompt_hook.h"
-#include "gpu/gow3gpu.h"
+#include "gpu/gr2gpu.h"
 #if !defined(__x86_64__) || !defined(__GNUC__)
 #error This prototype requires x86-64 GCC or Clang (including MinGW).
 #endif
@@ -156,9 +156,9 @@ static LONG fatal_exception(EXCEPTION_POINTERS *info) {
         fprintf(stderr,"Fault: exception 0x%08lx at %s (thread %lu)\n",record->ExceptionCode,where,GetCurrentThreadId());
     fprintf(stderr,"  rax=%016llx rbx=%016llx rcx=%016llx rdx=%016llx\n  rsi=%016llx rdi=%016llx rbp=%016llx rsp=%016llx\n",
             c->Rax,c->Rbx,c->Rcx,c->Rdx,c->Rsi,c->Rdi,c->Rbp,c->Rsp);
-    if (gpu_enabled) gow3gpu_dump_guest_writes(info);
+    if (gpu_enabled) gr2gpu_dump_guest_writes(info);
     /* Unwound through .pdata (drivers and the port's C++ have no frame pointer chain); guest
-     * frames continue on rbp. Same layout as GOW3_PROFILE stacks: symbolize_profile.py names it. */
+     * frames continue on rbp. Same layout as GR2_PROFILE stacks: symbolize_profile.py names it. */
     fprintf(stderr,"  unwind:\n");
     CONTEXT u=*c;
     for (int depth=0; depth<40 && u.Rip; ++depth) {
@@ -219,7 +219,7 @@ static void isa_context_regs(CONTEXT *c, IsaRegs *regs, int to_context) {
 typedef struct { EXCEPTION_POINTERS *info; void *address; } GpuFault;
 static long gpu_fault(void *argument) {
     GpuFault *fault=argument;
-    return gow3gpu_handle_fault(fault->info,fault->address);
+    return gr2gpu_handle_fault(fault->info,fault->address);
 }
 static LONG CALLBACK vectored_fault(EXCEPTION_POINTERS *info) {
     const EXCEPTION_RECORD *record=info->ExceptionRecord;
@@ -243,14 +243,14 @@ static LONG CALLBACK vectored_fault(EXCEPTION_POINTERS *info) {
         }
         if (runtime_fault_recover) {
             /* A speculative guest memory read (GPU draw preparation) faulted: the thread resumes
-             * in gow3_longjmp, outside the exception dispatcher, back at its recovery point. */
+             * in gr2_longjmp, outside the exception dispatcher, back at its recovery point. */
             unsigned long long *buffer=*runtime_fault_recover;
             runtime_fault_recover=NULL;
             CONTEXT *c=info->ContextRecord;
             c->Rsp=((c->Rsp-128)&~(DWORD64)15)-40;
             c->Rcx=(DWORD64)(uintptr_t)buffer;
             c->Rdx=1;
-            c->Rip=(DWORD64)(uintptr_t)gow3_longjmp;
+            c->Rip=(DWORD64)(uintptr_t)gr2_longjmp;
             return EXCEPTION_CONTINUE_EXECUTION;
         }
     }
@@ -270,7 +270,7 @@ static LONG CALLBACK vectored_fault(EXCEPTION_POINTERS *info) {
                  !module;
         if (ours) return fatal_exception(info);
     }
-    /* GOW3_STRICT_HANDLES=1: a closed or invalid handle used anywhere is reported (diagnostics). */
+    /* GR2_STRICT_HANDLES=1: a closed or invalid handle used anywhere is reported (diagnostics). */
     if (code==0xC0000008 /* STATUS_INVALID_HANDLE */) return fatal_exception(info);
     return EXCEPTION_CONTINUE_SEARCH;
 }
@@ -311,7 +311,7 @@ static void fault(int sig, siginfo_t *info, void *context) {
         }
     }
     /* GPU page tracking (write-protected guest pages) is resolved first. */
-    if (gpu_enabled && sig == SIGSEGV && gow3gpu_handle_fault(context, info->si_addr)) return;
+    if (gpu_enabled && sig == SIGSEGV && gr2gpu_handle_fault(context, info->si_addr)) return;
     /* A speculative guest memory read (runtime_memory.c) failed: resume its recovery point. */
     if ((sig == SIGSEGV || sig == SIGBUS) && runtime_fault_recover) {
         sigjmp_buf *recover = runtime_fault_recover;
@@ -341,7 +341,7 @@ static void fault(int sig, siginfo_t *info, void *context) {
     else
         snprintf(line, sizeof(line), "Fault (signal %d) at RIP %p, address %p\n", sig, (void *)rip, info->si_addr);
     { ssize_t written_=write(2, line, strlen(line)); (void)written_; }
-    if (gpu_enabled) gow3gpu_dump_guest_writes(context);
+    if (gpu_enabled) gr2gpu_dump_guest_writes(context);
     /* Host call chain (frames with unwind info; guest frames end it). */
     void *frames[32];
     int depth = backtrace(frames, 32);
@@ -433,50 +433,50 @@ static int mapped(Segment *segments, uint64_t count, uint64_t address, uint64_t 
             address - segments[i].address <= segments[i].size - bytes) return 1;
     return 0;
 }
-extern ABI float gow3_orbs_gain(void *player, float requested);
-extern void gow3_orbs_status(int supported);
-extern uintptr_t gow3_cheat_flag(unsigned id);
-extern uintptr_t gow3_actor_slots_address(void);
-extern void gow3_actor_status(int supported);
-extern void gow3_cheat_status(unsigned id);
-extern uintptr_t gow3_damage_multiplier(int taken);
-extern uintptr_t gow3_orb_pickup_multiplier(unsigned kind);
-extern void gow3_stat_multipliers_status(int damage, int orb_pickup);
-extern ABI void gow3_mouse_look_adjust(float *x, float *y);
-extern ABI void gow3_mouse_look_limits(float *limits);
-extern int gow3_mouse_direct_wanted(void);
-extern void gow3_mouse_direct_status(int ready);
+extern ABI float gr2_orbs_gain(void *player, float requested);
+extern void gr2_orbs_status(int supported);
+extern uintptr_t gr2_cheat_flag(unsigned id);
+extern uintptr_t gr2_actor_slots_address(void);
+extern void gr2_actor_status(int supported);
+extern void gr2_cheat_status(unsigned id);
+extern uintptr_t gr2_damage_multiplier(int taken);
+extern uintptr_t gr2_orb_pickup_multiplier(unsigned kind);
+extern void gr2_stat_multipliers_status(int damage, int orb_pickup);
+extern ABI void gr2_mouse_look_adjust(float *x, float *y);
+extern ABI void gr2_mouse_look_limits(float *limits);
+extern int gr2_mouse_direct_wanted(void);
+extern void gr2_mouse_direct_status(int ready);
 
 /* The hooks below find their sites by signature (src/signature.h), so they work in any region
  * and version of the game whose code matches; a site that is not found leaves its feature off. */
 static void install_cheats(Segment *segments, uint64_t count, uint64_t size) {
     const char *names[] = {"health", "magic", "item meter", "Rage of Sparta", "red orbs",
                            "Very Hard unlock", "infinite double jumps"};
-    uint64_t at[GOW3_CHEAT_HOOK_COUNT];
-    for (unsigned i = 0; i < GOW3_CHEAT_HOOK_COUNT; ++i)
-        at[i] = gow3_signature_find(image, size, &gow3_cheat_hooks[i].site);
-    for (unsigned id = 0; id < GOW3_CHEAT_COUNT; ++id) {
+    uint64_t at[GR2_CHEAT_HOOK_COUNT];
+    for (unsigned i = 0; i < GR2_CHEAT_HOOK_COUNT; ++i)
+        at[i] = gr2_signature_find(image, size, &gr2_cheat_hooks[i].site);
+    for (unsigned id = 0; id < GR2_CHEAT_COUNT; ++id) {
         int valid = 1;
-        for (unsigned i = 0; i < GOW3_CHEAT_HOOK_COUNT; ++i) {
-            const Gow3CheatHook *hook = &gow3_cheat_hooks[i];
+        for (unsigned i = 0; i < GR2_CHEAT_HOOK_COUNT; ++i) {
+            const Gr2CheatHook *hook = &gr2_cheat_hooks[i];
             if (hook->id != id) continue;
             if (at[i] == UINT64_MAX || !mapped(segments, count, at[i], hook->length) ||
-                !gow3_cheat_signature_match(hook, image + at[i], size - at[i])) valid = 0;
+                !gr2_cheat_signature_match(hook, image + at[i], size - at[i])) valid = 0;
         }
         if (!valid) {
             printf("Cheats: %s unavailable (code not found in this eboot.bin)\n", names[id]);
             continue;
         }
         unsigned char *stubs = hook_page();
-        int32_t relative[GOW3_CHEAT_HOOK_COUNT] = {0};
-        for (unsigned i = 0; i < GOW3_CHEAT_HOOK_COUNT; ++i) {
-            const Gow3CheatHook *hook = &gow3_cheat_hooks[i];
+        int32_t relative[GR2_CHEAT_HOOK_COUNT] = {0};
+        for (unsigned i = 0; i < GR2_CHEAT_HOOK_COUNT; ++i) {
+            const Gr2CheatHook *hook = &gr2_cheat_hooks[i];
             if (hook->id != id) continue;
             unsigned char *stub = stubs + i * 256;
             int64_t delta = (int64_t)(uintptr_t)stub - (int64_t)(uintptr_t)(image + at[i] + 5);
             if (delta < INT32_MIN || delta > INT32_MAX) { valid = 0; break; }
             relative[i] = (int32_t)delta;
-            gow3_cheat_build_stub(stub, hook, gow3_cheat_flag(id),
+            gr2_cheat_build_stub(stub, hook, gr2_cheat_flag(id),
                                  (uintptr_t)(image + at[i] + hook->length));
         }
         if (!valid) {
@@ -484,14 +484,14 @@ static void install_cheats(Segment *segments, uint64_t count, uint64_t size) {
             continue;
         }
         protect(stubs, page_size, 5);
-        for (unsigned i = 0; i < GOW3_CHEAT_HOOK_COUNT; ++i) {
-            const Gow3CheatHook *hook = &gow3_cheat_hooks[i];
+        for (unsigned i = 0; i < GR2_CHEAT_HOOK_COUNT; ++i) {
+            const Gr2CheatHook *hook = &gr2_cheat_hooks[i];
             if (hook->id != id) continue;
             image[at[i]] = 0xe9;
             memcpy(image + at[i] + 1, &relative[i], 4);
             memset(image + at[i] + 5, 0x90, hook->length - 5);
         }
-        gow3_cheat_status(id);
+        gr2_cheat_status(id);
         printf("Cheats: %s ready (live toggle, initially disabled unless saved)\n", names[id]);
     }
 }
@@ -499,9 +499,9 @@ static void install_cheats(Segment *segments, uint64_t count, uint64_t size) {
 /* Damage hook for the enemy health bar (src/actor_hook.h). Always
  * installed when the code matches: it only records values; the overlay decides what to show. */
 static void install_actor_watch(Segment *segments, uint64_t count, uint64_t size) {
-    const uint64_t at = gow3_signature_find(image, size, &gow3_actor_site);
-    if (at == UINT64_MAX || !mapped(segments, count, at, GOW3_ACTOR_HOOK_LENGTH) ||
-        !gow3_actor_signature_match(image + at, size - at)) {
+    const uint64_t at = gr2_signature_find(image, size, &gr2_actor_site);
+    if (at == UINT64_MAX || !mapped(segments, count, at, GR2_ACTOR_HOOK_LENGTH) ||
+        !gr2_actor_signature_match(image + at, size - at)) {
         printf("Health display: unavailable (code not found in this eboot.bin)\n");
         return;
     }
@@ -511,19 +511,19 @@ static void install_actor_watch(Segment *segments, uint64_t count, uint64_t size
         printf("Health display: unavailable (hook outside relative-jump range)\n");
         return;
     }
-    gow3_actor_build_stub(stub, gow3_actor_slots_address(), (uintptr_t)(image + at + GOW3_ACTOR_HOOK_LENGTH));
+    gr2_actor_build_stub(stub, gr2_actor_slots_address(), (uintptr_t)(image + at + GR2_ACTOR_HOOK_LENGTH));
     protect(stub, page_size, 5);
     const int32_t relative = (int32_t)delta;
     image[at] = 0xe9;
     memcpy(image + at + 1, &relative, 4);
-    memset(image + at + 5, 0x90, GOW3_ACTOR_HOOK_LENGTH - 5);
-    gow3_actor_status(1);
+    memset(image + at + 5, 0x90, GR2_ACTOR_HOOK_LENGTH - 5);
+    gr2_actor_status(1);
     printf("Health display: damage hook ready (enemy health bar in the menu)\n");
 }
 
 static void install_orb_multiplier(Segment *segments, uint64_t count, uint64_t size) {
     uint64_t calls[3];
-    const uint64_t setter_at = gow3_orb_find(image, size, calls);
+    const uint64_t setter_at = gr2_orb_find(image, size, calls);
     if (setter_at == UINT64_MAX) {
         printf("Red orbs: multiplier unavailable (code not found in this eboot.bin)\n");
         return;
@@ -534,9 +534,9 @@ static void install_orb_multiplier(Segment *segments, uint64_t count, uint64_t s
     /* SysV call sites: preserve the receiver across the helper, then tail-call the original
      * setter. Its cap and upgrade notifications remain in the game's own code. */
     unsigned char *stub = hook_page();
-    uintptr_t helper = (uintptr_t)gow3_orbs_gain, setter = (uintptr_t)(image + setter_at);
+    uintptr_t helper = (uintptr_t)gr2_orbs_gain, setter = (uintptr_t)(image + setter_at);
     unsigned char code[26];
-    gow3_orb_build_stub(code, helper, setter);
+    gr2_orb_build_stub(code, helper, setter);
     int32_t displacements[3];
     for (unsigned i = 0; i < 3; ++i) {
         int64_t delta = (int64_t)(uintptr_t)stub - (int64_t)(uintptr_t)(image + calls[i] + 5);
@@ -550,7 +550,7 @@ static void install_orb_multiplier(Segment *segments, uint64_t count, uint64_t s
     protect(stub, page_size, 5);
     for (unsigned i = 0; i < 3; ++i)
         memcpy(image + calls[i] + 1, &displacements[i], 4);
-    gow3_orbs_status(1);
+    gr2_orbs_status(1);
     printf("Red orbs: live multiplier ready (3 validated gain paths, 0.1x to 100x)\n");
 }
 /* Writes a jump from image+at to `stub`; the rest of the replaced bytes become nops (the stub
@@ -568,53 +568,53 @@ static int install_jump(uint64_t at, unsigned length, unsigned char *stub) {
 /* Direct mouse look (src/mouse_hook.h): wraps the game's look input routine so the mouse turns
  * the camera linearly instead of through an emulated, saturating right stick. */
 static void install_mouse_look(Segment *segments, uint64_t count, uint64_t size) {
-    if (!gow3_mouse_direct_wanted()) return;
-    const uint64_t at = gow3_signature_find(image, size, &gow3_mouse_site);
-    if (at == UINT64_MAX || !mapped(segments, count, at, GOW3_MOUSE_HOOK_LENGTH) ||
-        !gow3_mouse_signature_match(image + at, size - at)) {
+    if (!gr2_mouse_direct_wanted()) return;
+    const uint64_t at = gr2_signature_find(image, size, &gr2_mouse_site);
+    if (at == UINT64_MAX || !mapped(segments, count, at, GR2_MOUSE_HOOK_LENGTH) ||
+        !gr2_mouse_signature_match(image + at, size - at)) {
         printf("Mouse look: direct mode unavailable (code not found in this eboot.bin)\n");
         return;
     }
     unsigned char *stub = hook_page();
-    gow3_mouse_build_stub(stub, (uintptr_t)gow3_mouse_look_adjust, (uintptr_t)(image + at + GOW3_MOUSE_HOOK_LENGTH));
+    gr2_mouse_build_stub(stub, (uintptr_t)gr2_mouse_look_adjust, (uintptr_t)(image + at + GR2_MOUSE_HOOK_LENGTH));
     /* Optional: without it the mouse still turns, through the game's turn acceleration. */
-    const uint64_t limits = gow3_signature_find(image, size, &gow3_mouse_limits_site);
-    const int limits_found = limits != UINT64_MAX && mapped(segments, count, limits, GOW3_MOUSE_LIMITS_LENGTH) &&
-                             gow3_mouse_limits_signature_match(image + limits, size - limits);
+    const uint64_t limits = gr2_signature_find(image, size, &gr2_mouse_limits_site);
+    const int limits_found = limits != UINT64_MAX && mapped(segments, count, limits, GR2_MOUSE_LIMITS_LENGTH) &&
+                             gr2_mouse_limits_signature_match(image + limits, size - limits);
     if (limits_found)
-        gow3_mouse_limits_build_stub(stub + 128, (uintptr_t)gow3_mouse_look_limits,
-                                     (uintptr_t)(image + limits + GOW3_MOUSE_LIMITS_LENGTH));
+        gr2_mouse_limits_build_stub(stub + 128, (uintptr_t)gr2_mouse_look_limits,
+                                     (uintptr_t)(image + limits + GR2_MOUSE_LIMITS_LENGTH));
     protect(stub, page_size, 5);
-    if (!install_jump(at, GOW3_MOUSE_HOOK_LENGTH, stub)) {
+    if (!install_jump(at, GR2_MOUSE_HOOK_LENGTH, stub)) {
         printf("Mouse look: direct mode unavailable (hook outside relative-jump range)\n");
         return;
     }
-    gow3_mouse_direct_status(1);
+    gr2_mouse_direct_status(1);
     printf("Mouse look: direct mode ready (look input routine at image+0x%" PRIx64 ")\n", at);
-    if (limits_found && install_jump(limits, GOW3_MOUSE_LIMITS_LENGTH, stub + 128))
+    if (limits_found && install_jump(limits, GR2_MOUSE_LIMITS_LENGTH, stub + 128))
         printf("Mouse look: no turn acceleration while the mouse moves (limits at image+0x%" PRIx64 ")\n", limits);
     else
         printf("Mouse look: turn acceleration kept (limits code not found)\n");
 }
 
-/* Live FOV (src/mouse_hook.h gow3_fov_site): the FOV update's pi/180 operand reads a writable
+/* Live FOV (src/mouse_hook.h gr2_fov_site): the FOV update's pi/180 operand reads a writable
  * float near the image; the in-game menu and the launcher's FOV setting rewrite it. */
 static void install_fov(Segment *segments, uint64_t count, uint64_t size) {
-    const uint64_t at = gow3_signature_find(image, size, &gow3_fov_site);
-    if (at == UINT64_MAX || !mapped(segments, count, at + GOW3_FOV_DISP_OFFSET, 4)) {
+    const uint64_t at = gr2_signature_find(image, size, &gr2_fov_site);
+    if (at == UINT64_MAX || !mapped(segments, count, at + GR2_FOV_DISP_OFFSET, 4)) {
         printf("FOV: unavailable (camera code not found in this eboot.bin)\n");
         return;
     }
     float *cell = hook_page();
     *cell = 0.017453292f;
-    const int64_t delta = (int64_t)(uintptr_t)cell - (int64_t)(uintptr_t)(image + at + GOW3_FOV_DISP_OFFSET + 4);
+    const int64_t delta = (int64_t)(uintptr_t)cell - (int64_t)(uintptr_t)(image + at + GR2_FOV_DISP_OFFSET + 4);
     if (delta < INT32_MIN || delta > INT32_MAX) {
         printf("FOV: unavailable (setting outside relative range)\n");
         return;
     }
     const int32_t relative = (int32_t)delta;
-    memcpy(image + at + GOW3_FOV_DISP_OFFSET, &relative, 4);
-    gow3gpu_fov_register(cell);
+    memcpy(image + at + GR2_FOV_DISP_OFFSET, &relative, 4);
+    gr2gpu_fov_register(cell);
     printf("FOV: live setting ready (camera at image+0x%" PRIx64 ")\n", at);
 }
 
@@ -622,19 +622,19 @@ static void install_fov(Segment *segments, uint64_t count, uint64_t size) {
  * grain turned off in the settings clear their bit of the game's feature mask (restart); camera
  * shake is a stub reading an int the menu rewrites (live). */
 static void install_post_effects(Segment *segments, uint64_t count, uint64_t size) {
-    const unsigned off = gow3gpu_post_effects_off();
-    for (unsigned i = 0; i < GOW3_POSTFX_COUNT; ++i) {
-        const Gow3PostFx *fx = &gow3_postfx[i];
+    const unsigned off = gr2gpu_post_effects_off();
+    for (unsigned i = 0; i < GR2_POSTFX_COUNT; ++i) {
+        const Gr2PostFx *fx = &gr2_postfx[i];
         if (!(off & fx->bit)) continue;
-        const uint64_t at = gow3_signature_find(image, size, &fx->site);
-        const uint64_t mask = at == UINT64_MAX ? UINT64_MAX : gow3_postfx_mask(image, at);
+        const uint64_t at = gr2_signature_find(image, size, &fx->site);
+        const uint64_t mask = at == UINT64_MAX ? UINT64_MAX : gr2_postfx_mask(image, at);
         uint32_t flags = 0;
         if (mask == UINT64_MAX || mask + 4 > size || !mapped(segments, count, mask, 4)) {
             printf("Effects: %s switch unavailable (code not found in this eboot.bin)\n", fx->name);
             continue;
         }
         memcpy(&flags, image + mask, 4);
-        if (!gow3_postfx_mask_known(flags)) {
+        if (!gr2_postfx_mask_known(flags)) {
             printf("Effects: %s switch unavailable (unknown feature mask %08x)\n", fx->name, flags);
             continue;
         }
@@ -643,81 +643,81 @@ static void install_post_effects(Segment *segments, uint64_t count, uint64_t siz
         printf("Effects: %s off (feature mask %08x -> %08x)\n", fx->name, flags, after);
     }
 
-    const uint64_t at = gow3_signature_find(image, size, &gow3_shake_site);
-    if (at == UINT64_MAX || !mapped(segments, count, at, GOW3_SHAKE_HOOK_LENGTH) ||
-        memcmp(image + at, gow3_shake_original, GOW3_SHAKE_HOOK_LENGTH)) {
+    const uint64_t at = gr2_signature_find(image, size, &gr2_shake_site);
+    if (at == UINT64_MAX || !mapped(segments, count, at, GR2_SHAKE_HOOK_LENGTH) ||
+        memcmp(image + at, gr2_shake_original, GR2_SHAKE_HOOK_LENGTH)) {
         printf("Camera shake: switch unavailable (camera code not found in this eboot.bin)\n");
         return;
     }
     int *cell = hook_page();
     *cell = 1;
     unsigned char *stub = hook_page();
-    if (!gow3_shake_build_stub(stub, (uintptr_t)stub, (uintptr_t)cell,
-                               (uintptr_t)(image + at + GOW3_SHAKE_HOOK_LENGTH))) {
+    if (!gr2_shake_build_stub(stub, (uintptr_t)stub, (uintptr_t)cell,
+                               (uintptr_t)(image + at + GR2_SHAKE_HOOK_LENGTH))) {
         printf("Camera shake: switch unavailable (stub outside relative range)\n");
         return;
     }
     protect(stub, page_size, 5);
-    if (!install_jump(at, GOW3_SHAKE_HOOK_LENGTH, stub)) {
+    if (!install_jump(at, GR2_SHAKE_HOOK_LENGTH, stub)) {
         printf("Camera shake: switch unavailable (hook outside relative-jump range)\n");
         return;
     }
-    gow3gpu_camera_shake_register(cell);
+    gr2gpu_camera_shake_register(cell);
     printf("Camera shake: live setting ready (camera at image+0x%" PRIx64 ")\n", at);
 }
 
-/* Upscaler quality modes (src/scene_res_hook.h): GOW3_RENDER_RES=WxH below 1080p renders the 3D
+/* Upscaler quality modes (src/scene_res_hook.h): GR2_RENDER_RES=WxH below 1080p renders the 3D
  * scene at that size while the display, UI and movies stay 1920x1080; the GPU side upscales the
  * scene to the output before the UI is composed. Every site is checked before any is written. */
 static void install_scene_resolution(Segment *segments, uint64_t count, uint64_t size) {
-    const char *res = getenv("GOW3_RENDER_RES");
+    const char *res = getenv("GR2_RENDER_RES");
     unsigned width = 0, height = 0;
     if (!res || !*res || sscanf(res, "%ux%u", &width, &height) != 2) return;
     if (width < 320 || height < 180 || width > 1920 || height > 1080 || (width == 1920 && height == 1080)) {
         printf("Scene resolution: %s ignored (only sizes below 1920x1080)\n", res);
         return;
     }
-    uint64_t at[GOW3_SCENE_SIZE_SITES];
-    for (unsigned i = 0; i < GOW3_SCENE_SIZE_SITES; ++i) {
-        at[i] = gow3_signature_find(image, size, &gow3_scene_size_sites[i].site);
+    uint64_t at[GR2_SCENE_SIZE_SITES];
+    for (unsigned i = 0; i < GR2_SCENE_SIZE_SITES; ++i) {
+        at[i] = gr2_signature_find(image, size, &gr2_scene_size_sites[i].site);
         if (at[i] == UINT64_MAX || !mapped(segments, count, at[i], 12)) {
             printf("Scene resolution: unavailable (%s size code not found in this eboot.bin)\n",
-                   gow3_scene_size_sites[i].name);
+                   gr2_scene_size_sites[i].name);
             return;
         }
     }
-    const uint64_t rect = gow3_signature_find(image, size, &gow3_scene_rect_site);
-    if (rect == UINT64_MAX || !mapped(segments, count, rect, GOW3_SCENE_RECT_HOOK_LENGTH)) {
+    const uint64_t rect = gr2_signature_find(image, size, &gr2_scene_rect_site);
+    if (rect == UINT64_MAX || !mapped(segments, count, rect, GR2_SCENE_RECT_HOOK_LENGTH)) {
         printf("Scene resolution: unavailable (view copy code not found in this eboot.bin)\n");
         return;
     }
     unsigned char *stub = hook_page();
-    if (!gow3_scene_rect_build_stub(stub, (uintptr_t)stub, (uintptr_t)(image + rect), width, height)) {
+    if (!gr2_scene_rect_build_stub(stub, (uintptr_t)stub, (uintptr_t)(image + rect), width, height)) {
         printf("Scene resolution: unavailable (stub outside relative range)\n");
         return;
     }
     protect(stub, page_size, 5);
-    if (!install_jump(rect, GOW3_SCENE_RECT_HOOK_LENGTH, stub)) {
+    if (!install_jump(rect, GR2_SCENE_RECT_HOOK_LENGTH, stub)) {
         printf("Scene resolution: unavailable (hook outside relative-jump range)\n");
         return;
     }
-    for (unsigned i = 0; i < GOW3_SCENE_SIZE_SITES; ++i)
-        gow3_scene_size_write(image + at[i], gow3_scene_size_sites[i].width_first, width, height);
+    for (unsigned i = 0; i < GR2_SCENE_SIZE_SITES; ++i)
+        gr2_scene_size_write(image + at[i], gr2_scene_size_sites[i].width_first, width, height);
     printf("Scene resolution: 3D scene %ux%u, display and UI 1920x1080 (views at image+0x%" PRIx64 ")\n",
            width, height, rect);
 }
 
 /* Native PC button prompts (src/prompt_hook.h): one PC atlas per distinct game atlas, a slot
  * claimed by the atlas texture's address (state 1 preparing, 2 ready, 3 refused). */
-static Gow3PromptAtlas prompt_atlases[GOW3_PROMPT_ATLASES];
-static uint64_t prompt_sources[GOW3_PROMPT_ATLASES];
-static int prompt_states[GOW3_PROMPT_ATLASES];
+static Gr2PromptAtlas prompt_atlases[GR2_PROMPT_ATLASES];
+static uint64_t prompt_sources[GR2_PROMPT_ATLASES];
+static int prompt_states[GR2_PROMPT_ATLASES];
 static int prompt_any_ready;
 static unsigned prompt_draws;
 /* Rich-text ImageMaps (the menu legends), a slot claimed by the map's address like the atlases. */
-static Gow3PromptMenu prompt_menus[GOW3_PROMPT_MENUS];
-static uint64_t prompt_menu_maps[GOW3_PROMPT_MENUS];
-static int prompt_menu_states[GOW3_PROMPT_MENUS];
+static Gr2PromptMenu prompt_menus[GR2_PROMPT_MENUS];
+static uint64_t prompt_menu_maps[GR2_PROMPT_MENUS];
+static int prompt_menu_states[GR2_PROMPT_MENUS];
 static unsigned prompt_text_images;
 static unsigned prompt_sheet_draws;
 static unsigned prompt_widget_draws;
@@ -749,11 +749,11 @@ static uint64_t prompt_create(const uint32_t *pixels, unsigned width, unsigned h
         return 0;
     }
     memcpy(data, pixels, bytes);
-    void *texture = ((NativeNew)(image + GOW3_PROMPT_NEW))(0xc0);
+    void *texture = ((NativeNew)(image + GR2_PROMPT_NEW))(0xc0);
     if (!texture) return 0;
-    ((NativeCtor)(image + GOW3_PROMPT_CTOR))(texture);
+    ((NativeCtor)(image + GR2_PROMPT_CTOR))(texture);
     const uint32_t description[3] = {width, height, 15};
-    if (!((NativeTexture)(image + GOW3_PROMPT_TEXTURE_INIT))(texture, 0, 1, description, 0, 0, 1, 0, 0, 2,
+    if (!((NativeTexture)(image + GR2_PROMPT_TEXTURE_INIT))(texture, 0, 1, description, 0, 0, 1, 0, 0, 2,
                                                             (uintptr_t)data, 256, 0, 0))
         return 0;
     /* The game's own record of it: size, pitch, and a T# over our pixels (linear or 2D tiled). */
@@ -778,20 +778,20 @@ static uint64_t prompt_create(const uint32_t *pixels, unsigned width, unsigned h
  * atlas is prepared here, on the game's thread, before any of its icons is drawn. */
 static ABI void prompt_lookup(uintptr_t collection, uint64_t unused1, uint64_t unused2) {
     (void)unused1; (void)unused2;
-    if (!collection || *(const int32_t *)(collection + 0x18) != GOW3_PROMPT_GLYPHS) return;
+    if (!collection || *(const int32_t *)(collection + 0x18) != GR2_PROMPT_GLYPHS) return;
     const uint64_t source = *(const uint64_t *)(collection + 0x50);
     if (!source) return;
-    unsigned slot = GOW3_PROMPT_ATLASES;
-    for (unsigned i = 0; i < GOW3_PROMPT_ATLASES; ++i) {
+    unsigned slot = GR2_PROMPT_ATLASES;
+    for (unsigned i = 0; i < GR2_PROMPT_ATLASES; ++i) {
         uint64_t expected = 0;
         if (__atomic_compare_exchange_n(&prompt_sources[i], &expected, source, 0, __ATOMIC_ACQ_REL,
                                         __ATOMIC_ACQUIRE)) { slot = i; break; }
         if (expected == source) return; /* known (or being prepared by another thread) */
     }
-    if (slot == GOW3_PROMPT_ATLASES) return;
+    if (slot == GR2_PROMPT_ATLASES) return;
     __atomic_store_n(&prompt_states[slot], 1, __ATOMIC_RELEASE);
-    Gow3PromptAtlas *atlas = &prompt_atlases[slot];
-    const int ready = gow3_prompt_prepare(atlas, (uintptr_t)image, collection, prompt_read,
+    Gr2PromptAtlas *atlas = &prompt_atlases[slot];
+    const int ready = gr2_prompt_prepare(atlas, (uintptr_t)image, collection, prompt_read,
                                           runtime_pad_prompt_binding, prompt_create);
     __atomic_store_n(&prompt_states[slot], ready ? 2 : 3, __ATOMIC_RELEASE);
     if (ready) __atomic_store_n(&prompt_any_ready, 1, __ATOMIC_RELEASE);
@@ -812,25 +812,25 @@ static int prompt_diag_new(uint64_t key) {
     }
     return 0;
 }
-static int prompt_menu_swap(Gow3PromptMenu *menu, uintptr_t command, uint64_t size, uintptr_t uv) {
+static int prompt_menu_swap(Gr2PromptMenu *menu, uintptr_t command, uint64_t size, uintptr_t uv) {
     for (unsigned s = 0; s < menu->sheets; ++s)
-        if (menu->sheet[s].glyphs && gow3_prompt_swap(&menu->sheet[s], command, size, uv)) return 1;
+        if (menu->sheet[s].glyphs && gr2_prompt_swap(&menu->sheet[s], command, size, uv)) return 1;
     return 0;
 }
 
 /* Before each UI quad draw (rdi command, rdx size, rcx UV quad). */
 static ABI void prompt_draw(uintptr_t command, uint64_t size, uintptr_t uv) {
     if (!__atomic_load_n(&prompt_any_ready, __ATOMIC_ACQUIRE) || !runtime_pad_prompts_pc()) return;
-    for (unsigned i = 0; i < GOW3_PROMPT_ATLASES; ++i) {
+    for (unsigned i = 0; i < GR2_PROMPT_ATLASES; ++i) {
         if (__atomic_load_n(&prompt_states[i], __ATOMIC_ACQUIRE) != 2 ||
-            !gow3_prompt_swap(&prompt_atlases[i], command, size, uv)) continue;
+            !gr2_prompt_swap(&prompt_atlases[i], command, size, uv)) continue;
         if (__atomic_add_fetch(&prompt_draws, 1, __ATOMIC_RELAXED) == 1) {
             printf("Button prompts: first keyboard icon drawn\n");
             fflush(stdout);
         }
         return;
     }
-    for (unsigned i = 0; i < GOW3_PROMPT_MENUS; ++i) {
+    for (unsigned i = 0; i < GR2_PROMPT_MENUS; ++i) {
         if (__atomic_load_n(&prompt_menu_states[i], __ATOMIC_ACQUIRE) != 2 ||
             !prompt_menu_swap(&prompt_menus[i], command, size, uv)) continue;
         if (__atomic_add_fetch(&prompt_sheet_draws, 1, __ATOMIC_RELAXED) == 1) {
@@ -850,10 +850,10 @@ static ABI void prompt_text_image(uintptr_t builder, uint64_t *texture, uint64_t
         int32_t glyph[4];
         uint64_t render = 0;
         if (!prompt_read(*rect, glyph, sizeof(glyph)) || !prompt_read(*texture + 0x18, &render, 8)) return;
-        for (unsigned i = 0; i < GOW3_PROMPT_ATLASES; ++i) {
+        for (unsigned i = 0; i < GR2_PROMPT_ATLASES; ++i) {
             if (__atomic_load_n(&prompt_states[i], __ATOMIC_ACQUIRE) != 2) continue;
-            Gow3PromptAtlas *pc = &prompt_atlases[i];
-            if (!gow3_prompt_text_texture(pc, render, glyph)) continue;
+            Gr2PromptAtlas *pc = &prompt_atlases[i];
+            if (!gr2_prompt_text_texture(pc, render, glyph)) continue;
             /* The first resource seen lends its header (written once, before it is handed out). */
             if (!__atomic_load_n(&pc->resource[3], __ATOMIC_ACQUIRE)) {
                 if (!prompt_read(*texture, pc->resource, 0x18)) return;
@@ -869,13 +869,13 @@ static ABI void prompt_text_image(uintptr_t builder, uint64_t *texture, uint64_t
     if (!prompt_read(builder + 0x30, &depth, 4) || depth <= 0 || !prompt_read(builder + 0x38, &styles, 8) ||
         !prompt_read(styles + (uint64_t)(depth - 1) * 8, &style, 8) || !prompt_read(style + 0x30, &map, 8) || !map)
         return;
-    unsigned slot = GOW3_PROMPT_MENUS;
-    for (unsigned i = 0; i < GOW3_PROMPT_MENUS && slot == GOW3_PROMPT_MENUS; ++i) {
+    unsigned slot = GR2_PROMPT_MENUS;
+    for (unsigned i = 0; i < GR2_PROMPT_MENUS && slot == GR2_PROMPT_MENUS; ++i) {
         uint64_t expected = 0;
         if (__atomic_compare_exchange_n(&prompt_menu_maps[i], &expected, map, 0, __ATOMIC_ACQ_REL,
                                         __ATOMIC_ACQUIRE)) {
             __atomic_store_n(&prompt_menu_states[i], 1, __ATOMIC_RELEASE);
-            const int ready = gow3_prompt_prepare_menu(&prompt_menus[i], map, prompt_read,
+            const int ready = gr2_prompt_prepare_menu(&prompt_menus[i], map, prompt_read,
                                                        runtime_pad_prompt_binding, prompt_create);
             __atomic_store_n(&prompt_menu_states[i], ready ? 2 : 3, __ATOMIC_RELEASE);
             if (ready) __atomic_store_n(&prompt_any_ready, 1, __ATOMIC_RELEASE);
@@ -889,11 +889,11 @@ static ABI void prompt_text_image(uintptr_t builder, uint64_t *texture, uint64_t
             slot = i;
         }
     }
-    if (slot == GOW3_PROMPT_MENUS || __atomic_load_n(&prompt_menu_states[slot], __ATOMIC_ACQUIRE) != 2) return;
+    if (slot == GR2_PROMPT_MENUS || __atomic_load_n(&prompt_menu_states[slot], __ATOMIC_ACQUIRE) != 2) return;
     int32_t r[4] = {0, 0, 0, 0};
     uint64_t render = 0;
     if (!prompt_read(*rect, r, sizeof(r)) || !prompt_read(*texture + 0x18, &render, 8)) return;
-    const uint64_t key = gow3_prompt_menu_image(&prompt_menus[slot], render, r);
+    const uint64_t key = gr2_prompt_menu_image(&prompt_menus[slot], render, r);
     if (!key) {
         uint32_t dims[2] = {0, 0};
         prompt_read(render + 0x18, dims, sizeof(dims));
@@ -920,17 +920,17 @@ static ABI void prompt_texture_widget(uintptr_t widget, uint64_t unused1, uint64
     uint64_t *bound = (uint64_t *)(widget + 0x340);
     const uint64_t render = *bound;
     if (!render) return;
-    for (unsigned i = 0; i < GOW3_PROMPT_MENUS; ++i) {
+    for (unsigned i = 0; i < GR2_PROMPT_MENUS; ++i) {
         if (__atomic_load_n(&prompt_menu_states[i], __ATOMIC_ACQUIRE) != 2) continue;
-        Gow3PromptMenu *menu = &prompt_menus[i];
+        Gr2PromptMenu *menu = &prompt_menus[i];
         for (unsigned s = 0; s < menu->sheets; ++s) {
-            const Gow3PromptAtlas *sheet = &menu->sheet[s];
+            const Gr2PromptAtlas *sheet = &menu->sheet[s];
             if (!sheet->glyphs || (render != sheet->original_texture && render != sheet->holder[0])) continue;
             uint32_t dims[2] = {0, 0};
             const uint64_t resource = *(const uint64_t *)(widget + 0x328);
             const int pc = runtime_pad_prompts_pc() && resource &&
                            prompt_read(sheet->original_texture + 0x18, dims, sizeof(dims)) &&
-                           gow3_prompt_widget_art(sheet, dims[0], dims[1], resource, prompt_read);
+                           gr2_prompt_widget_art(sheet, dims[0], dims[1], resource, prompt_read);
             *bound = pc ? sheet->holder[0] : sheet->original_texture;
             if (pc && __atomic_add_fetch(&prompt_widget_draws, 1, __ATOMIC_RELAXED) == 1) {
                 printf("Button prompts: first keyboard icon in a texture widget (menu tabs)\n");
@@ -942,70 +942,70 @@ static ABI void prompt_texture_widget(uintptr_t widget, uint64_t unused1, uint64
 }
 
 static void install_prompts(Segment *segments, uint64_t count, uint64_t size) {
-    int found = mapped(segments, count, GOW3_PROMPT_DRAW, 27) && gow3_prompt_code_match(image, size);
-    for (unsigned i = 0; i < GOW3_PROMPT_LOOKUPS; ++i)
-        found = found && mapped(segments, count, gow3_prompt_lookups[i].address, gow3_prompt_lookups[i].replay);
-    found = found && mapped(segments, count, GOW3_PROMPT_TEXT_IMAGE, GOW3_PROMPT_ENTRY_LENGTH) &&
-            mapped(segments, count, GOW3_PROMPT_TEXTURE_WIDGET, GOW3_PROMPT_ENTRY_LENGTH);
+    int found = mapped(segments, count, GR2_PROMPT_DRAW, 27) && gr2_prompt_code_match(image, size);
+    for (unsigned i = 0; i < GR2_PROMPT_LOOKUPS; ++i)
+        found = found && mapped(segments, count, gr2_prompt_lookups[i].address, gr2_prompt_lookups[i].replay);
+    found = found && mapped(segments, count, GR2_PROMPT_TEXT_IMAGE, GR2_PROMPT_ENTRY_LENGTH) &&
+            mapped(segments, count, GR2_PROMPT_TEXTURE_WIDGET, GR2_PROMPT_ENTRY_LENGTH);
     if (!found) {
         printf("Button prompts: PC icons unavailable (code not found in this eboot.bin)\n");
         return;
     }
     unsigned char *stubs = hook_page();
-    gow3_prompt_build_stub(stubs, (uintptr_t)prompt_draw, image + GOW3_PROMPT_DRAW, GOW3_PROMPT_ENTRY_LENGTH,
-                           (uintptr_t)(image + GOW3_PROMPT_DRAW + GOW3_PROMPT_ENTRY_LENGTH));
-    for (unsigned i = 0; i < GOW3_PROMPT_LOOKUPS; ++i) {
-        const uint32_t at = gow3_prompt_lookups[i].address;
-        const unsigned replay = gow3_prompt_lookups[i].replay;
-        gow3_prompt_build_stub(stubs + 256 * (i + 1), (uintptr_t)prompt_lookup, image + at, replay,
+    gr2_prompt_build_stub(stubs, (uintptr_t)prompt_draw, image + GR2_PROMPT_DRAW, GR2_PROMPT_ENTRY_LENGTH,
+                           (uintptr_t)(image + GR2_PROMPT_DRAW + GR2_PROMPT_ENTRY_LENGTH));
+    for (unsigned i = 0; i < GR2_PROMPT_LOOKUPS; ++i) {
+        const uint32_t at = gr2_prompt_lookups[i].address;
+        const unsigned replay = gr2_prompt_lookups[i].replay;
+        gr2_prompt_build_stub(stubs + 256 * (i + 1), (uintptr_t)prompt_lookup, image + at, replay,
                                (uintptr_t)(image + at + replay));
     }
-    unsigned char *text_stub = stubs + 256 * (GOW3_PROMPT_LOOKUPS + 1);
-    gow3_prompt_build_text_stub(text_stub, (uintptr_t)prompt_text_image, image + GOW3_PROMPT_TEXT_IMAGE,
-                                GOW3_PROMPT_ENTRY_LENGTH,
-                                (uintptr_t)(image + GOW3_PROMPT_TEXT_IMAGE + GOW3_PROMPT_ENTRY_LENGTH));
-    unsigned char *widget_stub = stubs + 256 * (GOW3_PROMPT_LOOKUPS + 2);
-    gow3_prompt_build_stub(widget_stub, (uintptr_t)prompt_texture_widget, image + GOW3_PROMPT_TEXTURE_WIDGET,
-                           GOW3_PROMPT_ENTRY_LENGTH,
-                           (uintptr_t)(image + GOW3_PROMPT_TEXTURE_WIDGET + GOW3_PROMPT_ENTRY_LENGTH));
+    unsigned char *text_stub = stubs + 256 * (GR2_PROMPT_LOOKUPS + 1);
+    gr2_prompt_build_text_stub(text_stub, (uintptr_t)prompt_text_image, image + GR2_PROMPT_TEXT_IMAGE,
+                                GR2_PROMPT_ENTRY_LENGTH,
+                                (uintptr_t)(image + GR2_PROMPT_TEXT_IMAGE + GR2_PROMPT_ENTRY_LENGTH));
+    unsigned char *widget_stub = stubs + 256 * (GR2_PROMPT_LOOKUPS + 2);
+    gr2_prompt_build_stub(widget_stub, (uintptr_t)prompt_texture_widget, image + GR2_PROMPT_TEXTURE_WIDGET,
+                           GR2_PROMPT_ENTRY_LENGTH,
+                           (uintptr_t)(image + GR2_PROMPT_TEXTURE_WIDGET + GR2_PROMPT_ENTRY_LENGTH));
     protect(stubs, page_size, 5);
     int installed = 1;
-    for (unsigned i = 0; i < GOW3_PROMPT_LOOKUPS && installed; ++i)
-        installed = install_jump(gow3_prompt_lookups[i].address, gow3_prompt_lookups[i].replay, stubs + 256 * (i + 1));
-    if (!installed || !install_jump(GOW3_PROMPT_DRAW, GOW3_PROMPT_ENTRY_LENGTH, stubs) ||
-        !install_jump(GOW3_PROMPT_TEXT_IMAGE, GOW3_PROMPT_ENTRY_LENGTH, text_stub) ||
-        !install_jump(GOW3_PROMPT_TEXTURE_WIDGET, GOW3_PROMPT_ENTRY_LENGTH, widget_stub)) {
+    for (unsigned i = 0; i < GR2_PROMPT_LOOKUPS && installed; ++i)
+        installed = install_jump(gr2_prompt_lookups[i].address, gr2_prompt_lookups[i].replay, stubs + 256 * (i + 1));
+    if (!installed || !install_jump(GR2_PROMPT_DRAW, GR2_PROMPT_ENTRY_LENGTH, stubs) ||
+        !install_jump(GR2_PROMPT_TEXT_IMAGE, GR2_PROMPT_ENTRY_LENGTH, text_stub) ||
+        !install_jump(GR2_PROMPT_TEXTURE_WIDGET, GR2_PROMPT_ENTRY_LENGTH, widget_stub)) {
         printf("Button prompts: PC icons unavailable (hook outside relative-jump range)\n");
         return;
     }
     printf("Button prompts: PC icons ready (%u icon lookups, UI quad draw at image+0x%x, rich-text images at "
-           "image+0x%x, texture widgets at image+0x%x)\n", GOW3_PROMPT_LOOKUPS, GOW3_PROMPT_DRAW,
-           GOW3_PROMPT_TEXT_IMAGE, GOW3_PROMPT_TEXTURE_WIDGET);
+           "image+0x%x, texture widgets at image+0x%x)\n", GR2_PROMPT_LOOKUPS, GR2_PROMPT_DRAW,
+           GR2_PROMPT_TEXT_IMAGE, GR2_PROMPT_TEXTURE_WIDGET);
 }
 
 /* Damage dealt/taken and green/blue/gold orb multipliers (src/damage_hook.h, src/orb_hook.h):
  * the stubs read the menu's floats directly, so changes apply on the next hit or pickup. */
 static void install_stat_multipliers(Segment *segments, uint64_t count, uint64_t size) {
-    const uint64_t damage_at = gow3_signature_find(image, size, &gow3_damage_site);
-    const uint64_t pickup_at = gow3_signature_find(image, size, &gow3_orb_pickup_site);
-    int damage = damage_at != UINT64_MAX && mapped(segments, count, damage_at, GOW3_DAMAGE_HOOK_LENGTH) &&
-                 gow3_damage_signature_match(image + damage_at, size - damage_at);
-    int pickup = pickup_at != UINT64_MAX && mapped(segments, count, pickup_at, GOW3_ORB_PICKUP_LENGTH) &&
-                 gow3_orb_pickup_signature_match(image + pickup_at, size - pickup_at);
+    const uint64_t damage_at = gr2_signature_find(image, size, &gr2_damage_site);
+    const uint64_t pickup_at = gr2_signature_find(image, size, &gr2_orb_pickup_site);
+    int damage = damage_at != UINT64_MAX && mapped(segments, count, damage_at, GR2_DAMAGE_HOOK_LENGTH) &&
+                 gr2_damage_signature_match(image + damage_at, size - damage_at);
+    int pickup = pickup_at != UINT64_MAX && mapped(segments, count, pickup_at, GR2_ORB_PICKUP_LENGTH) &&
+                 gr2_orb_pickup_signature_match(image + pickup_at, size - pickup_at);
     unsigned char *stubs = damage || pickup ? hook_page() : NULL;
     if (damage) {
-        gow3_damage_build_stub(stubs, gow3_damage_multiplier(1), gow3_damage_multiplier(0),
-                               (uintptr_t)(image + damage_at + GOW3_DAMAGE_HOOK_LENGTH));
+        gr2_damage_build_stub(stubs, gr2_damage_multiplier(1), gr2_damage_multiplier(0),
+                               (uintptr_t)(image + damage_at + GR2_DAMAGE_HOOK_LENGTH));
     }
     if (pickup) {
-        gow3_orb_pickup_build_stub(stubs + 256, gow3_orb_pickup_multiplier(0), gow3_orb_pickup_multiplier(1),
-                                   gow3_orb_pickup_multiplier(2),
-                                   (uintptr_t)(image + pickup_at + GOW3_ORB_PICKUP_LENGTH));
+        gr2_orb_pickup_build_stub(stubs + 256, gr2_orb_pickup_multiplier(0), gr2_orb_pickup_multiplier(1),
+                                   gr2_orb_pickup_multiplier(2),
+                                   (uintptr_t)(image + pickup_at + GR2_ORB_PICKUP_LENGTH));
     }
     if (stubs) protect(stubs, page_size, 5);
-    damage = damage && install_jump(damage_at, GOW3_DAMAGE_HOOK_LENGTH, stubs);
-    pickup = pickup && install_jump(pickup_at, GOW3_ORB_PICKUP_LENGTH, stubs + 256);
-    gow3_stat_multipliers_status(damage, pickup);
+    damage = damage && install_jump(damage_at, GR2_DAMAGE_HOOK_LENGTH, stubs);
+    pickup = pickup && install_jump(pickup_at, GR2_ORB_PICKUP_LENGTH, stubs + 256);
+    gr2_stat_multipliers_status(damage, pickup);
     printf("Multipliers: damage %s, green/blue/gold orbs %s\n", damage ? "ready" : "unavailable",
            pickup ? "ready" : "unavailable");
 }
@@ -1050,19 +1050,19 @@ static void apply_patches(const char *path, Segment *segments, uint64_t ns, cons
  * released before the new process opens its own. */
 void runtime_restart(void) {
     fflush(NULL);
-    /* Started by the launcher (GOW3_LAUNCHER_RESTART=1): it starts the game again itself on exit
+    /* Started by the launcher (GR2_LAUNCHER_RESTART=1): it starts the game again itself on exit
      * code 75, recomputing every option (upscaler and frame generation chosen in the menu too). */
-    const char *launcher=getenv("GOW3_LAUNCHER_RESTART");
+    const char *launcher=getenv("GR2_LAUNCHER_RESTART");
     if (launcher && launcher[0]=='1') {
         puts("Runtime: restarting through the launcher");
         fflush(NULL);
         _exit(75);
     }
 #ifdef _WIN32
-    /* run.py sets GOW3_RESTART_COMMAND: the launch command line, started again (new patches). */
-    const char *command=getenv("GOW3_RESTART_COMMAND");
+    /* run.py sets GR2_RESTART_COMMAND: the launch command line, started again (new patches). */
+    const char *command=getenv("GR2_RESTART_COMMAND");
     puts("Runtime: restarting through run.py");
-    if (!command || !*command) { fputs("runtime_restart: GOW3_RESTART_COMMAND is not set\n",stderr); _exit(1); }
+    if (!command || !*command) { fputs("runtime_restart: GR2_RESTART_COMMAND is not set\n",stderr); _exit(1); }
     char *line=_strdup(command);
     /* Same output handles: a launcher reading the game's log keeps reading the new launch. */
     STARTUPINFOA startup={.cb=sizeof(startup),.dwFlags=STARTF_USESTDHANDLES,
@@ -1076,10 +1076,10 @@ void runtime_restart(void) {
     /* The new launch waits for this process's GPU device to go away (run.py --after). */
     TerminateProcess(GetCurrentProcess(),0);
 #else
-    const char *command = getenv("GOW3_RESTART_COMMAND");
+    const char *command = getenv("GR2_RESTART_COMMAND");
     syscall(SYS_close_range, 3u, ~0u, 0u);
     if (command && *command) {
-        puts("Runtime: restarting through GOW3_RESTART_COMMAND");
+        puts("Runtime: restarting through GR2_RESTART_COMMAND");
         execl("/bin/sh", "sh", "-c", command, (char *)NULL);
     } else {
         puts("Runtime: restarting through run.sh");
@@ -1090,12 +1090,12 @@ void runtime_restart(void) {
 #endif
 }
 
-/* The guest code needs the PS4's instruction sets (#33, #66); GOW3_CPU_CHECK=0 skips this. A
+/* The guest code needs the PS4's instruction sets (#33, #66); GR2_CPU_CHECK=0 skips this. A
  * missing fatal set prints STOP and returns 0; the rewritable ones go to cpu_missing_sets, named
  * in missing. */
 static int cpu_supported(char *missing, size_t size) {
     missing[0] = 0;
-    const char *check = getenv("GOW3_CPU_CHECK");
+    const char *check = getenv("GR2_CPU_CHECK");
     if (check && !strcmp(check, "0")) return 1;
     const CpuFeatureWords words = cpu_feature_words();
     if (cpu_missing_fatal(words, missing, size)) {
@@ -1107,8 +1107,43 @@ static int cpu_supported(char *missing, size_t size) {
     return 1;
 }
 
+/* Variables under the port's earlier name (GOW3_*) still work: each sets its GR2_* name unless
+ * that is set already. Runs first, before anything reads the environment. */
+#ifndef _WIN32
+extern char **environ;
+#endif
+static void alias_old_environment(void) {
+    static char pending[32][1024];
+    int count = 0;
+#ifdef _WIN32
+    char *block = GetEnvironmentStringsA();
+    for (char *e = block; e && *e && count < 32; e += strlen(e) + 1)
+        if (!strncmp(e, "GOW3_", 5) && strlen(e) < sizeof(pending[0])) strcpy(pending[count++], e);
+    if (block) FreeEnvironmentStringsA(block);
+#else
+    for (char **e = environ; e && *e && count < 32; ++e)
+        if (!strncmp(*e, "GOW3_", 5) && strlen(*e) < sizeof(pending[0])) strcpy(pending[count++], *e);
+#endif
+    for (int i = 0; i < count; ++i) {
+        char *eq = strchr(pending[i], '=');
+        if (!eq) continue;
+        *eq = 0;
+        char name[1100];
+        snprintf(name, sizeof(name), "GR2_%s", pending[i] + 5);
+        if (getenv(name)) continue;
+#ifdef _WIN32
+        char assignment[2200];
+        snprintf(assignment, sizeof(assignment), "%s=%s", name, eq + 1);
+        _putenv(assignment); /* the CRT copies it */
+#else
+        setenv(name, eq + 1, 0);
+#endif
+    }
+}
+
 int main(int argc, char **argv) {
     setvbuf(stdout, NULL, _IONBF, 0);
+    alias_old_environment();
 #ifndef _WIN32
     /* Keep host heap objects handed to the guest (thread handles, TLS) in the
        non-PIE brk heap, i.e. below 1 TiB: the guest packs pointers into 40 bits. */
@@ -1162,11 +1197,11 @@ int main(int argc, char **argv) {
     }
     if (!cpu_supported(missing, sizeof missing)) return 20;
     if (cpu_missing_sets) printf("CPU: missing %s\n", missing);
-    /* GOW3_ISA_REWRITE=0 never rewrites, =1 rewrites every site; by default the sets the CPU lacks. */
-    const char *policy = getenv("GOW3_ISA_REWRITE");
+    /* GR2_ISA_REWRITE=0 never rewrites, =1 rewrites every site; by default the sets the CPU lacks. */
+    const char *policy = getenv("GR2_ISA_REWRITE");
     unsigned isa_sets = policy && !strcmp(policy, "1") ? 0xffffffffu : policy && !strcmp(policy, "0") ? 0 : cpu_missing_sets;
     if (cpu_missing_sets && !isa_sets) {
-        printf("STOP: this CPU lacks %s and the rewrite is disabled (GOW3_ISA_REWRITE=0)\n", missing);
+        printf("STOP: this CPU lacks %s and the rewrite is disabled (GR2_ISA_REWRITE=0)\n", missing);
         return 20;
     }
     if (cpu_missing_sets && !isa_file) {
@@ -1199,24 +1234,24 @@ int main(int argc, char **argv) {
         }
         char sfo[4096], id[16]="";
         snprintf(sfo,sizeof(sfo),"%s/sce_sys/param.sfo",app0);
-        /* GOW3_SAVEDATA_ID (launcher): one save folder for every region of the game. */
-        const char *save_id=getenv("GOW3_SAVEDATA_ID");
+        /* GR2_SAVEDATA_ID (launcher): one save folder for every region of the game. */
+        const char *save_id=getenv("GR2_SAVEDATA_ID");
         if (save_id && *save_id)
             runtime_savedata_configure(save_id);
         else if (sfo_value(sfo,"INSTALL_DIR_SAVEDATA",id,sizeof(id),NULL) || sfo_value(sfo,"TITLE_ID",id,sizeof(id),NULL))
             runtime_savedata_configure(id);
     }
-    gow3gpu_register_kernel();
+    gr2gpu_register_kernel();
 #ifdef _WIN32
     SYSTEM_INFO system_info; GetSystemInfo(&system_info); page_size = system_info.dwPageSize;
     AddVectoredExceptionHandler(1, vectored_fault);
     SetUnhandledExceptionFilter(unhandled_fault);
-    if (getenv("GOW3_STRICT_HANDLES")) {
+    if (getenv("GR2_STRICT_HANDLES")) {
         PROCESS_MITIGATION_STRICT_HANDLE_CHECK_POLICY strict={0};
         strict.RaiseExceptionOnInvalidHandleReference=1;
         strict.HandleExceptionsPermanentlyEnabled=1;
         if (!SetProcessMitigationPolicy(ProcessStrictHandleCheckPolicy,&strict,sizeof(strict)))
-            fprintf(stderr,"GOW3_STRICT_HANDLES: policy not set (%lu)\n",GetLastError());
+            fprintf(stderr,"GR2_STRICT_HANDLES: policy not set (%lu)\n",GetLastError());
     }
     (void)timeout_seconds; /* no watchdog on Windows */
 #else
@@ -1375,17 +1410,17 @@ int main(int argc, char **argv) {
         sfo_value(sfo,"ATTRIBUTE",NULL,0,&attributes);
         uint64_t sdk=0;
         if (procparam) memcpy(&sdk,image+procparam+16,8); /* procparam: size, magic, count, sdk_version */
-        /* GOW3_WINDOW_SIZE=<w>x<h>: the window's first size (launcher); the game image stays 1080p. */
+        /* GR2_WINDOW_SIZE=<w>x<h>: the window's first size (launcher); the game image stays 1080p. */
         unsigned window_w=1920, window_h=1080;
-        const char *size_env=getenv("GOW3_WINDOW_SIZE");
+        const char *size_env=getenv("GR2_WINDOW_SIZE");
         if (size_env) {
             unsigned w=0, h=0;
             if (sscanf(size_env,"%ux%u",&w,&h)==2 && w>=640 && h>=360 && w<=7680 && h<=4320) { window_w=w; window_h=h; }
         }
-        Gow3GpuConfig gpu={title,serial,user_dir ? user_dir : "user",(uint32_t)sdk,attributes,window_w,window_h};
+        Gr2GpuConfig gpu={title,serial,user_dir ? user_dir : "user",(uint32_t)sdk,attributes,window_w,window_h};
         gpu_enabled=1; /* page tracking starts while the rasterizer registers guest memory */
-        if (gow3gpu_init(&gpu)) fail("GPU initialization failed");
-        printf("GPU: window and Vulkan presenter ready; SDK 0x%08x, %u HLE symbols\n",(unsigned)sdk,gow3gpu_symbol_count());
+        if (gr2gpu_init(&gpu)) fail("GPU initialization failed");
+        printf("GPU: window and Vulkan presenter ready; SDK 0x%08x, %u HLE symbols\n",(unsigned)sdk,gr2gpu_symbol_count());
     }
     unsigned char *traps = allocate(round_page((import_count + 1) * 32));
     unsigned char *data_traps = allocate((import_count + 1) * page_size);
@@ -1476,7 +1511,7 @@ int main(int argc, char **argv) {
             fflush(NULL);
             _exit(20); /* no destructors: GPU threads are running */
         }
-        if (isa_sets == 0xffffffffu) printf("ISA: forced rewrite of all %u sites (GOW3_ISA_REWRITE=1), %u skipped\n", r.rewritten, r.skipped);
+        if (isa_sets == 0xffffffffu) printf("ISA: forced rewrite of all %u sites (GR2_ISA_REWRITE=1), %u skipped\n", r.rewritten, r.skipped);
         else printf("ISA: CPU lacks %s: %u sites rewritten (%u jmp, %u relocated, %u int3), %u skipped\n",
                     missing, r.rewritten, r.jmp, r.relocated, r.int3, r.skipped);
         runtime_set_report_hook(isa_report_hook);
@@ -1528,7 +1563,7 @@ int main(int argc, char **argv) {
     profiler_start(describe_address);
 #endif
     printf("Guest image base %p\n", (void *)image);
-    if (gpu_enabled) gow3gpu_set_guest_image(image);
+    if (gpu_enabled) gr2gpu_set_guest_image(image);
     printf("Entering original x86-64 code at guest offset 0x%" PRIx64 "\n", entry);
     entered_game=1;
     struct { uint64_t argc; const char *argv[2]; } params = {1, {"/app0/eboot.bin", NULL}};

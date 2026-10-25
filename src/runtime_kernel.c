@@ -87,7 +87,7 @@ static uint64_t monotonic_ns(void) {
 /* The guest's TSC runs at the PS4's 1.594 GHz: games hardcode that rate (Killzone Shadow Fall
  * ran 2x fast on a 3.7 GHz host TSC). It is the host TSC scaled by tsc_multiplier (32.32 fixed
  * point), the clock tsc_patch.c's trampolines give every inline rdtsc, so values from
- * sceKernelReadTsc and from rdtsc can be mixed. GOW3_PS4_TSC=0 restores the previous clock, the
+ * sceKernelReadTsc and from rdtsc can be mixed. GR2_PS4_TSC=0 restores the previous clock, the
  * process time in nanoseconds (for hosts whose TSC differs per core: 3.9 s apart on a Xeon
  * E5-2680 v4, #42), and inline rdtsc is then left alone. */
 #define PS4_TSC_HZ UINT64_C(1594000000)
@@ -100,9 +100,9 @@ static uint64_t guest_tsc(void) {
 /* Measures the host TSC against the monotonic clock (100 ms) once, before the guest runs. */
 int runtime_tsc_calibrate(void) {
     if (ps4_tsc>=0) return ps4_tsc;
-    const char *setting=getenv("GOW3_PS4_TSC");
+    const char *setting=getenv("GR2_PS4_TSC");
     ps4_tsc=!setting || strcmp(setting,"0");
-    if (!ps4_tsc) { puts("Runtime: guest TSC is the process clock (GOW3_PS4_TSC=0)"); return 0; }
+    if (!ps4_tsc) { puts("Runtime: guest TSC is the process clock (GR2_PS4_TSC=0)"); return 0; }
     uint64_t t0=monotonic_ns(), c0=__builtin_ia32_rdtsc();
 #ifdef _WIN32
     compat_sleep_ns(100000000);

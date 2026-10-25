@@ -62,12 +62,12 @@ def read_frame(transport, stop=None, timeout=READ_SECONDS):
 
 
 def activity(started):
-    # GOW3_DISCORD_DETAILS / GOW3_DISCORD_IMAGE (Killzone launcher): a line under the game name and
+    # GR2_DISCORD_DETAILS / GR2_DISCORD_IMAGE (Killzone launcher): a line under the game name and
     # the large image (an asset key of the Discord application).
     value = {'timestamps': {'start': int(started)}}
-    if details := os.environ.get('GOW3_DISCORD_DETAILS'):
+    if details := os.environ.get('GR2_DISCORD_DETAILS'):
         value['details'] = details
-    if image := os.environ.get('GOW3_DISCORD_IMAGE'):
+    if image := os.environ.get('GR2_DISCORD_IMAGE'):
         value['assets'] = {'large_image': image, 'large_text': details or image}
     return value
 
@@ -181,8 +181,8 @@ class Presence:
         self.stop = threading.Event()
         self.started = time.time()
         self.pid = os.getpid() if pid is None else pid
-        self.client_id = client_id or os.environ.get('GOW3_DISCORD_ID') or CLIENT_ID
-        if not self.client_id or os.environ.get('GOW3_DISCORD') == '0':
+        self.client_id = client_id or os.environ.get('GR2_DISCORD_ID') or CLIENT_ID
+        if not self.client_id or os.environ.get('GR2_DISCORD') == '0':
             return
         self.thread = threading.Thread(target=self.run, name='discord-presence', daemon=True)
         self.thread.start()

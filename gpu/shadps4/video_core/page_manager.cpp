@@ -2,14 +2,14 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include <boost/container/small_vector.hpp>
-#include "gow3_toggles.h"
+#include "gr2_toggles.h"
 #include "common/assert.h"
 #include "common/debug.h"
 #include "common/div_ceil.h"
 #include "common/error.h"
 #include "common/range_lock.h"
 #include "common/signal_context.h"
-#include "gow3_guest_image.h"
+#include "gr2_guest_image.h"
 #include <algorithm>
 #include <array>
 #include <chrono>
@@ -73,7 +73,7 @@ struct PageManager::Impl {
 
     virtual void Protect(VAddr address, size_t size, Core::MemoryPermission perms) = 0;
 
-    // gow3: GOW3_FAULT_PROFILE=1 prints, every 5 s, the guest instructions whose faults on GPU
+    // gr2: GR2_FAULT_PROFILE=1 prints, every 5 s, the guest instructions whose faults on GPU
     // tracked pages cost the most time (game code that waits for the GPU; from iss_pc). Raw
     // addresses: subtract "Guest image base" (game.log) for guest offsets.
     struct FaultSite {
@@ -84,7 +84,7 @@ struct PageManager::Impl {
     };
     static void ProfileFault(void* context, VAddr addr, bool write, u64 ns) {
         static const bool enabled = [] {
-            const char* e = std::getenv("GOW3_FAULT_PROFILE");
+            const char* e = std::getenv("GR2_FAULT_PROFILE");
             return e && *e == '1';
         }();
         if (!enabled) {
@@ -108,7 +108,7 @@ struct PageManager::Impl {
         if (rsp) {
             const auto* stack = reinterpret_cast<const u64*>(rsp);
             for (u32 i = 1, found = 0; i < 64 && found < guest_callers.size(); ++i) {
-                if (Gow3GuestImage::Offset(stack[i]) != ~u64{0}) {
+                if (Gr2GuestImage::Offset(stack[i]) != ~u64{0}) {
                     guest_callers[found++] = stack[i];
                 }
             }
@@ -131,7 +131,7 @@ struct PageManager::Impl {
                   [](const auto& a, const auto& b) { return a.second.ns > b.second.ns; });
         // Guest offsets where the address is in the guest image, else the host address.
         const auto name = [](u64 address) {
-            const u64 offset = Gow3GuestImage::Offset(address);
+            const u64 offset = Gr2GuestImage::Offset(address);
             return static_cast<unsigned long long>(offset != ~u64{0} ? offset : address);
         };
         std::printf("Fault profile (5 s; guest offsets):");
@@ -163,14 +163,14 @@ struct PageManager::Impl {
         return handled;
     }
 
-    // gow3: GOW3_NOWAIT_WRITES=<offset>[,<offset>...] (guest offsets, hex; from iss_pc): guest
+    // gr2: GR2_NOWAIT_WRITES=<offset>[,<offset>...] (guest offsets, hex; from iss_pc): guest
     // instructions whose write faults take the page over without reading the GPU data back
     // (BufferCache::NoWaitWrite). For pages the game refills while it never reads what the GPU
     // wrote there.
     static bool IsNoWaitWriteSite(void* context) {
         static const std::vector<u64> sites = [] {
             std::vector<u64> list;
-            const char* e = std::getenv("GOW3_NOWAIT_WRITES");
+            const char* e = std::getenv("GR2_NOWAIT_WRITES");
             for (const char* p = e; p && *p;) {
                 char* end = nullptr;
                 const u64 offset = std::strtoull(p, &end, 16);
@@ -188,24 +188,24 @@ struct PageManager::Impl {
         if (sites.empty()) {
             return false;
         }
-        const u64 offset = Gow3GuestImage::Offset(reinterpret_cast<u64>(Common::GetRip(context)));
+        const u64 offset = Gr2GuestImage::Offset(reinterpret_cast<u64>(Common::GetRip(context)));
         return std::find(sites.begin(), sites.end(), offset) != sites.end();
     }
 
     static bool HandleGuestFault(void* context, void* fault_address) {
         const auto addr = reinterpret_cast<VAddr>(fault_address);
-        // gow3: the draw recording thread handles its faults inline too (vk_draw_pipe.h).
+        // gr2: the draw recording thread handles its faults inline too (vk_draw_pipe.h).
         const auto is_gpu_thread = rasterizer->IsGpuSideThread();
         if (is_gpu_thread) {
-            Gow3Stats::gpu_signal_faults.fetch_add(1, std::memory_order_relaxed);
+            Gr2Stats::gpu_signal_faults.fetch_add(1, std::memory_order_relaxed);
         }
         if (Common::IsWriteError(context)) {
-            Gow3Stats::Timer timer{Gow3Stats::t_write_faults};
+            Gr2Stats::Timer timer{Gr2Stats::t_write_faults};
             const bool nowait = !is_gpu_thread && IsNoWaitWriteSite(context);
             return rasterizer->OnWriteFault(addr, is_gpu_thread, nowait);
         } else {
-            Gow3Stats::read_faults.fetch_add(1, std::memory_order_relaxed);
-            Gow3Stats::Timer timer{Gow3Stats::t_read_faults};
+            Gr2Stats::read_faults.fetch_add(1, std::memory_order_relaxed);
+            Gr2Stats::Timer timer{Gr2Stats::t_read_faults};
             return rasterizer->ReadMemory(addr, 8, is_gpu_thread);
         }
         return false;
@@ -358,12 +358,12 @@ struct PageManager::Impl {
 };
 
 #ifdef __linux__
-// gow3: write tracking with userfaultfd write-protection instead of mprotect. mprotect takes
+// gr2: write tracking with userfaultfd write-protection instead of mprotect. mprotect takes
 // the address space lock for writing and splits mappings; while guest threads fault on
 // per-frame buffers and the GPU thread re-protects uploaded pages, every page fault in the
 // process (copy threads included) waits for it. UFFDIO_WRITEPROTECT changes page table bits
 // under the lock for reading. Read protection (readbacks) still uses mprotect: userfaultfd
-// write-protection cannot deny reads. GOW3_UFFD=1.
+// write-protection cannot deny reads. GR2_UFFD=1.
 struct UffdImpl : public PageManager::Impl {
 private:
     std::jthread ufd_thread;
@@ -462,7 +462,7 @@ public:
     }
 
     void UffdHandler(std::stop_token token) {
-        Common::SetCurrentThreadName("gow3:Uffd");
+        Common::SetCurrentThreadName("gr2:Uffd");
         while (!token.stop_requested()) {
             pollfd pollfd{};
             pollfd.fd = uffd;
@@ -483,7 +483,7 @@ public:
             const VAddr addr = msg.arg.pagefault.address;
             const auto ptid = msg.arg.pagefault.feat.ptid;
             {
-                Gow3Stats::Timer timer{Gow3Stats::t_write_faults};
+                Gr2Stats::Timer timer{Gr2Stats::t_write_faults};
                 rasterizer->OnWriteFault(addr, rasterizer->IsGpuSideThreadId(ptid));
             }
             // Protect() clears with DONTWAKE (it may run for pages nobody waits on).
@@ -519,7 +519,7 @@ struct SignalImpl : public PageManager::Impl {
 
 PageManager::PageManager(Vulkan::Rasterizer* rasterizer_) {
 #ifdef __linux__
-    if (std::getenv("GOW3_UFFD") && std::getenv("GOW3_UFFD")[0] == '1') {
+    if (std::getenv("GR2_UFFD") && std::getenv("GR2_UFFD")[0] == '1') {
         try {
             impl = std::make_unique<UffdImpl>(rasterizer_);
             LOG_INFO(Config, "Memory tracking method: userfaultfd");

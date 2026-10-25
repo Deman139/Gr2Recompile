@@ -31,10 +31,10 @@ using namespace Xbyak::util;
 
 static Xbyak::CodeGenerator g_srt_codegen(64_MB);
 static const u8* g_srt_codegen_start = nullptr;
-// gow3: the shader compiler and the background cache warm-up append walkers from different
+// gr2: the shader compiler and the background cache warm-up append walkers from different
 // threads.
 static std::mutex g_srt_codegen_mutex;
-// gow3: identical walkers share one copy. Every cached pipeline used to append its own walker,
+// gr2: identical walkers share one copy. Every cached pipeline used to append its own walker,
 // so a large cache filled the buffer ("code is too big") and valid records were dropped.
 // Keys view the codegen buffer itself, which never moves or shrinks below them.
 static std::unordered_map<std::string_view, Shader::PFN_SrtWalker> g_srt_walkers;

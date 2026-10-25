@@ -93,12 +93,12 @@ static Module *from_handle(int32_t handle) {
     return handle>=HANDLE_BASE && index<module_count ? &modules[index] : NULL;
 }
 
-/* GOW3_STATIC_MODULES ("/app0/sysdata/libSceSecure.prx;..."): modules the game loads itself that
+/* GR2_STATIC_MODULES ("/app0/sysdata/libSceSecure.prx;..."): modules the game loads itself that
  * are linked into the image and already started at boot (run.py). Loading one succeeds with a
  * handle of its own; its exports are bound to the game's imports, so no sceKernelDlsym. */
 #define STATIC_HANDLE_BASE 0x1000
 static int32_t static_module(const char *path) {
-    const char *list=getenv("GOW3_STATIC_MODULES");
+    const char *list=getenv("GR2_STATIC_MODULES");
     if (!list || !path) return 0;
     size_t n=strlen(path);
     int32_t index=0;

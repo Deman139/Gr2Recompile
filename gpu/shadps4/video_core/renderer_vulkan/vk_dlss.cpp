@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: Copyright 2026 IFreemz, gow3 contributors
+// SPDX-FileCopyrightText: Copyright 2026 IFreemz, gr2 contributors
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include <algorithm>
@@ -17,7 +17,7 @@
 #define NOMINMAX
 #endif
 #include <windows.h>
-#include "../../../dlss_bridge/gow3_dlss_bridge.h"
+#include "../../../dlss_bridge/gr2_dlss_bridge.h"
 #endif
 
 namespace Vulkan {
@@ -30,8 +30,15 @@ int Dlss::QualityForScale(float scale) {
 #ifdef _WIN32
 
 namespace {
-constexpr wchar_t BridgeName[] = L"gow3_dlss.dll";
+constexpr wchar_t BridgeName[] = L"gr2_dlss.dll";
+/// The bridge's name before the port was renamed (a gow3_dlss.dll built then still works).
+constexpr wchar_t OldBridgeName[] = L"gow3_dlss.dll";
 constexpr wchar_t NgxName[] = L"nvngx_dlss.dll";
+
+std::filesystem::path BridgePath(const std::filesystem::path& directory) {
+    return std::filesystem::is_regular_file(directory / BridgeName) ? directory / BridgeName
+                                                                    : directory / OldBridgeName;
+}
 
 std::filesystem::path ExecutableDirectory() {
     std::wstring path(MAX_PATH, L'\0');
@@ -71,7 +78,7 @@ bool CollectExtensions(const VkExtensionProperties* required, u32 count,
 
 struct Dlss::Impl {
     HMODULE module{};
-    const Gow3DlssApi* api{};
+    const Gr2DlssApi* api{};
     std::vector<std::string> instance_extensions, device_extensions;
     std::optional<FeatureDesc> feature;
     std::optional<FrameGenDesc> frame_gen;
@@ -88,12 +95,12 @@ struct Dlss::Impl {
 
 Dlss* Dlss::Get() {
     static Dlss* const dlss = []() -> Dlss* {
-        const char* setting = std::getenv("GOW3_DLSS");
+        const char* setting = std::getenv("GR2_DLSS");
         if (setting && setting[0] == '0') {
             return nullptr;
         }
         const auto directory = ExecutableDirectory();
-        if (!std::filesystem::is_regular_file(directory / BridgeName) ||
+        if (!std::filesystem::is_regular_file(BridgePath(directory)) ||
             !std::filesystem::is_regular_file(directory / NgxName)) {
             return nullptr;
         }
@@ -111,19 +118,22 @@ Dlss* Dlss::Get() {
 
 Dlss::Dlss() : impl{std::make_unique<Impl>()} {
     const auto directory = ExecutableDirectory();
-    impl->module = LoadLibraryW((directory / BridgeName).c_str());
-    const auto get_api =
-        impl->module ? reinterpret_cast<Gow3DlssGetApiFn>(GetProcAddress(impl->module, "Gow3DlssGetApi"))
+    impl->module = LoadLibraryW(BridgePath(directory).c_str());
+    auto get_api =
+        impl->module ? reinterpret_cast<Gr2DlssGetApiFn>(GetProcAddress(impl->module, "Gr2DlssGetApi"))
                      : nullptr;
+    if (impl->module && !get_api) { // a bridge built before the rename exports the old name
+        get_api = reinterpret_cast<Gr2DlssGetApiFn>(GetProcAddress(impl->module, "Gow3DlssGetApi"));
+    }
     impl->api = get_api ? get_api() : nullptr;
     // ABI 1 bridges (DLSS only) still work; Frame Generation needs ABI 2.
-    if (!impl->api || impl->api->abi < 1 || impl->api->abi > GOW3_DLSS_BRIDGE_ABI) {
-        impl->Disable("gow3_dlss.dll is missing or from another version");
+    if (!impl->api || impl->api->abi < 1 || impl->api->abi > GR2_DLSS_BRIDGE_ABI) {
+        impl->Disable("gr2_dlss.dll is missing or from another version");
         return;
     }
     // NGX writes its logs and model updates here: beside the saves and shader caches.
     std::filesystem::path data = directory / "dlss";
-    if (const char* user = std::getenv("GOW3_GPU_USER_DIR"); user && user[0]) {
+    if (const char* user = std::getenv("GR2_GPU_USER_DIR"); user && user[0]) {
         data = std::filesystem::path{user} / "dlss";
     }
     std::error_code error;
@@ -191,7 +201,7 @@ void Dlss::Initialize(vk::Instance instance, vk::PhysicalDevice physical, vk::De
     if (impl->api->abi >= 2) {
         impl->frame_gen_max = std::max(0, impl->api->FrameGenMaxCount());
     } else {
-        std::printf("DLSS: gow3_dlss.dll predates Frame Generation (rebuild it with "
+        std::printf("DLSS: gr2_dlss.dll predates Frame Generation (rebuild it with "
                     "packaging/windows/build_dlss.sh)\n");
     }
 }
@@ -213,7 +223,7 @@ bool Dlss::CreateFeature(vk::CommandBuffer command, const FeatureDesc& desc) {
         return false;
     }
     impl->feature.reset();
-    const Gow3DlssFeature feature{desc.input_width,  desc.input_height, desc.output_width,
+    const Gr2DlssFeature feature{desc.input_width,  desc.input_height, desc.output_width,
                                 desc.output_height, desc.quality,      0,
                                 0,                  desc.hdr ? 1 : 0};
     if (!impl->api->CreateFeature(command, &feature)) {
@@ -229,14 +239,14 @@ bool Dlss::Evaluate(vk::CommandBuffer command, const Frame& frame) {
     }
     const auto image = [](const Resource& r) {
         const vk::ImageSubresourceRange range{r.aspect, 0, 1, 0, 1};
-        return Gow3DlssImage{r.image,
+        return Gr2DlssImage{r.image,
                            r.view,
                            static_cast<VkImageSubresourceRange>(range),
                            static_cast<VkFormat>(r.format),
                            r.width,
                            r.height};
     };
-    const Gow3DlssEvaluate parameters{image(frame.color),  image(frame.depth), image(frame.motion),
+    const Gr2DlssEvaluate parameters{image(frame.color),  image(frame.depth), image(frame.motion),
                                     image(frame.output), frame.jitter_x,     frame.jitter_y,
                                     frame.reset ? 1 : 0, frame.frame_ms,     frame.sharpness};
     return impl->api->Evaluate(command, &parameters) != 0;
@@ -262,7 +272,7 @@ bool Dlss::CreateFrameGen(vk::CommandBuffer command, const FrameGenDesc& desc) {
         return false;
     }
     impl->frame_gen.reset();
-    const Gow3DlssgFeature feature{desc.width, desc.height, static_cast<VkFormat>(desc.format),
+    const Gr2DlssgFeature feature{desc.width, desc.height, static_cast<VkFormat>(desc.format),
                                  desc.render_width, desc.render_height};
     if (!impl->api->FrameGenCreate(command, &feature)) {
         return false;
@@ -277,16 +287,16 @@ bool Dlss::EvaluateFrameGen(vk::CommandBuffer command, const FrameGenFrame& fram
     }
     const auto image = [](const Resource& r) {
         const vk::ImageSubresourceRange range{r.aspect, 0, 1, 0, 1};
-        return Gow3DlssImage{r.image,
+        return Gr2DlssImage{r.image,
                            r.view,
                            static_cast<VkImageSubresourceRange>(range),
                            static_cast<VkFormat>(r.format),
                            r.width,
                            r.height};
     };
-    const Gow3DlssgEvaluate parameters{
+    const Gr2DlssgEvaluate parameters{
         image(frame.backbuffer), image(frame.depth),  image(frame.motion), image(frame.output),
-        frame.hudless.image ? image(frame.hudless) : Gow3DlssImage{},
+        frame.hudless.image ? image(frame.hudless) : Gr2DlssImage{},
         frame.jitter_x,          frame.jitter_y,      frame.camera_near,   frame.camera_far,
         frame.camera_fov,        frame.depth_inverted ? 1 : 0,             frame.reset ? 1 : 0,
         frame.count,             frame.index};

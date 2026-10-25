@@ -32,11 +32,11 @@
 #define GLYPH_MAGIC 0x0F03
 #define MISSING_LOG_LIMIT 8
 
-/* Fonts embedded by gpu/shim/gow3_overlay.cpp (weak: absent in builds without them): Noto Sans
+/* Fonts embedded by gpu/shim/gr2_overlay.cpp (weak: absent in builds without them): Noto Sans
  * for the system font sets (as shadPS4: with the wider DejaVu Sans, Killzone's text lost
  * letters), the overlay's DejaVu Sans otherwise. */
-extern const unsigned char gow3_system_font_ttf[] __attribute__((weak));
-extern const unsigned char gow3_font_ttf[] __attribute__((weak));
+extern const unsigned char gr2_system_font_ttf[] __attribute__((weak));
+extern const unsigned char gr2_font_ttf[] __attribute__((weak));
 
 typedef struct { uint32_t magic; } Library;
 typedef struct { uint32_t magic, set_type; float scale_w, scale_h; } Font;
@@ -82,10 +82,10 @@ static pthread_once_t face_once=PTHREAD_ONCE_INIT;
 static _Atomic unsigned missing_logged;
 
 static void load_face(void) {
-    if (gow3_system_font_ttf && stbtt_InitFont(&face,gow3_system_font_ttf,stbtt_GetFontOffsetForIndex(gow3_system_font_ttf,0))) {
+    if (gr2_system_font_ttf && stbtt_InitFont(&face,gr2_system_font_ttf,stbtt_GetFontOffsetForIndex(gr2_system_font_ttf,0))) {
         face_state=1;
         puts("Runtime: system fonts: embedded Noto Sans stands in for the PS4 font sets");
-    } else if (gow3_font_ttf && stbtt_InitFont(&face,gow3_font_ttf,stbtt_GetFontOffsetForIndex(gow3_font_ttf,0))) {
+    } else if (gr2_font_ttf && stbtt_InitFont(&face,gr2_font_ttf,stbtt_GetFontOffsetForIndex(gr2_font_ttf,0))) {
         face_state=1;
         puts("Runtime: system fonts: embedded DejaVu Sans stands in for the PS4 font sets");
     } else {
@@ -121,17 +121,17 @@ static ABI int32_t open_font_set(Library *lib,uint32_t set_type,uint32_t mode,co
     Font *f=calloc(1,sizeof(*f));
     if (!f) return FONT_ALLOCATION_FAILED;
     f->magic=FONT_MAGIC; f->set_type=set_type; f->scale_w=f->scale_h=16.0f;
-    printf("Runtime: font set 0x%08X opened (%s)\n",set_type,face_ready() ? (gow3_system_font_ttf ? "Noto Sans" : "DejaVu Sans") : "no glyphs");
+    printf("Runtime: font set 0x%08X opened (%s)\n",set_type,face_ready() ? (gr2_system_font_ttf ? "Noto Sans" : "DejaVu Sans") : "no glyphs");
     *out=f; return 0;
 }
 static ABI int32_t close_font(Font *f) {
     if (!f || f->magic!=FONT_MAGIC) return FONT_INVALID_FONT_HANDLE;
     f->magic=0; free(f); return 0;
 }
-/* GOW3_FONT_TRACE=1: every call on stderr (first 4000), to match missing letters to calls. */
+/* GR2_FONT_TRACE=1: every call on stderr (first 4000), to match missing letters to calls. */
 static int font_trace(void) {
     static int v=-1;
-    if (v<0) { const char *e=getenv("GOW3_FONT_TRACE"); v=e && e[0]=='1'; }
+    if (v<0) { const char *e=getenv("GR2_FONT_TRACE"); v=e && e[0]=='1'; }
     static _Atomic unsigned n;
     return v && atomic_fetch_add(&n,1)<4000;
 }

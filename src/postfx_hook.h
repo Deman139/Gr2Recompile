@@ -1,8 +1,8 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later
  * Sites and checks adapted from pearlxcore/KillzoneShadowFall-PC (src/kzsf_motion_blur.h,
  * kzsf_depth_of_field.h, kzsf_post_effects.h, kzsf_camera_controls_win.h). */
-#ifndef GOW3_POSTFX_HOOK_H
-#define GOW3_POSTFX_HOOK_H
+#ifndef GR2_POSTFX_HOOK_H
+#define GR2_POSTFX_HOOK_H
 #include <stdint.h>
 #include <string.h>
 #include "signature.h"
@@ -12,9 +12,9 @@
  * the game's own off branch when the bit is clear, which still writes the pass's target with the
  * neutral result. Bit 4 (vignette) also gates other effects and is never touched. The mask is
  * cleared in the image before the game starts, so these apply on restart. */
-enum { GOW3_POSTFX_COUNT = 4 };
-typedef struct { const char *name; uint32_t bit; Gow3Signature site; } Gow3PostFx;
-static const Gow3PostFx gow3_postfx[GOW3_POSTFX_COUNT] = {
+enum { GR2_POSTFX_COUNT = 4 };
+typedef struct { const char *name; uint32_t bit; Gr2Signature site; } Gr2PostFx;
+static const Gr2PostFx gr2_postfx[GR2_POSTFX_COUNT] = {
     /* 0x577c1a: motion blur, then a call to its pass (0x5787f0). */
     {"motion blur", 1, {"48 8d 05 ?? ?? ?? ?? f6 00 01 74 10 48 89 df 4c 89 fe e8 ?? ?? ?? ?? e9", 0}},
     /* 0x57835d: depth of field (far and near passes, 0x57a600). */
@@ -26,30 +26,30 @@ static const Gow3PostFx gow3_postfx[GOW3_POSTFX_COUNT] = {
 };
 
 /* The mask's image offset from the site's lea. */
-static inline uint64_t gow3_postfx_mask(const unsigned char *image, uint64_t at) {
+static inline uint64_t gr2_postfx_mask(const unsigned char *image, uint64_t at) {
     int32_t disp;
     memcpy(&disp, image + at + 3, 4);
     return at + 7 + (int64_t)disp;
 }
 
 /* Only a known mask: bits 4..11 set, 12..31 clear; bits 0..3 may already be cleared. */
-static inline int gow3_postfx_mask_known(uint32_t flags) { return (flags | 0x0fu) == 0xfffu; }
+static inline int gr2_postfx_mask_known(uint32_t flags) { return (flags | 0x0fu) == 0xfffu; }
 
 /* Image offset 0xd92b4e, the player view's camera update (0xd92a00): right after the camera
  * shake is evaluated (call at 0xd92b49 into the shake transform at rbp-0x170 and the FOV factor
  * at rbp-0x234), "vmovss xmm0,[rbp-0x234]" reads the factor. With shake off the stub first writes
  * the game's no-shake values there (identity transform, factor 1), as its no-shake branch does. */
-enum { GOW3_SHAKE_HOOK_LENGTH = 8 };
-static const Gow3Signature gow3_shake_site = {
+enum { GR2_SHAKE_HOOK_LENGTH = 8 };
+static const Gr2Signature gr2_shake_site = {
     "e8 ?? ?? ?? ?? c5 fa 10 85 cc fd ff ff c5 fa 59 43 6c c5 fa 11 43 6c", 5};
-static const unsigned char gow3_shake_original[GOW3_SHAKE_HOOK_LENGTH] = {
+static const unsigned char gr2_shake_original[GR2_SHAKE_HOOK_LENGTH] = {
     0xc5, 0xfa, 0x10, 0x85, 0xcc, 0xfd, 0xff, 0xff /* vmovss xmm0, [rbp-0x234] */
 };
 
 /* The stub at `out` (address out_address): cell is an int, nonzero keeps the game's shake. The
  * flags are free here (the next instructions do not read them; a call just clobbered them).
  * Returns its length, or 0 when the cell or the resume point is out of rel32 range. */
-static inline unsigned gow3_shake_build_stub(unsigned char *out, uintptr_t out_address, uintptr_t cell,
+static inline unsigned gr2_shake_build_stub(unsigned char *out, uintptr_t out_address, uintptr_t cell,
                                              uintptr_t resume) {
     unsigned n = 0;
     const int64_t to_cell = (int64_t)cell - (int64_t)(out_address + 7);
@@ -74,8 +74,8 @@ static inline unsigned gow3_shake_build_stub(unsigned char *out, uintptr_t out_a
     }
     const int32_t skip = (int32_t)(n - (jne + 4));
     memcpy(out + jne, &skip, 4);
-    memcpy(out + n, gow3_shake_original, GOW3_SHAKE_HOOK_LENGTH);
-    n += GOW3_SHAKE_HOOK_LENGTH;
+    memcpy(out + n, gr2_shake_original, GR2_SHAKE_HOOK_LENGTH);
+    n += GR2_SHAKE_HOOK_LENGTH;
     const int64_t back = (int64_t)resume - (int64_t)(out_address + n + 5);
     if (back < INT32_MIN || back > INT32_MAX) return 0;
     const int32_t b = (int32_t)back;

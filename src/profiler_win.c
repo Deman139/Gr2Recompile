@@ -1,7 +1,7 @@
-/* Sampling profiler and hang reporter (Windows; GOW3_PROFILE=<report file>).
- * A thread suspends every other thread of the process every GOW3_PROFILE_MS (default 5) ms,
+/* Sampling profiler and hang reporter (Windows; GR2_PROFILE=<report file>).
+ * A thread suspends every other thread of the process every GR2_PROFILE_MS (default 5) ms,
  * records its call stack and resumes it. Host frames unwind through the modules' .pdata;
- * guest frames (no unwind data) follow the rbp chain. Every GOW3_PROFILE_PERIOD (default 5) s
+ * guest frames (no unwind data) follow the rbp chain. Every GR2_PROFILE_PERIOD (default 5) s
  * the report gets, per thread: CPU time used in the window, the share of samples blocked in a
  * kernel wait, the most frequent stacks and the stack seen last (what a frozen thread is
  * doing). Host frames are module+offset: tools/symbolize_profile.py names them. */
@@ -263,7 +263,7 @@ static void write_report(uint64_t window_ms, unsigned round) {
 
 static DWORD WINAPI profiler_main(void *unused) {
     (void)unused;
-    const char *ms = getenv("GOW3_PROFILE_MS"), *period = getenv("GOW3_PROFILE_PERIOD");
+    const char *ms = getenv("GR2_PROFILE_MS"), *period = getenv("GR2_PROFILE_PERIOD");
     uint64_t interval_ns = (uint64_t)(ms ? atof(ms) * 1e6 : 5e6), period_ms = (uint64_t)(period ? atof(period) * 1000 : 5000);
     DWORD self = GetCurrentThreadId();
     uint64_t window_start = GetTickCount64(), last_scan = 0;
@@ -289,7 +289,7 @@ static DWORD WINAPI profiler_main(void *unused) {
 }
 
 void profiler_start(ProfilerDescribe describe_address) {
-    const char *path = getenv("GOW3_PROFILE");
+    const char *path = getenv("GR2_PROFILE");
     if (!path || !path[0]) return;
     report = fopen(path, "w");
     if (!report) { fprintf(stderr, "Profiler: cannot write %s\n", path); return; }

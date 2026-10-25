@@ -7,7 +7,7 @@
 #include "common/assert.h"
 #include "common/logging/log.h"
 #include "core/emulator_settings.h"
-#include "gow3_settings.h"
+#include "gr2_settings.h"
 #include "imgui/renderer/imgui_core.h"
 #include "sdl_window.h"
 #include "video_core/renderer_vulkan/vk_instance.h"
@@ -200,9 +200,9 @@ void Swapchain::FindPresentMode() {
         return;
     }
 
-    // gow3: VSync on is Fifo (no tearing, waits for the display); off is Mailbox when the
+    // gr2: VSync on is Fifo (no tearing, waits for the display); off is Mailbox when the
     // driver has it, else Immediate (tearing allowed), else Fifo.
-    vsync = Gow3Settings::Get().vsync;
+    vsync = Gr2Settings::Get().vsync;
     const auto has = [&](vk::PresentModeKHR mode) { return std::ranges::find(modes, mode) != modes.cend(); };
     present_mode = vsync ? vk::PresentModeKHR::eFifo
                    : has(vk::PresentModeKHR::eMailbox) ? vk::PresentModeKHR::eMailbox
@@ -212,7 +212,7 @@ void Swapchain::FindPresentMode() {
 }
 
 void Swapchain::UpdateVsync() {
-    if (Gow3Settings::Get().vsync == vsync) {
+    if (Gr2Settings::Get().vsync == vsync) {
         return;
     }
     if (const auto result = instance.GetDevice().waitIdle(); result != vk::Result::eSuccess) {
@@ -238,9 +238,9 @@ void Swapchain::SetSurfaceProperties() {
     }
 
     // Select number of images in swap chain, we prefer one buffer in the background to work on
-    // (gow3: two with frame generation, which presents two images per game frame).
+    // (gr2: two with frame generation, which presents two images per game frame).
     image_count = capabilities.minImageCount +
-                  (Gow3Settings::Get().frame_gen != Gow3Settings::FrameGenOff ? 2 : 1);
+                  (Gr2Settings::Get().frame_gen != Gr2Settings::FrameGenOff ? 2 : 1);
     if (capabilities.maxImageCount > 0) {
         image_count = std::min(image_count, capabilities.maxImageCount);
     }

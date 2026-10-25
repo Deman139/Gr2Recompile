@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# gow3: rewrites the FSR 4.1.1 postpass (spirv-dis text of dxil-spirv output) so that its image
+# gr2: rewrites the FSR 4.1.1 postpass (spirv-dis text of dxil-spirv output) so that its image
 # stores go through workgroup memory, like tools/fsr4_post_lds.pl does for FSR 4 v07.
 #
 #   postpass_lds.py < postpass.spvasm > postpass_lds.spvasm   (then spirv-as --target-env spv1.3)
@@ -55,41 +55,41 @@ n = [0]
 
 def new(prefix):
     n[0] += 1
-    return f'%gow3_{prefix}{n[0]}'
+    return f'%gr2_{prefix}{n[0]}'
 
 decl = [
-    '%gow3_u5 = OpConstant %uint 5', '%gow3_u31 = OpConstant %uint 31', '%gow3_u32 = OpConstant %uint 32',
-    '%gow3_u10 = OpConstant %uint 10', '%gow3_u256 = OpConstant %uint 256', '%gow3_u2 = OpConstant %uint 2',
-    '%gow3_u264 = OpConstant %uint 264', '%gow3_u10240 = OpConstant %uint 10240',
-] + [f'%gow3_c{c} = OpConstant %uint {c}' for c in range(10)] + [
-    '%gow3_arr = OpTypeArray %float %gow3_u10240',
-    '%gow3_ptr_arr = OpTypePointer Workgroup %gow3_arr',
-    '%gow3_ptr_f = OpTypePointer Workgroup %float',
-    '%gow3_lds = OpVariable %gow3_ptr_arr Workgroup',
+    '%gr2_u5 = OpConstant %uint 5', '%gr2_u31 = OpConstant %uint 31', '%gr2_u32 = OpConstant %uint 32',
+    '%gr2_u10 = OpConstant %uint 10', '%gr2_u256 = OpConstant %uint 256', '%gr2_u2 = OpConstant %uint 2',
+    '%gr2_u264 = OpConstant %uint 264', '%gr2_u10240 = OpConstant %uint 10240',
+] + [f'%gr2_c{c} = OpConstant %uint {c}' for c in range(10)] + [
+    '%gr2_arr = OpTypeArray %float %gr2_u10240',
+    '%gr2_ptr_arr = OpTypePointer Workgroup %gr2_arr',
+    '%gr2_ptr_f = OpTypePointer Workgroup %float',
+    '%gr2_lds = OpVariable %gr2_ptr_arr Workgroup',
 ]
 preamble = [
-    '%gow3_wgx_p = OpAccessChain %_ptr_Input_uint %gl_WorkGroupID %uint_0',
-    '%gow3_wgx = OpLoad %uint %gow3_wgx_p',
-    '%gow3_wgy_p = OpAccessChain %_ptr_Input_uint %gl_WorkGroupID %uint_1',
-    '%gow3_wgy = OpLoad %uint %gow3_wgy_p',
-    '%gow3_lid_p = OpAccessChain %_ptr_Input_uint %gl_LocalInvocationID %uint_0',
-    '%gow3_lid = OpLoad %uint %gow3_lid_p',
-    '%gow3_x0 = OpShiftLeftLogical %uint %gow3_wgx %gow3_u5',
-    '%gow3_y0 = OpShiftLeftLogical %uint %gow3_wgy %gow3_u5',
+    '%gr2_wgx_p = OpAccessChain %_ptr_Input_uint %gl_WorkGroupID %uint_0',
+    '%gr2_wgx = OpLoad %uint %gr2_wgx_p',
+    '%gr2_wgy_p = OpAccessChain %_ptr_Input_uint %gl_WorkGroupID %uint_1',
+    '%gr2_wgy = OpLoad %uint %gr2_wgy_p',
+    '%gr2_lid_p = OpAccessChain %_ptr_Input_uint %gl_LocalInvocationID %uint_0',
+    '%gr2_lid = OpLoad %uint %gr2_lid_p',
+    '%gr2_x0 = OpShiftLeftLogical %uint %gr2_wgx %gr2_u5',
+    '%gr2_y0 = OpShiftLeftLogical %uint %gr2_wgy %gr2_u5',
 ]
 
 def flush():
-    code = ['OpControlBarrier %gow3_u2 %gow3_u2 %gow3_u264']
+    code = ['OpControlBarrier %gr2_u2 %gr2_u2 %gr2_u264']
     for k in range(4):
         i, lx, ly, px, py = new('i'), new('lx'), new('ly'), new('px'), new('py')
         kk = new('k')
         code += [
             f'{kk} = OpConstant %uint {256 * k}' if False else '',
-            f'{i} = OpIAdd %uint %gow3_lid %gow3_k{k}',
-            f'{lx} = OpBitwiseAnd %uint {i} %gow3_u31',
-            f'{ly} = OpShiftRightLogical %uint {i} %gow3_u5',
-            f'{px} = OpIAdd %uint %gow3_x0 {lx}',
-            f'{py} = OpIAdd %uint %gow3_y0 {ly}',
+            f'{i} = OpIAdd %uint %gr2_lid %gr2_k{k}',
+            f'{lx} = OpBitwiseAnd %uint {i} %gr2_u31',
+            f'{ly} = OpShiftRightLogical %uint {i} %gr2_u5',
+            f'{px} = OpIAdd %uint %gr2_x0 {lx}',
+            f'{py} = OpIAdd %uint %gr2_y0 {ly}',
         ]
         tx, ty, cx, cy, c = new('tx'), new('ty'), new('cx'), new('cy'), new('c')
         code += [
@@ -99,14 +99,14 @@ def flush():
             f'{cy} = OpULessThan %bool {ty} {h2}',
             f'{c} = OpLogicalAnd %bool {cx} {cy}',
         ]
-        then, done = f'%gow3_then{k}', f'%gow3_done{k}'
+        then, done = f'%gr2_then{k}', f'%gr2_done{k}'
         code += [f'OpSelectionMerge {done} None', f'OpBranchConditional {c} {then} {done}', f'{then} = OpLabel']
         base = new('base')
-        code.append(f'{base} = OpIMul %uint {i} %gow3_u10')
+        code.append(f'{base} = OpIMul %uint {i} %gr2_u10')
         vals = []
         for comp in range(10):
             e, p, v = new('e'), new('p'), new('v')
-            code += [f'{e} = OpIAdd %uint {base} %gow3_c{comp}', f'{p} = OpAccessChain %gow3_ptr_f %gow3_lds {e}',
+            code += [f'{e} = OpIAdd %uint {base} %gr2_c{comp}', f'{p} = OpAccessChain %gr2_ptr_f %gr2_lds {e}',
                      f'{v} = OpLoad %float {p}']
             vals.append(v)
         coord = new('coord')
@@ -124,7 +124,7 @@ def flush():
         code += [f'OpBranch {done}', f'{done} = OpLabel']
     return [c for c in code if c]
 
-decl += [f'%gow3_k{k} = OpConstant %uint {256 * k}' for k in range(4)]
+decl += [f'%gr2_k{k} = OpConstant %uint {256 * k}' for k in range(4)]
 
 stores = 0
 in_main = False
@@ -165,14 +165,14 @@ for idx, line in enumerate(lines):
             comps = [t[1], t[2], t[3]]
         lx, ly, row, pix, base = new('slx'), new('sly'), new('srow'), new('spix'), new('sbase')
         out += ['               ' + c for c in [
-            f'{lx} = OpISub %uint {x} %gow3_x0', f'{ly} = OpISub %uint {y} %gow3_y0',
-            f'{row} = OpShiftLeftLogical %uint {ly} %gow3_u5', f'{pix} = OpIAdd %uint {row} {lx}',
-            f'{base} = OpIMul %uint {pix} %gow3_u10']]
+            f'{lx} = OpISub %uint {x} %gr2_x0', f'{ly} = OpISub %uint {y} %gr2_y0',
+            f'{row} = OpShiftLeftLogical %uint {ly} %gr2_u5', f'{pix} = OpIAdd %uint {row} {lx}',
+            f'{base} = OpIMul %uint {pix} %gr2_u10']]
         for c, v in enumerate(comps):
             e, p = new('se'), new('sp')
             out += ['               ' + q for q in [
-                f'{e} = OpIAdd %uint {base} %gow3_c{SLOT[var] + c}',
-                f'{p} = OpAccessChain %gow3_ptr_f %gow3_lds {e}', f'OpStore {p} {v}']]
+                f'{e} = OpIAdd %uint {base} %gr2_c{SLOT[var] + c}',
+                f'{p} = OpAccessChain %gr2_ptr_f %gr2_lds {e}', f'OpStore {p} {v}']]
         stores += 1
         continue
     if in_main and s == f'{merge} = OpLabel':

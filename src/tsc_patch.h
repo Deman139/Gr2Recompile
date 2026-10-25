@@ -4,8 +4,8 @@
  * same clock sceKernelReadTsc returns. rdtsc is 2 bytes, too short for a jump, so neighbouring
  * instructions move with it until the patched window holds a 5-byte jump. Runs at load time,
  * before the image is protected. */
-#ifndef GOW3_TSC_PATCH_H
-#define GOW3_TSC_PATCH_H
+#ifndef GR2_TSC_PATCH_H
+#define GR2_TSC_PATCH_H
 #include <stddef.h>
 #include <stdint.h>
 

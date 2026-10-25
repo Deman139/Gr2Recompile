@@ -3,7 +3,7 @@
  * (GPL-2.0-or-later): every sceAudio3dPortAdvance mixes one granule of the bed and of every
  * object into stereo, and sceAudio3dPortPush plays the mixed granules through an AudioOut port
  * (type 126), which paces the game's audio thread. Objects are panned left/right from their
- * position (shadPS4 mixes them to the center); GOW3_AUDIO3D_PAN=0 turns panning off, -1
+ * position (shadPS4 mixes them to the center); GR2_AUDIO3D_PAN=0 turns panning off, -1
  * swaps the sides. */
 #include "runtime.h"
 #include <math.h>
@@ -168,7 +168,7 @@ static ABI int32_t a3d_initialize(int64_t reserved) {
     pthread_mutex_lock(&ports_lock);
     int was = initialized;
     initialized = 1;
-    const char *pan = getenv("GOW3_AUDIO3D_PAN");
+    const char *pan = getenv("GR2_AUDIO3D_PAN");
     if (pan) pan_mode = atoi(pan) < 0 ? -1 : atoi(pan) > 0 ? 1 : 0;
     pthread_mutex_unlock(&ports_lock);
     if (was) return A3D_NOT_READY;

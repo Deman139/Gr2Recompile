@@ -10,7 +10,7 @@ import graphics_options as g
 class GraphicsOptionsTest(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
-        self.ini = Path(self.temp.name) / 'gow3.ini'
+        self.ini = Path(self.temp.name) / 'gr2.ini'
         self.state = Path(self.temp.name) / 'state.json'
 
     def tearDown(self):
@@ -77,7 +77,7 @@ class GraphicsOptionsTest(unittest.TestCase):
 
     def test_environment(self):
         env = g.environment(g.startup_options({'stale_readback': '0'}))
-        self.assertEqual(env, {'GOW3_DEFERRED_READBACK': '1', 'GOW3_STALE_READBACK': '0', 'GOW3_ASYNC_SHADERS': '1'})
+        self.assertEqual(env, {'GR2_DEFERRED_READBACK': '1', 'GR2_STALE_READBACK': '0', 'GR2_ASYNC_SHADERS': '1'})
 
 
 if __name__ == '__main__':

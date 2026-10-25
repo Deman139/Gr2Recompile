@@ -11,11 +11,12 @@
 #           libSceJson2, libSceRtc, libSceFreeTypeOt, libSceFontFt and libSceFont are used when there.
 # GR2_PROFILE=1: sampling profiler report (where each thread spends its time, every 5 s) in
 #           user/logs/profile-<date>.txt, beside the log, and GPU frame statistics in the log.
-# Other GOW3_* variables (see run.py) pass through; arguments go to the game executable.
+# Other GR2_* variables (see run.py) pass through (the older GOW3_* names too); arguments go to
+# the game executable.
 set -euo pipefail
 cd -- "$(dirname -- "$0")"
-GR2_GAME=${GR2_GAME:-${GOW3_GAME_DIR:-}}
-GR2_SYS_MODULES=${GR2_SYS_MODULES:-${GOW3_SYS_MODULES:-}}
+GR2_GAME=${GR2_GAME:-${GR2_GAME_DIR:-}}
+GR2_SYS_MODULES=${GR2_SYS_MODULES:-}
 if [[ -z $GR2_GAME || ! -f $GR2_GAME/eboot.bin ]]; then
     echo "Set GR2_GAME to the Gravity Rush 2 folder with eboot.bin." >&2; exit 1
 fi
@@ -30,17 +31,17 @@ MINGW*|MSYS*)
     ;;
 *) to_native() { printf '%s\n' "$1"; } ;;
 esac
-export GOW3_GAME_DIR GOW3_SYS_MODULES
-GOW3_GAME_DIR=$(to_native "$GR2_GAME")
-GOW3_SYS_MODULES=$(to_native "$GR2_SYS_MODULES")
+export GR2_GAME_DIR GR2_SYS_MODULES
+GR2_GAME_DIR=$(to_native "$GR2_GAME")
+GR2_SYS_MODULES=$(to_native "$GR2_SYS_MODULES")
 mkdir -p user/logs
 stamp=$(date +%Y%m%d-%H%M%S)
 log=user/logs/gr2-$stamp.log
 if [[ ${GR2_PROFILE:-} == 1 ]]; then
-    export GOW3_PROFILE
-    GOW3_PROFILE=$(to_native "$PWD/user/logs/profile-$stamp.txt")
-    export GOW3_FRAME_STATS=1 GOW3_PERF_DIAG=1
-    echo "Profile: $GOW3_PROFILE"
+    export GR2_PROFILE
+    GR2_PROFILE=$(to_native "$PWD/user/logs/profile-$stamp.txt")
+    export GR2_FRAME_STATS=1 GR2_PERF_DIAG=1
+    echo "Profile: $GR2_PROFILE"
 fi
 echo "Log: $PWD/$log"
 set +e

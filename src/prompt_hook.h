@@ -1,8 +1,8 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later
  * Sites, atlas layout and checks adapted from pearlxcore/KillzoneShadowFall-PC
  * (src/kzsf_prompt_pc_win.h, kzsf_prompt_trace_win.h); hooked here with stubs instead of INT3. */
-#ifndef GOW3_PROMPT_HOOK_H
-#define GOW3_PROMPT_HOOK_H
+#ifndef GR2_PROMPT_HOOK_H
+#define GR2_PROMPT_HOOK_H
 #include <math.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -15,7 +15,7 @@
  * The gameplay button icons are quads cut from a 2048x1024 atlas of 27 PS4 glyphs. A glyph
  * collection (rdi) reaches one of three icon lookups, by button 0xdee8a0, by axis 0xdee930 and by
  * game function 0xdee9c0 (pearlx's trace sites); widgets can hold their own collection and atlas
- * texture, so each distinct atlas gets its PC copy (up to GOW3_PROMPT_ATLASES). +0x18 count (27),
+ * texture, so each distinct atlas gets its PC copy (up to GR2_PROMPT_ATLASES). +0x18 count (27),
  * +0x20 entries (0x30 bytes: +0 button icon, +4 axis, +0x10 rect, +0x28 icon object whose +0x20
  * holds the rect), +0x40 UV quads (0x40 bytes each), +0x50 texture holder (texture first, its
  * vtable at image+0x14e0420, +0x18 width/height). The first time one is seen, the loader draws a
@@ -46,26 +46,26 @@
  * and 0x42d370 (rdi the widget) draws with [+0x340]. A stub at its entry points +0x340 at a
  * sheet's copy when every element is a button with a key, and back at the sheet otherwise. */
 enum {
-    GOW3_PROMPT_ATLAS_WIDTH = 2048, GOW3_PROMPT_ATLAS_HEIGHT = 1024,
-    GOW3_PROMPT_ATLAS_BYTES = GOW3_PROMPT_ATLAS_WIDTH * GOW3_PROMPT_ATLAS_HEIGHT * 4,
-    GOW3_PROMPT_GLYPHS = 27, GOW3_PROMPT_ICONS = 16,
-    GOW3_PROMPT_DRAW = 0xfc4d90, GOW3_PROMPT_ATLASES = 4, GOW3_PROMPT_HOLDERS = 8,
-    GOW3_PROMPT_ENTRY_LENGTH = 6, /* push rbp; mov rbp,rsp; push r15 (draw, function lookup) */
-    GOW3_PROMPT_ATLAS_VTABLE = 0x14e0420,
-    GOW3_PROMPT_NEW = 0x321970, GOW3_PROMPT_CTOR = 0x2cea70, GOW3_PROMPT_TEXTURE_INIT = 0x2d0db0,
-    GOW3_PROMPT_LOOKUPS = 4, GOW3_PROMPT_TEXT_IMAGE = 0x51f4c0, GOW3_PROMPT_TEXTURE_WIDGET = 0x42d370,
-    GOW3_PROMPT_SHEET_MAX = 4096, GOW3_PROMPT_MENU_IMAGES = 64, GOW3_PROMPT_SHEETS = 4,
-    GOW3_PROMPT_MENUS = 4,
+    GR2_PROMPT_ATLAS_WIDTH = 2048, GR2_PROMPT_ATLAS_HEIGHT = 1024,
+    GR2_PROMPT_ATLAS_BYTES = GR2_PROMPT_ATLAS_WIDTH * GR2_PROMPT_ATLAS_HEIGHT * 4,
+    GR2_PROMPT_GLYPHS = 27, GR2_PROMPT_ICONS = 16,
+    GR2_PROMPT_DRAW = 0xfc4d90, GR2_PROMPT_ATLASES = 4, GR2_PROMPT_HOLDERS = 8,
+    GR2_PROMPT_ENTRY_LENGTH = 6, /* push rbp; mov rbp,rsp; push r15 (draw, function lookup) */
+    GR2_PROMPT_ATLAS_VTABLE = 0x14e0420,
+    GR2_PROMPT_NEW = 0x321970, GR2_PROMPT_CTOR = 0x2cea70, GR2_PROMPT_TEXTURE_INIT = 0x2d0db0,
+    GR2_PROMPT_LOOKUPS = 4, GR2_PROMPT_TEXT_IMAGE = 0x51f4c0, GR2_PROMPT_TEXTURE_WIDGET = 0x42d370,
+    GR2_PROMPT_SHEET_MAX = 4096, GR2_PROMPT_MENU_IMAGES = 64, GR2_PROMPT_SHEETS = 4,
+    GR2_PROMPT_MENUS = 4,
 };
 
-typedef struct { uint32_t address; unsigned length; unsigned char bytes[27]; } Gow3PromptCode;
+typedef struct { uint32_t address; unsigned length; unsigned char bytes[27]; } Gr2PromptCode;
 /* The four lookups and the bytes their stubs replay: push rbx; mov r10d,[rdi+0x18] for the
  * button and axis ones, push rbp; mov rbp,rsp; push r15 for the game-function ones. */
-static const struct { uint32_t address; unsigned replay; } gow3_prompt_lookups[GOW3_PROMPT_LOOKUPS] = {
+static const struct { uint32_t address; unsigned replay; } gr2_prompt_lookups[GR2_PROMPT_LOOKUPS] = {
     {0xdee8a0, 5}, {0xdee930, 5}, {0xdee9c0, 6}, {0xdeebd0, 6}};
-static const Gow3PromptCode gow3_prompt_code[] = {
+static const Gr2PromptCode gr2_prompt_code[] = {
     /* The draw: prologue (the 6 bytes its stub replays) and its first stack store. */
-    {GOW3_PROMPT_DRAW, 27, {0x55,0x48,0x89,0xe5,0x41,0x57,0x41,0x56,0x41,0x55,0x41,0x54,0x53,
+    {GR2_PROMPT_DRAW, 27, {0x55,0x48,0x89,0xe5,0x41,0x57,0x41,0x56,0x41,0x55,0x41,0x54,0x53,
         0x48,0x81,0xec,0x18,0x01,0x00,0x00,0x4c,0x89,0x85,0xd8,0xfe,0xff,0xff}},
     {0xdee8a0, 21, {0x53,0x44,0x8b,0x57,0x18,0x45,0x31,0xc0,0x49,0xc7,0xc1,0xf0,0xff,0xff,0xff,
         0x41,0xbb,0xfc,0xff,0xff,0xff}},
@@ -75,23 +75,23 @@ static const Gow3PromptCode gow3_prompt_code[] = {
         0x50,0x4d,0x89,0xc6,0x48,0x89,0x4d,0xd0}},
     {0xdeebd0, 14, {0x55,0x48,0x89,0xe5,0x41,0x57,0x41,0x56,0x41,0x55,0x41,0x54,0x53,0x50}},
     /* The inline image of rich text, and its calls for <icon> and <function-icon>. */
-    {GOW3_PROMPT_TEXT_IMAGE, 20, {0x55,0x48,0x89,0xe5,0x41,0x57,0x41,0x56,0x41,0x55,0x41,0x54,0x53,
+    {GR2_PROMPT_TEXT_IMAGE, 20, {0x55,0x48,0x89,0xe5,0x41,0x57,0x41,0x56,0x41,0x55,0x41,0x54,0x53,
         0x48,0x81,0xec,0x98,0x00,0x00,0x00}},
-    {GOW3_PROMPT_TEXTURE_WIDGET, 20, {0x55,0x48,0x89,0xe5,0x41,0x57,0x41,0x56,0x41,0x55,0x41,0x54,0x53,
+    {GR2_PROMPT_TEXTURE_WIDGET, 20, {0x55,0x48,0x89,0xe5,0x41,0x57,0x41,0x56,0x41,0x55,0x41,0x54,0x53,
         0x48,0x81,0xec,0x18,0x01,0x00,0x00}},
     {0xe7a5ec, 5, {0xe8,0xcf,0x4e,0x6a,0xff}},
     {0xe7a7a9, 5, {0xe8,0x12,0x4d,0x6a,0xff}},
-    {GOW3_PROMPT_NEW, 5, {0xe9,0x5b,0x7a,0x00,0x00}},
-    {GOW3_PROMPT_CTOR, 24, {0x48,0x8d,0x05,0x69,0x24,0x21,0x01,0x48,0x83,0xc0,0x10,0x48,
+    {GR2_PROMPT_NEW, 5, {0xe9,0x5b,0x7a,0x00,0x00}},
+    {GR2_PROMPT_CTOR, 24, {0x48,0x8d,0x05,0x69,0x24,0x21,0x01,0x48,0x83,0xc0,0x10,0x48,
         0x89,0x07,0xb8,0x00,0x00,0x00,0xf8,0x23,0x47,0x08,0x0d,0x00}},
-    {GOW3_PROMPT_TEXTURE_INIT, 24, {0x55,0x48,0x89,0xe5,0x41,0x57,0x41,0x56,0x41,0x55,0x41,0x54,
+    {GR2_PROMPT_TEXTURE_INIT, 24, {0x55,0x48,0x89,0xe5,0x41,0x57,0x41,0x56,0x41,0x55,0x41,0x54,
         0x53,0x48,0x81,0xec,0xf8,0x00,0x00,0x00,0x44,0x89,0x8d,0x40}},
 };
 
 /* The code above is there. */
-static inline int gow3_prompt_code_match(const unsigned char *image, uint64_t size) {
-    for (unsigned i = 0; i < sizeof(gow3_prompt_code) / sizeof(*gow3_prompt_code); ++i) {
-        const Gow3PromptCode *c = &gow3_prompt_code[i];
+static inline int gr2_prompt_code_match(const unsigned char *image, uint64_t size) {
+    for (unsigned i = 0; i < sizeof(gr2_prompt_code) / sizeof(*gr2_prompt_code); ++i) {
+        const Gr2PromptCode *c = &gr2_prompt_code[i];
         if (c->address > size || c->length > size - c->address ||
             memcmp(image + c->address, c->bytes, c->length)) return 0;
     }
@@ -102,7 +102,7 @@ static inline int gow3_prompt_code_match(const unsigned char *image, uint64_t si
  * and restored, then replays `replay` and jumps to `target`. Entered by a CALL or at a function's
  * entry, so rsp is 8 mod 16; seven pushes realign it for the call. In `args` the saved r8 and r9
  * are at [rsp+0x88] and [rsp+0x80], xmm0 at [rsp]. Returns its length. */
-static inline unsigned gow3_prompt_build_stub_args(unsigned char *out, uintptr_t helper,
+static inline unsigned gr2_prompt_build_stub_args(unsigned char *out, uintptr_t helper,
                                                    const unsigned char *args, unsigned args_length,
                                                    const unsigned char *replay, unsigned replay_length,
                                                    uintptr_t target) {
@@ -140,70 +140,70 @@ static inline unsigned gow3_prompt_build_stub_args(unsigned char *out, uintptr_t
 }
 
 /* helper(rdi, rdx, rcx). */
-static inline unsigned gow3_prompt_build_stub(unsigned char *out, uintptr_t helper,
+static inline unsigned gr2_prompt_build_stub(unsigned char *out, uintptr_t helper,
                                               const unsigned char *replay, unsigned replay_length,
                                               uintptr_t target) {
     static const unsigned char args[] = {
         0x48, 0x89, 0xd6,                                   /* mov rsi, rdx */
         0x48, 0x89, 0xca};                                  /* mov rdx, rcx */
-    return gow3_prompt_build_stub_args(out, helper, args, sizeof(args), replay, replay_length, target);
+    return gr2_prompt_build_stub_args(out, helper, args, sizeof(args), replay, replay_length, target);
 }
 
 /* helper(rdi, &r8, &r9): the helper may change the texture and rect the image is added with. */
-static inline unsigned gow3_prompt_build_text_stub(unsigned char *out, uintptr_t helper,
+static inline unsigned gr2_prompt_build_text_stub(unsigned char *out, uintptr_t helper,
                                                    const unsigned char *replay, unsigned replay_length,
                                                    uintptr_t target) {
     static const unsigned char args[] = {
         0x48, 0x8d, 0xb4, 0x24, 0x88, 0x00, 0x00, 0x00,     /* lea rsi, [rsp+0x88] */
         0x48, 0x8d, 0x94, 0x24, 0x80, 0x00, 0x00, 0x00};    /* lea rdx, [rsp+0x80] */
-    return gow3_prompt_build_stub_args(out, helper, args, sizeof(args), replay, replay_length, target);
+    return gr2_prompt_build_stub_args(out, helper, args, sizeof(args), replay, replay_length, target);
 }
 
 /* Reads guest memory without faulting on a bad pointer. */
-typedef int (*Gow3PromptRead)(uintptr_t address, void *out, size_t size);
+typedef int (*Gr2PromptRead)(uintptr_t address, void *out, size_t size);
 /* Key label (kind 1) or mouse button (2 left, 3 right) bound to a prompt icon; 0: keep PS4. */
-typedef int (*Gow3PromptBinding)(unsigned icon, char *label, size_t size);
+typedef int (*Gr2PromptBinding)(unsigned icon, char *label, size_t size);
 /* Creates a width x height RGBA game texture from the pixels; 0 on failure. */
-typedef uint64_t (*Gow3PromptCreate)(const uint32_t *pixels, unsigned width, unsigned height);
+typedef uint64_t (*Gr2PromptCreate)(const uint32_t *pixels, unsigned width, unsigned height);
 
 typedef struct {
     uint64_t original_texture;
     uint64_t holder[9];        /* the game's holder with the PC atlas as its texture */
     /* One quad per glyph with PC art: a button can have several glyphs (pearlx kept one per
      * button, so the others, the reload prompt's among them, stayed PS4). */
-    float uv[GOW3_PROMPT_GLYPHS][16];
+    float uv[GR2_PROMPT_GLYPHS][16];
     unsigned glyphs;
     /* The game's holders of this atlas seen so far (the HUD and the prompts may each have one),
      * each paired with a copy of `holder` for its commands. */
-    uint64_t original_holders[GOW3_PROMPT_HOLDERS];
-    uint64_t pc_holders[GOW3_PROMPT_HOLDERS][9];
+    uint64_t original_holders[GR2_PROMPT_HOLDERS];
+    uint64_t pc_holders[GR2_PROMPT_HOLDERS][9];
     uint32_t supported;        /* icons with PC art */
     /* Rich text holds a texture resource whose +0x18 is the render texture (0x518420 reads its
      * size there), so its images get this one: the original's header, our texture at +0x18. */
     uint64_t resource[4];
-    /* A sheet's copy (Gow3PromptMenu) has no holder to start from: each pc_holders[k] is copied
+    /* A sheet's copy (Gr2PromptMenu) has no holder to start from: each pc_holders[k] is copied
      * from the first command holder claiming it, then flagged ready. */
     int lazy_holders;
-    int holder_ready[GOW3_PROMPT_HOLDERS];
-} Gow3PromptAtlas;
+    int holder_ready[GR2_PROMPT_HOLDERS];
+} Gr2PromptAtlas;
 
 /* Draws the PC atlas over the collection's glyph rectangles and creates it. 1 when ready. */
-static inline int gow3_prompt_prepare(Gow3PromptAtlas *pc, uintptr_t base, uintptr_t collection,
-                                      Gow3PromptRead read, Gow3PromptBinding binding,
-                                      Gow3PromptCreate create) {
+static inline int gr2_prompt_prepare(Gr2PromptAtlas *pc, uintptr_t base, uintptr_t collection,
+                                      Gr2PromptRead read, Gr2PromptBinding binding,
+                                      Gr2PromptCreate create) {
     int32_t count = 0;
     uint64_t entries = 0, quads = 0, source = 0, vtable = 0;
     uint32_t dims[2], flags = 0;
-    if (!read(collection + 0x18, &count, 4) || count != GOW3_PROMPT_GLYPHS ||
+    if (!read(collection + 0x18, &count, 4) || count != GR2_PROMPT_GLYPHS ||
         !read(collection + 0x20, &entries, 8) || !read(collection + 0x40, &quads, 8) ||
         !read(collection + 0x50, &source, 8) || !read(source, &vtable, 8) ||
-        vtable != base + GOW3_PROMPT_ATLAS_VTABLE || !read(source + 8, &flags, 4) ||
+        vtable != base + GR2_PROMPT_ATLAS_VTABLE || !read(source + 8, &flags, 4) ||
         ((flags >> 15) & 255) != 14 || !read(source + 0x18, dims, sizeof(dims)) ||
-        dims[0] != GOW3_PROMPT_ATLAS_WIDTH || dims[1] != GOW3_PROMPT_ATLAS_HEIGHT) return 0;
-    Gow3PromptAtlas atlas;
+        dims[0] != GR2_PROMPT_ATLAS_WIDTH || dims[1] != GR2_PROMPT_ATLAS_HEIGHT) return 0;
+    Gr2PromptAtlas atlas;
     memset(&atlas, 0, sizeof(atlas));
     if (!read(collection + 0x50, atlas.holder, sizeof(atlas.holder))) return 0;
-    uint32_t *pixels = calloc(1, GOW3_PROMPT_ATLAS_BYTES);
+    uint32_t *pixels = calloc(1, GR2_PROMPT_ATLAS_BYTES);
     if (!pixels) return 0;
     for (int i = 0; i < count; ++i) {
         unsigned char item[0x30];
@@ -213,7 +213,7 @@ static inline int gow3_prompt_prepare(Gow3PromptAtlas *pc, uintptr_t base, uintp
         memcpy(&icon, item, 4);
         memcpy(&axis, item + 4, 4);
         memcpy(&object, item + 0x28, 8);
-        if (axis != -1 || icon < 0 || icon >= GOW3_PROMPT_ICONS) continue;
+        if (axis != -1 || icon < 0 || icon >= GR2_PROMPT_ICONS) continue;
         char label[16];
         const int kind = binding((unsigned)icon, label, sizeof(label));
         if (!kind) continue;
@@ -222,26 +222,26 @@ static inline int gow3_prompt_prepare(Gow3PromptAtlas *pc, uintptr_t base, uintp
         float *uv = atlas.uv[atlas.glyphs];
         if (!read(quads + (uintptr_t)i * 0x40, uv, 64)) goto invalid;
         /* The quad must be exactly the rectangle (x, y per corner, two unused floats). */
-        const float w = GOW3_PROMPT_ATLAS_WIDTH, h = GOW3_PROMPT_ATLAS_HEIGHT;
+        const float w = GR2_PROMPT_ATLAS_WIDTH, h = GR2_PROMPT_ATLAS_HEIGHT;
         const float expected[8] = {rect[0] / w, rect[1] / h, rect[2] / w, rect[1] / h,
                                    rect[2] / w, rect[3] / h, rect[0] / w, rect[3] / h};
         for (unsigned v = 0; v < 4; ++v)
             for (unsigned a = 0; a < 2; ++a)
                 if (!isfinite(uv[v * 4 + a]) || fabsf(uv[v * 4 + a] - expected[v * 2 + a]) > 0.000001f)
                     goto invalid;
-        if (!gow3_prompt_art(pixels, GOW3_PROMPT_ATLAS_WIDTH, GOW3_PROMPT_ATLAS_HEIGHT, rect, kind, label))
+        if (!gr2_prompt_art(pixels, GR2_PROMPT_ATLAS_WIDTH, GR2_PROMPT_ATLAS_HEIGHT, rect, kind, label))
             goto invalid;
         atlas.supported |= 1u << icon;
         ++atlas.glyphs;
     }
     if (!atlas.supported) goto invalid;
-    const uint64_t texture = create(pixels, GOW3_PROMPT_ATLAS_WIDTH, GOW3_PROMPT_ATLAS_HEIGHT);
+    const uint64_t texture = create(pixels, GR2_PROMPT_ATLAS_WIDTH, GR2_PROMPT_ATLAS_HEIGHT);
     free(pixels);
     if (!texture) return 0;
     atlas.original_texture = source;
     atlas.holder[0] = texture;
     memset(&atlas.holder[6], 0, 3 * sizeof(uint64_t)); /* no borrowed program pointer or slots */
-    for (unsigned k = 0; k < GOW3_PROMPT_HOLDERS; ++k)
+    for (unsigned k = 0; k < GR2_PROMPT_HOLDERS; ++k)
         memcpy(atlas.pc_holders[k], atlas.holder, sizeof(atlas.holder));
     *pc = atlas;
     return 1;
@@ -252,7 +252,7 @@ invalid:
 
 /* Whether the quad whose UV corners are (u0, v0)-(u1, v1) lies in a glyph with PC art (the HUD
  * may inset or scale its UVs, so its center is tested against each glyph rectangle). */
-static inline int gow3_prompt_has_art(const Gow3PromptAtlas *pc, float u0, float v0, float u1, float v1) {
+static inline int gr2_prompt_has_art(const Gr2PromptAtlas *pc, float u0, float v0, float u1, float v1) {
     const float u = (u0 + u1) * 0.5f, v = (v0 + v1) * 0.5f;
     for (unsigned i = 0; i < pc->glyphs; ++i) {
         const float *g = pc->uv[i];
@@ -264,15 +264,15 @@ static inline int gow3_prompt_has_art(const Gow3PromptAtlas *pc, float u0, float
 
 /* Before a quad is appended to `command` (see above). Returns 1 when the command draws from the
  * PC atlas. Runs for every UI quad, so it reads directly: the append reads the same memory. */
-static inline int gow3_prompt_swap(Gow3PromptAtlas *pc, uintptr_t command, uint64_t size,
+static inline int gr2_prompt_swap(Gr2PromptAtlas *pc, uintptr_t command, uint64_t size,
                                    uintptr_t uv_address) {
     const int32_t width = (int32_t)size, height = (int32_t)(size >> 32);
     if (!command || !uv_address || width <= 0 || height <= 0) return 0;
     const uint64_t holder = *(const uint64_t *)(command + 0x58);
     if (!holder) return 0;
     const float *uv = (const float *)uv_address;
-    const int art = gow3_prompt_has_art(pc, uv[0], uv[1], uv[8], uv[9]);
-    for (unsigned k = 0; k < GOW3_PROMPT_HOLDERS; ++k) {
+    const int art = gr2_prompt_has_art(pc, uv[0], uv[1], uv[8], uv[9]);
+    for (unsigned k = 0; k < GR2_PROMPT_HOLDERS; ++k) {
         if (holder != (uintptr_t)pc->pc_holders[k]) continue;
         if (art) return 1;
         *(uint64_t *)(command + 0x58) = pc->original_holders[k];
@@ -285,9 +285,9 @@ static inline int gow3_prompt_swap(Gow3PromptAtlas *pc, uintptr_t command, uint6
     for (int32_t q = 0; q + 5 < count; q += 6) {
         const float *a = (const float *)(vertices + (size_t)q * 0x24 + 0xc);       /* first corner */
         const float *b = (const float *)(vertices + (size_t)(q + 2) * 0x24 + 0xc); /* opposite one */
-        if (!gow3_prompt_has_art(pc, a[0], a[1], b[0], b[1])) return 0;
+        if (!gr2_prompt_has_art(pc, a[0], a[1], b[0], b[1])) return 0;
     }
-    for (unsigned k = 0; k < GOW3_PROMPT_HOLDERS; ++k) {
+    for (unsigned k = 0; k < GR2_PROMPT_HOLDERS; ++k) {
         uint64_t expected = 0;
         if (__atomic_compare_exchange_n(&pc->original_holders[k], &expected, holder, 0, __ATOMIC_ACQ_REL,
                                         __ATOMIC_ACQUIRE)) {
@@ -310,10 +310,10 @@ static inline int gow3_prompt_swap(Gow3PromptAtlas *pc, uintptr_t command, uint6
 
 /* A rich-text image cut from the atlas (<function-icon>; render: its resource's render texture,
  * rect: its int rectangle): whether the glyph has PC art, for pc->resource. */
-static inline int gow3_prompt_text_texture(const Gow3PromptAtlas *pc, uint64_t render, const int32_t *rect) {
+static inline int gr2_prompt_text_texture(const Gr2PromptAtlas *pc, uint64_t render, const int32_t *rect) {
     if (render != pc->original_texture) return 0;
-    const float w = GOW3_PROMPT_ATLAS_WIDTH, h = GOW3_PROMPT_ATLAS_HEIGHT;
-    return gow3_prompt_has_art(pc, rect[0] / w, rect[1] / h, rect[2] / w, rect[3] / h);
+    const float w = GR2_PROMPT_ATLAS_WIDTH, h = GR2_PROMPT_ATLAS_HEIGHT;
+    return gr2_prompt_has_art(pc, rect[0] / w, rect[1] / h, rect[2] / w, rect[3] / h);
 }
 
 /* The EIconType of an ImageMap image id, -1 for other images. The legends use the ELegendButton
@@ -321,7 +321,7 @@ static inline int gow3_prompt_text_texture(const Gow3PromptAtlas *pc, uint64_t r
  * confirms), any case. Other images (the menu tabs, the death screen) name a button inside a
  * longer id: each word of it (split at non-alphanumerics) is tried against the names no
  * decoration would use, a shoulder or stick name also as a word's start (l1button). */
-static inline int gow3_prompt_legend_icon(const char *id) {
+static inline int gr2_prompt_legend_icon(const char *id) {
     static const struct { const char *id; int icon, in_words; } ids[] = {
         {"up", 12, 0}, {"down", 14, 0}, {"left", 15, 0}, {"right", 13, 0}, {"ok", 2, 0}, {"cancel", 1, 0},
         {"select", 9, 0}, {"start", 8, 0},
@@ -357,17 +357,17 @@ static inline int gow3_prompt_legend_icon(const char *id) {
 typedef struct {
     /* One copy per sheet its buttons are cut from (the legends' and larger ones for the menu
      * tabs and the death screen): original_texture the sheet, uv the button rectangles. */
-    Gow3PromptAtlas sheet[GOW3_PROMPT_SHEETS];
+    Gr2PromptAtlas sheet[GR2_PROMPT_SHEETS];
     unsigned sheets, images;
-    uint64_t image[GOW3_PROMPT_MENU_IMAGES];
-    unsigned char image_sheet[GOW3_PROMPT_MENU_IMAGES];
-    int32_t rect[GOW3_PROMPT_MENU_IMAGES][4];
+    uint64_t image[GR2_PROMPT_MENU_IMAGES];
+    unsigned char image_sheet[GR2_PROMPT_MENU_IMAGES];
+    int32_t rect[GR2_PROMPT_MENU_IMAGES][4];
     char others[256];          /* ids of the images left as they are, for the log */
     char buttons[768];         /* id@x,y of the buttons with keys, for the log */
-} Gow3PromptMenu;
+} Gr2PromptMenu;
 
 /* Reads a Decima String (pointer to {refcount, hash, length, characters at +0x10}). */
-static inline int gow3_prompt_read_string(uint64_t string, char *out, size_t size, Gow3PromptRead read) {
+static inline int gr2_prompt_read_string(uint64_t string, char *out, size_t size, Gr2PromptRead read) {
     int32_t length = 0;
     if (!string || !read(string + 8, &length, 4) || length <= 0 || (size_t)length >= size ||
         !read(string + 0x10, out, (size_t)length)) return 0;
@@ -376,23 +376,23 @@ static inline int gow3_prompt_read_string(uint64_t string, char *out, size_t siz
 }
 
 /* Prepares `menu` for the ImageMap at `map`. 1 when at least one button got a key. */
-static inline int gow3_prompt_prepare_menu(Gow3PromptMenu *menu, uint64_t map, Gow3PromptRead read,
-                                           Gow3PromptBinding binding, Gow3PromptCreate create) {
+static inline int gr2_prompt_prepare_menu(Gr2PromptMenu *menu, uint64_t map, Gr2PromptRead read,
+                                           Gr2PromptBinding binding, Gr2PromptCreate create) {
     int32_t count = 0;
     uint64_t list = 0;
     if (!read(map + 0x18, &count, 4) || count <= 0 || count > 256 || !read(map + 0x20, &list, 8)) return 0;
-    Gow3PromptMenu result;
+    Gr2PromptMenu result;
     memset(&result, 0, sizeof(result));
-    uint32_t *pixels[GOW3_PROMPT_SHEETS] = {NULL};
-    uint32_t dims[GOW3_PROMPT_SHEETS][2];
-    uint64_t resources[GOW3_PROMPT_SHEETS] = {0};
-    for (int i = 0; i < count && result.images < GOW3_PROMPT_MENU_IMAGES; ++i) {
+    uint32_t *pixels[GR2_PROMPT_SHEETS] = {NULL};
+    uint32_t dims[GR2_PROMPT_SHEETS][2];
+    uint64_t resources[GR2_PROMPT_SHEETS] = {0};
+    for (int i = 0; i < count && result.images < GR2_PROMPT_MENU_IMAGES; ++i) {
         uint64_t item[2], resource = 0, render = 0;
         char id[64], label[16];
         int32_t rect[4];
         if (!read(list + (uintptr_t)i * 16, item, sizeof(item)) || !item[1] ||
-            !gow3_prompt_read_string(item[0], id, sizeof(id), read)) continue;
-        const int icon = gow3_prompt_legend_icon(id);
+            !gr2_prompt_read_string(item[0], id, sizeof(id), read)) continue;
+        const int icon = gr2_prompt_legend_icon(id);
         if (icon < 0) {
             const size_t used = strlen(result.others);
             if (used + strlen(id) + 2 < sizeof(result.others))
@@ -404,18 +404,18 @@ static inline int gow3_prompt_prepare_menu(Gow3PromptMenu *menu, uint64_t map, G
         unsigned s = 0;
         while (s < result.sheets && result.sheet[s].original_texture != render) ++s;
         if (s == result.sheets) { /* a sheet not seen yet */
-            if (s == GOW3_PROMPT_SHEETS || !read(render + 0x18, dims[s], sizeof(dims[s])) || !dims[s][0] ||
-                !dims[s][1] || dims[s][0] > GOW3_PROMPT_SHEET_MAX || dims[s][1] > GOW3_PROMPT_SHEET_MAX ||
+            if (s == GR2_PROMPT_SHEETS || !read(render + 0x18, dims[s], sizeof(dims[s])) || !dims[s][0] ||
+                !dims[s][1] || dims[s][0] > GR2_PROMPT_SHEET_MAX || dims[s][1] > GR2_PROMPT_SHEET_MAX ||
                 !(pixels[s] = calloc(1, (size_t)dims[s][0] * dims[s][1] * 4))) continue;
             result.sheet[s].original_texture = render;
             resources[s] = resource;
             ++result.sheets;
         }
-        Gow3PromptAtlas *sheet = &result.sheet[s];
+        Gr2PromptAtlas *sheet = &result.sheet[s];
         const int kind = binding((unsigned)icon, label, sizeof(label));
-        if (!kind || sheet->glyphs == GOW3_PROMPT_GLYPHS || rect[0] < 0 || rect[1] < 0 || rect[2] <= rect[0] ||
+        if (!kind || sheet->glyphs == GR2_PROMPT_GLYPHS || rect[0] < 0 || rect[1] < 0 || rect[2] <= rect[0] ||
             rect[3] <= rect[1] || (uint32_t)rect[2] > dims[s][0] || (uint32_t)rect[3] > dims[s][1] ||
-            !gow3_prompt_art(pixels[s], dims[s][0], dims[s][1], rect, kind, label)) continue;
+            !gr2_prompt_art(pixels[s], dims[s][0], dims[s][1], rect, kind, label)) continue;
         float *uv = sheet->uv[sheet->glyphs++];
         uv[0] = (float)rect[0] / dims[s][0]; uv[1] = (float)rect[1] / dims[s][1];
         uv[8] = (float)rect[2] / dims[s][0]; uv[9] = (float)rect[3] / dims[s][1];
@@ -431,7 +431,7 @@ static inline int gow3_prompt_prepare_menu(Gow3PromptMenu *menu, uint64_t map, G
     }
     int ready = 0;
     for (unsigned s = 0; s < result.sheets; ++s) {
-        Gow3PromptAtlas *sheet = &result.sheet[s];
+        Gr2PromptAtlas *sheet = &result.sheet[s];
         const uint64_t texture = sheet->glyphs ? create(pixels[s], dims[s][0], dims[s][1]) : 0;
         free(pixels[s]);
         if (!texture || !read(resources[s], sheet->resource, 0x18)) {
@@ -450,9 +450,9 @@ static inline int gow3_prompt_prepare_menu(Gow3PromptMenu *menu, uint64_t map, G
 
 /* The button image cut from `render` at `rect` (by value: some tags pass a copy of the image's
  * rectangle): the resource of its sheet's copy, or 0. */
-static inline uint64_t gow3_prompt_menu_image(const Gow3PromptMenu *menu, uint64_t render, const int32_t *rect) {
+static inline uint64_t gr2_prompt_menu_image(const Gr2PromptMenu *menu, uint64_t render, const int32_t *rect) {
     for (unsigned i = 0; i < menu->images; ++i) {
-        const Gow3PromptAtlas *sheet = &menu->sheet[menu->image_sheet[i]];
+        const Gr2PromptAtlas *sheet = &menu->sheet[menu->image_sheet[i]];
         if (sheet->glyphs && sheet->original_texture == render && !memcmp(menu->rect[i], rect, 16))
             return (uintptr_t)sheet->resource;
     }
@@ -460,8 +460,8 @@ static inline uint64_t gow3_prompt_menu_image(const Gow3PromptMenu *menu, uint64
 }
 /* Whether every element of a TextureWidget's resource drawn from `sheet` (width x height) is a
  * button with a key (see above). */
-static inline int gow3_prompt_widget_art(const Gow3PromptAtlas *sheet, uint32_t width, uint32_t height,
-                                         uint64_t resource, Gow3PromptRead read) {
+static inline int gr2_prompt_widget_art(const Gr2PromptAtlas *sheet, uint32_t width, uint32_t height,
+                                         uint64_t resource, Gr2PromptRead read) {
     int32_t count = 0;
     uint64_t elements = 0;
     if (!sheet->glyphs || !width || !height || !read(resource + 0x38, &count, 4) || count <= 0 || count > 16 ||
@@ -471,7 +471,7 @@ static inline int gow3_prompt_widget_art(const Gow3PromptAtlas *sheet, uint32_t 
         int32_t rect[4];
         if (!read(element + 0x10, &image_rect, 8)) return 0;
         if (!read(image_rect ? image_rect + 0x20 : element, rect, sizeof(rect)) ||
-            !gow3_prompt_has_art(sheet, (float)rect[0] / width, (float)rect[1] / height, (float)rect[2] / width,
+            !gr2_prompt_has_art(sheet, (float)rect[0] / width, (float)rect[1] / height, (float)rect[2] / width,
                                  (float)rect[3] / height)) return 0;
     }
     return 1;

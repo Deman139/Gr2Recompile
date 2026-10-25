@@ -10,11 +10,11 @@
 
 namespace Vulkan {
 
-/// gow3 (Killzone): flips presented so far (VideoOutDriver::Flip); the frame clock of
+/// gr2 (Killzone): flips presented so far (VideoOutDriver::Flip); the frame clock of
 /// PendingDrawPolicy.
-inline std::atomic<std::uint64_t> gow3_flip_count{0};
+inline std::atomic<std::uint64_t> gr2_flip_count{0};
 
-/// gow3 (Killzone): what a draw does when its shaders or pipeline are still compiling.
+/// gr2 (Killzone): what a draw does when its shaders or pipeline are still compiling.
 ///
 /// Waiting (PipelineCache::WaitForPending) stalls the GPU thread for the whole compile (~200 ms
 /// each on a first play: the stutter of the first missions). Dropping the draw instead is
@@ -30,16 +30,16 @@ inline std::atomic<std::uint64_t> gow3_flip_count{0};
 /// full-resolution targets (at least 90% of the widest target drawn lately: G-buffer, light
 /// accumulation) may drop: the half-resolution ones (ambient occlusion, volumetrics,
 /// reflections) blend in earlier frames, so a dropped draw left dark cuts for a while.
-/// GOW3_SMART_PENDING=0 always waits; GOW3_PENDING_STREAK / GOW3_PENDING_MIN_WIDTH tune it;
-/// GOW3_PENDING_DROP_DEPTH=1 lets depth-only draws drop too.
+/// GR2_SMART_PENDING=0 always waits; GR2_PENDING_STREAK / GR2_PENDING_MIN_WIDTH tune it;
+/// GR2_PENDING_DROP_DEPTH=1 lets depth-only draws drop too.
 /// Used on the GPU command thread only.
 class PendingDrawPolicy {
 public:
     PendingDrawPolicy() {
-        enabled = Env("GOW3_SMART_PENDING", 1) != 0;
-        streak_needed = static_cast<std::uint32_t>(Env("GOW3_PENDING_STREAK", 12));
-        min_width = static_cast<std::uint32_t>(Env("GOW3_PENDING_MIN_WIDTH", 640));
-        drop_depth = Env("GOW3_PENDING_DROP_DEPTH", 0) != 0;
+        enabled = Env("GR2_SMART_PENDING", 1) != 0;
+        streak_needed = static_cast<std::uint32_t>(Env("GR2_PENDING_STREAK", 12));
+        min_width = static_cast<std::uint32_t>(Env("GR2_PENDING_MIN_WIDTH", 640));
+        drop_depth = Env("GR2_PENDING_DROP_DEPTH", 0) != 0;
     }
 
     /// Records a draw into `target` (color or depth address, `width` pixels) during `frame`.

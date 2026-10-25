@@ -19,10 +19,10 @@ uint32_t key_size = 2;
 
 void SetCache(const char* value) {
 #ifdef _WIN32
-    _putenv_s("GOW3_PIPELINE_BINARIES", value);
+    _putenv_s("GR2_PIPELINE_BINARIES", value);
 #else
-    if (*value) setenv("GOW3_PIPELINE_BINARIES", value, 1);
-    else unsetenv("GOW3_PIPELINE_BINARIES");
+    if (*value) setenv("GR2_PIPELINE_BINARIES", value, 1);
+    else unsetenv("GR2_PIPELINE_BINARIES");
 #endif
 }
 

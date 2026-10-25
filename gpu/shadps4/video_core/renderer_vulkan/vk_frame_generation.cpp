@@ -7,7 +7,7 @@
 #include <cstdlib>
 
 #include "ffx_vk_fsr3_3_1_5_bridge.h"
-#include "gow3_settings.h"
+#include "gr2_settings.h"
 #include "video_core/host_shaders/frame_gen_inputs_comp.h"
 #include "video_core/host_shaders/frame_gen_ui_comp.h"
 #include "video_core/renderer_vulkan/vk_dlss.h"
@@ -34,22 +34,22 @@ int DlssMaxCount() {
 
 FrameGenerator::FrameGenerator(const Instance& instance_, Scheduler& scheduler_)
     : instance{instance_}, scheduler{scheduler_} {
-    auto& settings = Gow3Settings::Get();
+    auto& settings = Gr2Settings::Get();
     const int dlss_max = DlssMaxCount();
     settings.dlssg_max_multiplier = dlss_max + 1;
-    if (settings.frame_gen == Gow3Settings::FrameGenDlss && dlss_max < 1) {
+    if (settings.frame_gen == Gr2Settings::FrameGenDlss && dlss_max < 1) {
         const Dlss* dlss = Dlss::Get();
         std::printf("Frame generation: DLSS Frame Generation unavailable (%s); using FSR 3.1\n",
-                    !dlss ? "gow3_dlss.dll and nvngx_dlss.dll are not installed"
+                    !dlss ? "gr2_dlss.dll and nvngx_dlss.dll are not installed"
                     : !dlss->Available() ? "DLSS is unavailable on this system"
                                          : "GeForce RTX 40 or newer, nvngx_dlssg.dll and a "
                                            "current driver are needed");
         settings.frame_gen_problem = "DLSS Frame Generation needs a GeForce RTX 40 or newer";
-        settings.frame_gen = Gow3Settings::FrameGenFsr3;
+        settings.frame_gen = Gr2Settings::FrameGenFsr3;
     }
-    if (settings.frame_gen != Gow3Settings::FrameGenOff) {
+    if (settings.frame_gen != Gr2Settings::FrameGenOff) {
         std::printf("Frame generation: %s, %ux\n",
-                    settings.frame_gen == Gow3Settings::FrameGenDlss ? "DLSS" : "FSR 3.1",
+                    settings.frame_gen == Gr2Settings::FrameGenDlss ? "DLSS" : "FSR 3.1",
                     GeneratedCount() + 1);
     }
 }
@@ -62,13 +62,13 @@ FrameGenerator::~FrameGenerator() {
 }
 
 bool FrameGenerator::Wanted() const {
-    return Gow3Settings::Get().frame_gen != Gow3Settings::FrameGenOff;
+    return Gr2Settings::Get().frame_gen != Gr2Settings::FrameGenOff;
 }
 
 u32 FrameGenerator::GeneratedCount() const {
-    const auto& settings = Gow3Settings::Get();
-    if (settings.frame_gen != Gow3Settings::FrameGenDlss) {
-        return settings.frame_gen == Gow3Settings::FrameGenOff ? 0 : 1;
+    const auto& settings = Gr2Settings::Get();
+    if (settings.frame_gen != Gr2Settings::FrameGenDlss) {
+        return settings.frame_gen == Gr2Settings::FrameGenOff ? 0 : 1;
     }
     return u32(std::clamp(settings.frame_gen_multiplier.load() - 1, 1,
                           std::min<int>(DlssMaxCount(), int(MaxGenerated))));
@@ -473,14 +473,14 @@ u32 FrameGenerator::Generate(vk::CommandBuffer cmdbuf, vk::Image color, vk::Imag
         ffxVkFsr3_3_1_6FrameGenerationContextRetireFrame(fsr3, fsr3_pending.front().frame_id);
         fsr3_pending.pop_front();
     }
-    const int provider = Gow3Settings::Get().frame_gen;
+    const int provider = Gr2Settings::Get().frame_gen;
     const int slot_index = selected;
     selected = -1;
     if (provider != last_provider) {
         last_provider = provider;
         reset = true;
     }
-    if (provider == Gow3Settings::FrameGenOff || slot_index < 0 || outputs.empty() || !width ||
+    if (provider == Gr2Settings::FrameGenOff || slot_index < 0 || outputs.empty() || !width ||
         !height) {
         // A frame without the game's scene (menu, movie, loading): start over afterwards.
         reset = true;
@@ -547,7 +547,7 @@ u32 FrameGenerator::Generate(vk::CommandBuffer cmdbuf, vk::Image color, vk::Imag
     }
     cmdbuf.pipelineBarrier2({.imageMemoryBarrierCount = used, .pImageMemoryBarriers = to_write.data()});
     u32 generated = 0;
-    if (provider == Gow3Settings::FrameGenDlss) {
+    if (provider == Gr2Settings::FrameGenDlss) {
         const u32 count = std::min(GeneratedCount(), used);
         generated = GenerateDlss(cmdbuf, slot, color, color_view, with_hudless ? hudless : vk::Image{},
                                  with_hudless ? hudless_view : vk::ImageView{}, width, height,
@@ -612,7 +612,7 @@ u32 FrameGenerator::GenerateFsr3(vk::CommandBuffer cmdbuf, const Slot& slot, vk:
         if (ffxVkFsr3_3_1_6FrameGenerationContextCreate(&create, &fsr3) !=
             FFX_VK_FSR3_3_1_6_FRAMEGEN_OK) {
             fsr3 = nullptr;
-            Fail(Gow3Settings::FrameGenFsr3, "FSR 3.1 frame generation context creation failed");
+            Fail(Gr2Settings::FrameGenFsr3, "FSR 3.1 frame generation context creation failed");
             return 0;
         }
         fsr3_width = width;
@@ -707,7 +707,7 @@ u32 FrameGenerator::Fsr3Failed(const char* step, int result) {
     // One bad frame skips its generated frame; only a run of them turns frame generation off.
     std::printf("Frame generation: FSR 3.1 %s failed (code %d), frame skipped\n", step, result);
     if (++fsr3_failures >= 30) {
-        Fail(Gow3Settings::FrameGenFsr3, step[0] == 'p'
+        Fail(Gr2Settings::FrameGenFsr3, step[0] == 'p'
                                              ? "FSR 3.1 frame generation (prepare) failed"
                                              : "FSR 3.1 frame generation (dispatch) failed");
         fsr3_failures = 0;
@@ -722,7 +722,7 @@ u32 FrameGenerator::GenerateDlss(vk::CommandBuffer cmdbuf, const Slot& slot, vk:
                                  std::span<const Output> outputs, u32 count) {
     Dlss* dlss = Dlss::Get();
     if (!dlss || dlss->FrameGenMaxCount() < 1 || !count) {
-        Fail(Gow3Settings::FrameGenDlss, "DLSS Frame Generation is unavailable");
+        Fail(Gr2Settings::FrameGenDlss, "DLSS Frame Generation is unavailable");
         return 0;
     }
     const Dlss::FrameGenDesc desc{width, height, ColorFormat, slot.width, slot.height};
@@ -731,7 +731,7 @@ u32 FrameGenerator::GenerateDlss(vk::CommandBuffer cmdbuf, const Slot& slot, vk:
         scheduler.WaitSubmitted();
         dlss->ReleaseFrameGen();
         if (!dlss->CreateFrameGen(cmdbuf, desc)) {
-            Fail(Gow3Settings::FrameGenDlss, "DLSS Frame Generation feature creation failed");
+            Fail(Gr2Settings::FrameGenDlss, "DLSS Frame Generation feature creation failed");
             return 0;
         }
         reset = true;
@@ -766,7 +766,7 @@ u32 FrameGenerator::GenerateDlss(vk::CommandBuffer cmdbuf, const Slot& slot, vk:
                         .index = index,
                     });
         if (!ok) {
-            Fail(Gow3Settings::FrameGenDlss, "DLSS Frame Generation evaluation failed");
+            Fail(Gr2Settings::FrameGenDlss, "DLSS Frame Generation evaluation failed");
             return 0;
         }
     }
@@ -774,10 +774,10 @@ u32 FrameGenerator::GenerateDlss(vk::CommandBuffer cmdbuf, const Slot& slot, vk:
 }
 
 void FrameGenerator::Fail(int provider, const char* reason) {
-    const bool dlss = provider == Gow3Settings::FrameGenDlss;
+    const bool dlss = provider == Gr2Settings::FrameGenDlss;
     std::printf("Frame generation: %s; %s\n", reason, dlss ? "using FSR 3.1" : "off");
-    Gow3Settings::Get().frame_gen_problem = reason;
-    Gow3Settings::Get().frame_gen = dlss ? Gow3Settings::FrameGenFsr3 : Gow3Settings::FrameGenOff;
+    Gr2Settings::Get().frame_gen_problem = reason;
+    Gr2Settings::Get().frame_gen = dlss ? Gr2Settings::FrameGenFsr3 : Gr2Settings::FrameGenOff;
     reset = true;
 }
 

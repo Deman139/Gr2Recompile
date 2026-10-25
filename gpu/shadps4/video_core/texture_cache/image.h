@@ -34,11 +34,11 @@ enum ImageFlagBits : u32 {
     GpuModified = 1 << 3, ///< Contents have been modified from the GPU
     Registered = 1 << 6,  ///< True when the image is registered
     Picked = 1 << 7,      ///< Temporary flag to mark the image as picked
-    Aliased = 1 << 8,     ///< gow3: another image has the same guest address (alias_states)
+    Aliased = 1 << 8,     ///< gr2: another image has the same guest address (alias_states)
 };
 DECLARE_ENUM_FLAG_OPERATORS(ImageFlagBits)
 
-/// gow3: prints the host images alive (count, bytes, largest formats) for the VRAM report.
+/// gr2: prints the host images alive (count, bytes, largest formats) for the VRAM report.
 void ReportImageMemory();
 
 struct UniqueImage {
@@ -139,10 +139,10 @@ struct Image {
 
 public:
     struct BackingImage;
-    // gow3: fields every binding of the image reads, together ahead of the large ImageInfo
+    // gr2: fields every binding of the image reads, together ahead of the large ImageInfo
     // (they were spread over several cache lines: one miss each per texture per draw).
     ImageFlagBits flags = ImageFlagBits::Dirty;
-    /// gow3: the stencil aspect was set to 0 on the first upload (uploads skip stencil).
+    /// gr2: the stencil aspect was set to 0 on the first upload (uploads skip stencil).
     bool stencil_initialized = false;
     struct {
         u32 is_bound : 1;
@@ -157,19 +157,19 @@ public:
         u32 depth_target : 1;
         u32 vo_surface : 1;
     } usage{};
-    bool scene_proxy = false; ///< gow3: SceneTargets holds a reduced-size proxy of it
+    bool scene_proxy = false; ///< gr2: SceneTargets holds a reduced-size proxy of it
     VAddr track_addr = 0;
     VAddr track_addr_end = 0;
     VAddr guest_begin = 0; ///< info.guest_address
     VAddr guest_end = 0;   ///< info.guest_address + info.guest_size
     BackingImage* backing{};
-    /// gow3: gc tick of the last LRU touch; skips the LRU list (a cache miss) when current.
+    /// gr2: gc tick of the last LRU touch; skips the LRU list (a cache miss) when current.
     mutable u64 lru_touched_tick = ~0ULL;
     u64 tick_accessed_last{};
     ImageId depth_id{};
     u64 depth_uid{};
     u64 image_uid{};
-    /// gow3: order of the last GPU write, to sync images sharing memory (texture_cache.h).
+    /// gr2: order of the last GPU write, to sync images sharing memory (texture_cache.h).
     u64 alias_generation{};
 
     ImageInfo info;
@@ -191,7 +191,7 @@ public:
         std::vector<State> subresource_states;
         boost::container::small_vector<ImageViewInfo, 4> image_view_infos;
         boost::container::small_vector<ImageViewId, 4> image_view_ids;
-        u32 last_view = 0; ///< gow3: index of the view FindView returned last
+        u32 last_view = 0; ///< gr2: index of the view FindView returned last
         u32 num_samples;
     };
     std::deque<BackingImage> backing_images;

@@ -10,7 +10,7 @@
  *
  * So every function import the host serves is called through a stub: when the thread's stack
  * pointer is outside its Windows stack (a fiber context, or any other guest-provided stack), the
- * call moves to a per-thread host stack of GOW3_HOST_STACK_KB (default 1024; 0 = off) with the
+ * call moves to a per-thread host stack of GR2_HOST_STACK_KB (default 1024; 0 = off) with the
  * first 16 stack arguments copied, and the TEB stack bounds describe that stack during the
  * call (exceptions, stack probes). Nested calls (guest callbacks from host code) are already on
  * it and go straight through. Calls on the thread's own stack pay one bounds check.
@@ -180,10 +180,10 @@ __asm__(
 
 void runtime_hoststack_init(void) {
     if (slot != TLS_OUT_OF_INDEXES || stack_size) return;
-    const char *env = getenv("GOW3_HOST_STACK_KB");
+    const char *env = getenv("GR2_HOST_STACK_KB");
     unsigned long long kb = env ? strtoull(env, NULL, 0) : 1024;
     if (!kb) {
-        printf("Runtime: host calls run on the caller's stack (GOW3_HOST_STACK_KB=0)\n");
+        printf("Runtime: host calls run on the caller's stack (GR2_HOST_STACK_KB=0)\n");
         stack_size = 1; /* initialized, off */
         return;
     }

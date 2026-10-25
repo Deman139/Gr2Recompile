@@ -1,13 +1,13 @@
-#ifndef GOW3_RUNTIME_H
-#define GOW3_RUNTIME_H
+#ifndef GR2_RUNTIME_H
+#define GR2_RUNTIME_H
 #include <stdint.h>
 #include <stddef.h>
 #ifdef _WIN32
 #include "compat_win.h"
-/* No signals on Windows: the exception handler resumes the thread in gow3_longjmp
- * (gpu/shim/gow3_toggles.h uses the same buffer type). */
-typedef gow3_jmp_buf sigjmp_buf;
-#define sigsetjmp(buffer, save) gow3_setjmp(buffer)
+/* No signals on Windows: the exception handler resumes the thread in gr2_longjmp
+ * (gpu/shim/gr2_toggles.h uses the same buffer type). */
+typedef gr2_jmp_buf sigjmp_buf;
+#define sigsetjmp(buffer, save) gr2_setjmp(buffer)
 #else
 #include <setjmp.h>
 #endif
@@ -71,7 +71,7 @@ uintptr_t runtime_sema_resolve(const char *name);
 void runtime_sema_report(void);
 unsigned runtime_sema_waiters(uint32_t id);
 uintptr_t runtime_time_resolve(const char *name);
-/* 1 when the guest TSC runs at the PS4 rate (default; GOW3_PS4_TSC=0 turns it off): inline rdtsc
+/* 1 when the guest TSC runs at the PS4 rate (default; GR2_PS4_TSC=0 turns it off): inline rdtsc
  * must then be patched (tsc_patch.c) to return (host TSC * *runtime_tsc_multiplier()) >> 32. */
 int runtime_tsc_calibrate(void);
 const uint64_t *runtime_tsc_multiplier(void);

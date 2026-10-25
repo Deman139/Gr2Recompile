@@ -7,7 +7,7 @@
 #include "common/assert.h"
 #include "common/bit_field.h"
 #include "video_core/amdgpu/pixel_format.h"
-#include "video_core/amdgpu/gow3_msaa.h"
+#include "video_core/amdgpu/gr2_msaa.h"
 #include "video_core/amdgpu/tiling.h"
 
 namespace AmdGpu {
@@ -217,7 +217,7 @@ struct Image {
             .a = CompSwizzle(dst_sel_w),
         };
         if (DataFormat(data_format) == DataFormat::Format4_4_4_4) {
-            // gow3 (Killzone): 4_4_4_4 is viewed as B4G4R4A4, so guest X/Y/Z/W live in host
+            // gr2 (Killzone): 4_4_4_4 is viewed as B4G4R4A4, so guest X/Y/Z/W live in host
             // A/R/G/B. RemapSwizzle's rotation is the color-export (write) direction; a sampled
             // view needs the inverse, or alpha comes from green (transparent white texels turned
             // opaque magenta: square around the knife crosshair).
@@ -288,7 +288,7 @@ struct Image {
 
     ImageType GetType() const noexcept {
         if (NoMsaa() && IsGuestMsaa()) {
-            // gow3: see gow3_msaa.h; shaders then fetch it without a sample index.
+            // gr2: see gr2_msaa.h; shaders then fetch it without a sample index.
             return static_cast<ImageType>(type) == ImageType::Color2DMsaa ? ImageType::Color2D
                                                                           : ImageType::Color2DArray;
         }

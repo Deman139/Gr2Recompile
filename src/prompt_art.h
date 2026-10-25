@@ -1,15 +1,15 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later
  * Prompt artwork from pearlxcore/KillzoneShadowFall-PC (src/kzsf_prompt_art.h): drawn in code,
  * monochrome; no game textures or fonts. */
-#ifndef GOW3_PROMPT_ART_H
-#define GOW3_PROMPT_ART_H
+#ifndef GR2_PROMPT_ART_H
+#define GR2_PROMPT_ART_H
 #include <stdint.h>
 #include <stddef.h>
 #include <string.h>
 
 /* Five-bit rows, seven rows per letter/digit. Small labels are scaled to fit
  * the native icon rectangle rather than extending over the action text. */
-static const uint8_t gow3_prompt_letters[36][7]={
+static const uint8_t gr2_prompt_letters[36][7]={
  {14,17,17,31,17,17,17},{30,17,17,30,17,17,30},{14,17,16,16,16,17,14},
  {30,17,17,17,17,17,30},{31,16,16,30,16,16,31},{31,16,16,30,16,16,16},
  {14,17,16,23,17,17,15},{17,17,17,31,17,17,17},{31,4,4,4,4,4,31},
@@ -24,15 +24,15 @@ static const uint8_t gow3_prompt_letters[36][7]={
  {14,16,16,30,17,17,14},{31,1,2,4,8,8,8},{14,17,17,14,17,17,14},
  {14,17,17,15,1,1,14}
 };
-static inline unsigned gow3_prompt_font_row(char c,unsigned row) {
-    if(c>='A' && c<='Z') return gow3_prompt_letters[c-'A'][row];
-    if(c>='0' && c<='9') return gow3_prompt_letters[26+c-'0'][row];
+static inline unsigned gr2_prompt_font_row(char c,unsigned row) {
+    if(c>='A' && c<='Z') return gr2_prompt_letters[c-'A'][row];
+    if(c>='0' && c<='9') return gr2_prompt_letters[26+c-'0'][row];
     if(c=='-') return row==3 ? 14u : 0u;
     if(c=='.') return row==6 ? 4u : 0u;
     return 0;
 }
 
-static inline int gow3_prompt_art(uint32_t *pixels,unsigned width,unsigned height,
+static inline int gr2_prompt_art(uint32_t *pixels,unsigned width,unsigned height,
                                   const int32_t rect[4],int kind,const char *label) {
     if(!pixels || !rect || rect[0]<0 || rect[1]<0 || rect[2]<=rect[0] || rect[3]<=rect[1] ||
        (unsigned)rect[2]>width || (unsigned)rect[3]>height || kind<1 || kind>3) return 0;
@@ -53,7 +53,7 @@ static inline int gow3_prompt_art(uint32_t *pixels,unsigned width,unsigned heigh
         int left=rect[0]+(w-tw)/2,top=rect[1]+(h-th)/2;
         for(int y=0;y<th;++y) for(int x=0;x<tw;++x) {
             unsigned sx=(unsigned)(x*logical/tw),row=(unsigned)(y*7/th);
-            if(sx%6<5 && (gow3_prompt_font_row(label[sx/6],row) & (1u<<(4-sx%6))))
+            if(sx%6<5 && (gr2_prompt_font_row(label[sx/6],row) & (1u<<(4-sx%6))))
                 pixels[(size_t)(top+y)*width+left+x]=UINT32_C(0xffffffff);
         }
     } else {

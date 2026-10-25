@@ -1,0 +1,5 @@
+#include <winuser.h>
+CREATEPROCESS_MANIFEST_RESOURCE_ID RT_MANIFEST "gr2-probe.manifest"
+// The first icon is the one Explorer and the game window show. The repository's own icon, so a
+// fresh clone builds (the game-cover gr2.ico is made from the player's dump and not committed).
+1 ICON "../../launcher/gr2_port.ico"

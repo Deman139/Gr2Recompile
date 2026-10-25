@@ -8,7 +8,7 @@ It mirrors runtime_resolve() in src/runtime.c:
   2. RuntimeExport tables, matched by symbol name through src/import_names.inc
      (the NID#library key must be listed there, or runtime_symbol() returns NULL);
   3. the GPU library's LIB_FUNCTION registrations (matched by NID only).
-libScePosix imports share libkernel's keys. Libraries named in GOW3_NATIVE_LIBS are never
+libScePosix imports share libkernel's keys. Libraries named in GR2_NATIVE_LIBS are never
 resolved by the host when the linked module exports them (runtime_native_lib()).
 
 usage: check_imports.py out/link.json [--aerolib path/to/shadPS4/src/core/aerolib/aerolib.inl]

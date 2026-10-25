@@ -82,8 +82,8 @@ private:
     Scheduler& scheduler;
 
     std::array<Ring, NUM_TYPES> rings;
-    u64 keep_blocks = 0; ///< gow3: ring blocks never trimmed
-    u64 keep_device_blocks = 0; ///< gow3: same for the device-local ring
+    u64 keep_blocks = 0; ///< gr2: ring blocks never trimmed
+    u64 keep_device_blocks = 0; ///< gr2: same for the device-local ring
     std::array<std::vector<LargeBuffer>, NUM_TYPES> large_caches;
     u64 frame = 0;
 };

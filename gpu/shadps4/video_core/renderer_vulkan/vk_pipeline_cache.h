@@ -54,8 +54,8 @@ struct Program {
 
     Shader::Info info;
     ModuleList modules{};
-    size_t last_used = 0; ///< gow3: permutation of the previous lookup, compared first
-    /// gow3: `info` as translated, for draw-preparation workers (they must not read `info`,
+    size_t last_used = 0; ///< gr2: permutation of the previous lookup, compared first
+    /// gr2: `info` as translated, for draw-preparation workers (they must not read `info`,
     /// whose user data the GPU thread rewrites every draw). Guarded by programs_mutex.
     std::unique_ptr<Shader::Info> info_template;
     std::shared_ptr<AsyncShaderCompilation> pending;
@@ -70,7 +70,7 @@ struct Program {
         modules.emplace_back(module, std::move(spec));
     }
 
-    /// gow3: the pending compilation is the program's first: `info` is not translated yet.
+    /// gr2: the pending compilation is the program's first: `info` is not translated yet.
     [[nodiscard]] bool PendingInitial() const;
 
     void InsertPermut(vk::ShaderModule module, Shader::StageSpecialization&& spec,
@@ -92,10 +92,10 @@ union Regs;
 }
 
 namespace Vulkan {
-/// gow3: source line where the last graphics key refresh failed (vk_pipeline_cache.cpp).
+/// gr2: source line where the last graphics key refresh failed (vk_pipeline_cache.cpp).
 int PipelineFailLine();
 
-/// gow3: state of one graphics/compute pipeline selection. The GPU thread owns one
+/// gr2: state of one graphics/compute pipeline selection. The GPU thread owns one
 /// (PipelineCache::sel); draw-preparation workers use their own with their register copies.
 struct PipelineSelection {
     const AmdGpu::Regs* regs{};
@@ -106,14 +106,14 @@ struct PipelineSelection {
     GraphicsPipelineKey graphics_key{};
     bool motion = false;
     bool compilation_pending = false;
-    /// gow3: with compilation_pending, the program whose compilation the lookup waits for
+    /// gr2: with compilation_pending, the program whose compilation the lookup waits for
     /// (null when its job could not be queued yet).
     struct Program* pending_program = nullptr;
     DrawIndirectParams draw_indirect_params{};
     struct PrepWorker* worker{}; ///< set: read-only selection for a draw-preparation worker
 };
 
-/// gow3: a draw-preparation worker's own program state (see vk_draw_prep.h).
+/// gr2: a draw-preparation worker's own program state (see vk_draw_prep.h).
 struct PrepWorker {
     struct Stage {
         const Program* program;
@@ -136,10 +136,10 @@ public:
                            AmdGpu::Liverpool* liverpool, u32 sparse_page_shift);
     ~PipelineCache();
 
-    /// Loads the pipelines of earlier sessions. gow3: called by the presenter once the window
+    /// Loads the pipelines of earlier sessions. gr2: called by the presenter once the window
     /// can show a loading screen; `progress(done, total)` follows the pipelines read.
     void WarmUp(const std::function<void(u32 done, u32 total, const char* stage)>& progress = {});
-    /// gow3: the same load on low-priority threads while the game runs; the GPU thread takes
+    /// gr2: the same load on low-priority threads while the game runs; the GPU thread takes
     /// the results a few at a time (PumpWarmUp). False when it cannot (zip archive store).
     bool StartBackgroundWarmUp();
     void StartOnDemand();
@@ -153,29 +153,29 @@ public:
     const GraphicsPipeline* GetGraphicsPipeline(const DrawIndirectParams params = {},
                                                 const PreparedDraw* prepared = nullptr);
 
-    /// gow3: worker side of draw preparation: selects the pipeline key for `sel.regs` without
+    /// gr2: worker side of draw preparation: selects the pipeline key for `sel.regs` without
     /// creating anything. False when a program or permutation does not exist yet.
     bool PrepareGraphicsPipeline(PipelineSelection& sel);
 
-    /// gow3: GPU-thread side: the pipeline for a prepared draw after checking that registers
+    /// gr2: GPU-thread side: the pipeline for a prepared draw after checking that registers
     /// and flattened user data match; null to take the regular path.
     const GraphicsPipeline* TryPreparedPipeline(const PreparedDraw& prepared);
 
-    /// gow3: the prepared draw the last GetGraphicsPipeline used, or null (regular path).
-    /// gow3 (Killzone): waits for the compilation the last GetGraphicsPipeline lacked (its
+    /// gr2: the prepared draw the last GetGraphicsPipeline used, or null (regular path).
+    /// gr2 (Killzone): waits for the compilation the last GetGraphicsPipeline lacked (its
     /// shader, or its pipeline) and publishes it; false when that lookup did not fail for a
     /// compilation. A draw that found its pipeline still compiling is retried after this
     /// instead of being dropped: Killzone draws each glyph of its text cache once, so dropped
     /// draws left letters missing for the rest of the session. Only that job is awaited, not
     /// the whole queue (a new area queues dozens: waiting for all stalled for seconds); when
-    /// its job is not queued yet (queue full), the oldest one. GOW3_TARGETED_WAIT=0 waits for
+    /// its job is not queued yet (queue full), the oldest one. GR2_TARGETED_WAIT=0 waits for
     /// every compilation in flight as before.
     bool WaitForPending();
-    /// gow3: the last GetGraphicsPipeline returned null because something it needs is compiling.
+    /// gr2: the last GetGraphicsPipeline returned null because something it needs is compiling.
     [[nodiscard]] bool LookupPending() const noexcept {
         return lookup_pending;
     }
-    /// gow3: the last pipeline lookup failed because a shader or pipeline is still compiling.
+    /// gr2: the last pipeline lookup failed because a shader or pipeline is still compiling.
     [[nodiscard]] bool CompilationPending() const noexcept {
         return sel.compilation_pending;
     }
@@ -209,7 +209,7 @@ private:
     void PublishGraphics(bool wait = false);
     void FinishCompilations();
     void SeedWorkerCaches();
-    /// gow3: the driver's VkPipelineCache blob kept between sessions (vk_pipeline_cache.cpp).
+    /// gr2: the driver's VkPipelineCache blob kept between sessions (vk_pipeline_cache.cpp).
     struct DriverCacheSaver;
     void StartDriverCacheSaver();
     void StopDriverCacheSaver();
@@ -217,7 +217,7 @@ private:
     bool SaveDriverCacheUnchecked();
     DriverCacheSaver* driver_saver = nullptr;
     bool CheckCacheProfile();
-    /// gow3: index for a new permutation of `program`: past every index the cache on disk holds.
+    /// gr2: index for a new permutation of `program`: past every index the cache on disk holds.
     size_t NewPermutationIndex(const Program& program, u64 hash) const;
     struct BackgroundWarmup;
     struct WarmStage;
@@ -257,17 +257,17 @@ private:
     std::unique_ptr<AsyncCompiler> compiler, capture_compiler;
     std::vector<vk::UniquePipelineCache> worker_pipeline_caches;
     bool worker_caches_seeded = false;
-    /// gow3: GOW3_PARALLEL_WARMUP: WarmUp builds the cached pipelines on these threads.
+    /// gr2: GR2_PARALLEL_WARMUP: WarmUp builds the cached pipelines on these threads.
     struct WarmupPool;
     WarmupPool* warmup_pool = nullptr;
     std::mutex warmup_results_mutex;
     std::vector<std::pair<GraphicsPipelineKey, std::unique_ptr<GraphicsPipeline>>> warmup_graphics;
     std::vector<std::pair<ComputePipelineKey, std::unique_ptr<ComputePipeline>>> warmup_compute;
-    /// gow3: StartBackgroundWarmUp state; owned here, deleted by StopWarmUp.
+    /// gr2: StartBackgroundWarmUp state; owned here, deleted by StopWarmUp.
     BackgroundWarmup* background = nullptr;
     tsl::robin_map<GraphicsPipelineKey, std::shared_ptr<AsyncGraphicsCompilation>> pending_graphics;
     tsl::robin_map<size_t, std::unique_ptr<Program>> program_cache;
-    /// gow3 (iss_pc a88bbc1): per program hash, one past the highest permutation index of the
+    /// gr2 (iss_pc a88bbc1): per program hash, one past the highest permutation index of the
     /// .spv files on disk. A permutation compiled in game takes an index from here, never one
     /// that a cached permutation not yet loaded (background warm-up) already names: its .meta
     /// would be overwritten with another specialization, and the .key files that name it would
@@ -275,11 +275,11 @@ private:
     /// CheckCacheProfile.
     std::unordered_map<u64, size_t> next_permutation;
     std::vector<Program*> pending_programs;
-    /// gow3: exclusive for program/permutation insertions, shared for worker lookups.
+    /// gr2: exclusive for program/permutation insertions, shared for worker lookups.
     std::shared_mutex programs_mutex;
     u64 prepared_hits = 0, prepared_misses = 0;
     const PreparedDraw* used_prepared = nullptr;
-    bool lookup_pending = false; ///< gow3: see LookupPending
+    bool lookup_pending = false; ///< gr2: see LookupPending
     tsl::robin_map<ComputePipelineKey, std::unique_ptr<ComputePipeline>> compute_pipelines;
     tsl::robin_map<GraphicsPipelineKey, std::unique_ptr<GraphicsPipeline>> graphics_pipelines;
     PipelineSelection sel{}; ///< GPU thread selection state

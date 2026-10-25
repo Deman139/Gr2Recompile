@@ -34,7 +34,7 @@ public:
         return opened;
     }
     void FinishPreload();
-    /// gow3: removes every cached blob (an incompatible cache is rebuilt, not ignored).
+    /// gr2: removes every cached blob (an incompatible cache is rebuilt, not ignored).
     void Clear();
 
     bool Save(BlobType type, const std::string& name, std::vector<u8>&& data);
@@ -43,22 +43,22 @@ public:
     void Load(BlobType type, const std::string& name, std::vector<u8>& data);
     void Load(BlobType type, const std::string& name, std::vector<u32>& data);
 
-    /// gow3: `stop` returning true ends the walk early (background warm-up at exit).
+    /// gr2: `stop` returning true ends the walk early (background warm-up at exit).
     void ForEachBlob(BlobType type, const std::function<void(std::vector<u8>&& data)>& func,
                      const std::function<bool()>& stop = {});
-    /// gow3: ForEachBlob that also passes each blob's name (no extension).
+    /// gr2: ForEachBlob that also passes each blob's name (no extension).
     void ForEachNamedBlob(
         BlobType type,
         const std::function<void(std::string_view name, std::vector<u8>&& data)>& func,
         const std::function<bool()>& stop = {});
-    /// gow3: deletes one blob (loose files only; the zip archive is left as it is).
+    /// gr2: deletes one blob (loose files only; the zip archive is left as it is).
     void Remove(BlobType type, std::string_view name);
-    /// gow3: blobs are plain files written beside and renamed into place, so other threads
+    /// gr2: blobs are plain files written beside and renamed into place, so other threads
     /// may read them while the IO thread saves (the zip archive cannot).
     [[nodiscard]] bool ConcurrentReads() const;
-    /// gow3: number of blobs ForEachBlob visits (the loading screen's total).
+    /// gr2: number of blobs ForEachBlob visits (the loading screen's total).
     size_t CountBlobs(BlobType type);
-    /// gow3: the name (no extension) of every blob of a type, without reading it.
+    /// gr2: the name (no extension) of every blob of a type, without reading it.
     void ForEachBlobName(BlobType type, const std::function<void(std::string_view name)>& func);
 
 private:

@@ -5,12 +5,12 @@
 One window: the game folder (CUSA04943 version 01.11 from the player's own dump, or the base game
 plus the 01.11 update folder), the PS4 system modules the port links (decrypted .sprx files from
 the player's console), port graphics options (settings.ini, shared with the in-game menu),
-keyboard, mouse and controller mapping (GOW3_KEY_MAP / GOW3_PAD_MAP) and shortcuts to saves,
+keyboard, mouse and controller mapping (GR2_KEY_MAP / GR2_PAD_MAP) and shortcuts to saves,
 screenshots, logs and the cache.
 
 Everything the port writes lives in user/ beside the launcher:
   user/launcher.json   launcher choices (folders, language, mappings)
-  user/settings.ini    port options (GOW3_CONFIG; the in-game menu writes it too)
+  user/settings.ini    port options (GR2_CONFIG; the in-game menu writes it too)
   user/out/            the prepared game image (rebuilt at every start)
   user/ps4/            the console's user folder: savedata, screenshots, shader cache
   user/logs/<time>/    one folder per game start (game.log, errors.log)
@@ -44,7 +44,7 @@ APP_NAME = 'Gravity Rush 2'
 TITLE_ID = 'CUSA04943'  # Europe: the release the port is built and tested on
 GAME_VERSION = '01.11'
 REPO_URL = 'https://github.com/Deman139/Gr2Recompile'
-USER_DIR = Path(os.environ.get('GR2_USER_DIR', PORT_DIR / 'user'))
+USER_DIR = Path(os.environ.get('GR2_PORT_USER_DIR', PORT_DIR / 'user'))
 LAUNCHER_FILE = USER_DIR / 'launcher.json'
 SETTINGS_FILE = USER_DIR / 'settings.ini'
 PS4_DIR = USER_DIR / 'ps4'
@@ -751,7 +751,7 @@ def save_graphics(values):
 
 
 def map_spec(mapping, column):
-    """GOW3_KEY_MAP / GOW3_PAD_MAP for the buttons that differ from the defaults."""
+    """GR2_KEY_MAP / GR2_PAD_MAP for the buttons that differ from the defaults."""
     defaults = {name: (key, pad) for name, _, key, pad in BUTTONS}
     return ','.join(f'{name}={value}' for name, value in mapping.items()
                     if name in defaults and value != defaults[name][column])
@@ -763,34 +763,34 @@ def game_environment(settings, graphics, needs_update):
     menu_key = settings.get('menu_key') if settings.get('menu_key') in MENU_KEYS else 'F12'
     readback = settings.get('readback_max_kb', 2048)
     env.update({
-        'GOW3_GAME_DIR': settings['game_dir'],
-        'GOW3_SYS_MODULES': settings['modules_dir'],
-        'GOW3_DATA_DIR': str(USER_DIR),
-        'GOW3_USER_DIR': str(PS4_DIR),
-        'GOW3_CONFIG': str(SETTINGS_FILE),
-        'GOW3_WINDOW_SIZE': settings.get('window_size') or '1920x1080',
-        'GOW3_KEY_MAP': map_spec(settings['key_map'], 0),
-        'GOW3_PAD_MAP': map_spec(settings['pad_map'], 1),
-        'GOW3_MOUSE_LOOK': '1' if settings.get('mouse_look', True) else '0',
-        'GOW3_MENU_KEY': menu_key,
-        'GOW3_READBACK_MAX_KB': str(int(readback)) if readback else '0',
-        'GOW3_SMART_PENDING': '1' if settings.get('smart_pending', True) else '0',
-        'GOW3_GS_OUTLINE': '1' if settings.get('gs_outline') else '0',
-        'GOW3_PRECOMPILE': os.environ.get('GOW3_PRECOMPILE', '1' if settings.get('precompile', False) else '0'),
+        'GR2_GAME_DIR': settings['game_dir'],
+        'GR2_SYS_MODULES': settings['modules_dir'],
+        'GR2_DATA_DIR': str(USER_DIR),
+        'GR2_USER_DIR': str(PS4_DIR),
+        'GR2_CONFIG': str(SETTINGS_FILE),
+        'GR2_WINDOW_SIZE': settings.get('window_size') or '1920x1080',
+        'GR2_KEY_MAP': map_spec(settings['key_map'], 0),
+        'GR2_PAD_MAP': map_spec(settings['pad_map'], 1),
+        'GR2_MOUSE_LOOK': '1' if settings.get('mouse_look', True) else '0',
+        'GR2_MENU_KEY': menu_key,
+        'GR2_READBACK_MAX_KB': str(int(readback)) if readback else '0',
+        'GR2_SMART_PENDING': '1' if settings.get('smart_pending', True) else '0',
+        'GR2_GS_OUTLINE': '1' if settings.get('gs_outline') else '0',
+        'GR2_PRECOMPILE': os.environ.get('GR2_PRECOMPILE', '1' if settings.get('precompile', False) else '0'),
         # An "Apply and restart" in the game ends it with code 75: game_ended starts it again.
-        'GOW3_LAUNCHER_RESTART': '1',
-        'GOW3_DISCORD': '0',
+        'GR2_LAUNCHER_RESTART': '1',
+        'GR2_DISCORD': '0',
         'PYTHONIOENCODING': 'utf-8',
     })
     if settings.get('no_gpu_copies'):
         # As GR2fork (readbacks = false, readbackLinearImages = false): no image or buffer
         # readbacks. With them, the 60 FPS patch scattered tree foliage.
-        env['GOW3_READBACK_LINEAR'] = '0'
-        env['GOW3_READBACKS'] = '0'
+        env['GR2_READBACK_LINEAR'] = '0'
+        env['GR2_READBACKS'] = '0'
     if needs_update and settings.get('update_dir'):
-        env['GOW3_PATCH_DIR'] = settings['update_dir']
+        env['GR2_PATCH_DIR'] = settings['update_dir']
     else:
-        env.pop('GOW3_PATCH_DIR', None)
+        env.pop('GR2_PATCH_DIR', None)
     return env
 
 
@@ -1647,15 +1647,15 @@ class Launcher:
         prune_logs()
         env = game_environment(self.settings, self.graphics, needs_update)
         if extra_dmem:
-            env['GOW3_DMEM_MB'] = str(DMEM_RETAIL_MB + extra_dmem)
+            env['GR2_DMEM_MB'] = str(DMEM_RETAIL_MB + extra_dmem)
         if self.settings.get('perf_diag'):
-            env.update(GOW3_FRAME_STATS='1', GOW3_PERF_DIAG='1', GOW3_PROFILE=str(run_dir / 'profile.txt'),
-                       GOW3_FRAME_CAPTURE_KEY='1', GOW3_CAPTURE_DIR=str(run_dir / 'captures'))
-        if resolution != '1920x1080' and env.get('GOW3_READBACK_MAX_KB', '0') != '0':
+            env.update(GR2_FRAME_STATS='1', GR2_PERF_DIAG='1', GR2_PROFILE=str(run_dir / 'profile.txt'),
+                       GR2_FRAME_CAPTURE_KEY='1', GR2_CAPTURE_DIR=str(run_dir / 'captures'))
+        if resolution != '1920x1080' and env.get('GR2_READBACK_MAX_KB', '0') != '0':
             # Render targets grow with the resolution: the readback size limit grows with them, so
             # the same images (those the CPU reads) are still copied back.
             w, h = (int(v) for v in resolution.split('x'))
-            env['GOW3_READBACK_MAX_KB'] = str(int(int(env['GOW3_READBACK_MAX_KB']) * w * h / (1920 * 1080)))
+            env['GR2_READBACK_MAX_KB'] = str(int(int(env['GR2_READBACK_MAX_KB']) * w * h / (1920 * 1080)))
         try:
             out = open(run_dir / 'game.log', 'w', encoding='utf-8')
             err = open(run_dir / 'errors.log', 'w', encoding='utf-8')

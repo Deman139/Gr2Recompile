@@ -1,14 +1,14 @@
 /* libScePad on SDL3 gamepads, with a keyboard fallback. SDL events are pumped
  * by the window thread (gpu/shim/window.cpp); here state is only sampled.
  *
- * Default keyboard layout (GOW3_KEY_MAP changes the buttons, see apply_button_map):
+ * Default keyboard layout (GR2_KEY_MAP changes the buttons, see apply_button_map):
  *   WASD left stick, mouse camera (left button R2, right button L2), Space Cross, C Circle,
  *   R Square, Q Triangle, 1 L1, 3 R1, LShift L3 (sprint), F R3, arrow keys d-pad,
  *   Enter Options, Tab left touchpad (photo mode), Backspace right touchpad (pause menu),
  *   Delete held + mouse = finger on the touchpad (the OWL's commands). */
 #define _GNU_SOURCE
 #include "runtime.h"
-#include "gpu/gow3gpu.h"
+#include "gpu/gr2gpu.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -135,8 +135,8 @@ static void integrate_orientation(const float w[3], uint64_t now) {
 
 static void sample_motion(SDL_Gamepad *g, PadData *d) {
     float w[3]={0,0,0}, a[3]={0,0,0};
-    static int allowed=-1; /* GOW3_PAD_MOTION=0: report a still pad */
-    if (allowed<0) { const char *e=getenv("GOW3_PAD_MOTION"); allowed=!e || *e!='0'; }
+    static int allowed=-1; /* GR2_PAD_MOTION=0: report a still pad */
+    if (allowed<0) { const char *e=getenv("GR2_PAD_MOTION"); allowed=!e || *e!='0'; }
     if (!allowed) g=NULL;
     const int have_gyro=g && motion.enabled && motion.gyro && SDL_GetGamepadSensorData(g,SDL_SENSOR_GYRO,w,3);
     if (g && motion.enabled && motion.accel && SDL_GetGamepadSensorData(g,SDL_SENSOR_ACCEL,a,3)) {
@@ -177,8 +177,8 @@ static SDL_Gamepad *current_gamepad(void) {
     return gamepad;
 }
 /* Button sources: a host button or key and the PS4 button it presses. The defaults below can be
- * changed per PS4 button with GOW3_PAD_MAP (gamepad) and GOW3_KEY_MAP (keyboard), e.g.
- * GOW3_KEY_MAP="cross=Q,square=Left Shift" or GOW3_PAD_MAP="cross=b,circle=a": comma-separated
+ * changed per PS4 button with GR2_PAD_MAP (gamepad) and GR2_KEY_MAP (keyboard), e.g.
+ * GR2_KEY_MAP="cross=Q,square=Left Shift" or GR2_PAD_MAP="cross=b,circle=a": comma-separated
  * <ps4 button>=<SDL key or gamepad button name>. A mapped PS4 button loses its default sources.
  * touchpad_left (alias touchpad) and touchpad_right are the two sides of the touchpad click:
  * photo mode and the pause menu. Back/View (Share on a DualSense) is the right click, and with
@@ -229,17 +229,17 @@ static int key_source(const char *name) {
     return (int)SDL_GetScancodeFromName(name);
 }
 
-/* Mouse look (GOW3_MOUSE_LOOK=1, launcher): the mouse turns the camera as the right stick, its
+/* Mouse look (GR2_MOUSE_LOOK=1, launcher): the mouse turns the camera as the right stick, its
  * buttons fire (left: R2) and aim (right: L2) besides the keys. Sensitivity and invert Y come
- * live from the settings (launcher, in-game menu: gow3gpu_input_settings). The game reads a
+ * live from the settings (launcher, in-game menu: gr2gpu_input_settings). The game reads a
  * stick, so the mouse's filtered speed becomes a deflection: past the game's dead zone as soon as
- * it moves, full at GOW3_MOUSE_FULL_SPEED pixels per second (sensitivity 1), along a curve
- * (GOW3_MOUSE_CURVE) that keeps small motions fine. */
+ * it moves, full at GR2_MOUSE_FULL_SPEED pixels per second (sensitivity 1), along a curve
+ * (GR2_MOUSE_CURVE) that keeps small motions fine. */
 static struct { int look; float dead_zone, full_speed, curve; } mouse_cfg;
 static float mouse_vx, mouse_vy;
 static uint64_t mouse_last_us, wheel_until_us[2];
 /* The live controls, refreshed at every pad sample. */
-static Gow3InputSettings input={.mouse_sens=1.0f,.mouse_turn_boost=6.0f,.quick_menu=1};
+static Gr2InputSettings input={.mouse_sens=1.0f,.mouse_turn_boost=6.0f,.quick_menu=1};
 static float env_float(const char *name, float fallback) {
     const char *v=getenv(name);
     float f=v && *v ? (float)atof(v) : fallback;
@@ -249,14 +249,14 @@ static void load_mouse(void) {
     static int loaded;
     if (loaded) return;
     loaded=1;
-    const char *look=getenv("GOW3_MOUSE_LOOK");
+    const char *look=getenv("GR2_MOUSE_LOOK");
     mouse_cfg.look=look && look[0]=='1';
-    mouse_cfg.dead_zone=env_float("GOW3_MOUSE_DEAD_ZONE",0.16f);
-    mouse_cfg.full_speed=env_float("GOW3_MOUSE_FULL_SPEED",2400.0f);
-    mouse_cfg.curve=env_float("GOW3_MOUSE_CURVE",0.65f);
+    mouse_cfg.dead_zone=env_float("GR2_MOUSE_DEAD_ZONE",0.16f);
+    mouse_cfg.full_speed=env_float("GR2_MOUSE_FULL_SPEED",2400.0f);
+    mouse_cfg.curve=env_float("GR2_MOUSE_CURVE",0.65f);
     if (mouse_cfg.dead_zone>0.9f) mouse_cfg.dead_zone=0.9f;
-    gow3gpu_mouse_configure(mouse_cfg.look);
-    gow3gpu_input_settings(&input);
+    gr2gpu_mouse_configure(mouse_cfg.look);
+    gr2gpu_input_settings(&input);
     if (mouse_cfg.look) printf("Runtime: mouse look on (sensitivity %.2f%s)\n",input.mouse_sens,input.mouse_invert ? ", inverted Y" : "");
 }
 static uint8_t mouse_axis(float speed) {
@@ -267,36 +267,36 @@ static uint8_t mouse_axis(float speed) {
     const int v=(int)(128.0f+(speed<0 ? -x : x)*127.5f);
     return (uint8_t)(v<0 ? 0 : v>255 ? 255 : v);
 }
-/* Direct mouse look (with mouse look on, unless GOW3_MOUSE_DIRECT=0; src/mouse_hook.h): the game's
+/* Direct mouse look (with mouse look on, unless GR2_MOUSE_DIRECT=0; src/mouse_hook.h): the game's
  * look input routine is wrapped and the mouse's speed is added to its x/y, linear and without the
  * stick's dead zone, curve or limit (x = speed * sensitivity / full speed, so sensitivity 1
- * matches the emulated stick's full deflection at GOW3_MOUSE_FULL_SPEED). The mouse then no
+ * matches the emulated stick's full deflection at GR2_MOUSE_FULL_SPEED). The mouse then no
  * longer moves the emulated right stick; the gamepad's stick still goes through the game. Games
  * without that routine keep the emulated stick. */
 static volatile int mouse_direct;
-/* Speed for direct look (pixels per second, invert applied), smoothed over GOW3_MOUSE_DIRECT_SMOOTH
+/* Speed for direct look (pixels per second, invert applied), smoothed over GR2_MOUSE_DIRECT_SMOOTH
  * seconds (0.012): raw per-sample motion stutters (samples without a mouse report turn by 0, the
  * next by double) and lets tiny vertical jitter tilt the view; a shorter window than the stick's
  * 25 ms keeps flicks crisp. */
 static float mouse_raw_vx, mouse_raw_vy;
-/* Last mouse motion, last on-foot limits call (gow3_mouse_look_limits) and its speed factor. */
+/* Last mouse motion, last on-foot limits call (gr2_mouse_look_limits) and its speed factor. */
 static volatile uint64_t mouse_moved_us, mouse_limits_us;
 static volatile float mouse_speed_boost;
-int gow3_mouse_direct_wanted(void) {
-    const char *look=getenv("GOW3_MOUSE_LOOK"), *direct=getenv("GOW3_MOUSE_DIRECT");
+int gr2_mouse_direct_wanted(void) {
+    const char *look=getenv("GR2_MOUSE_LOOK"), *direct=getenv("GR2_MOUSE_DIRECT");
     return look && look[0]=='1' && !(direct && direct[0]=='0');
 }
-void gow3_mouse_direct_status(int ready) { mouse_direct=ready; }
+void gr2_mouse_direct_status(int ready) { mouse_direct=ready; }
 static float mouse_direct_axis(const char *name) {
     const char *v=getenv(name);
     return v && *v ? (float)atof(v) : 1.0f;
 }
-ABI void gow3_mouse_look_adjust(float *x, float *y) {
-    /* GOW3_MOUSE_DIRECT_X/_Y scale (and flip, if negative) each axis; 1 by default. The routine's
+ABI void gr2_mouse_look_adjust(float *x, float *y) {
+    /* GR2_MOUSE_DIRECT_X/_Y scale (and flip, if negative) each axis; 1 by default. The routine's
      * y grows upwards (the stick's byte grows downwards), hence the minus. */
     static float sign_x, sign_y;
     if (!mouse_direct || (mouse_raw_vx==0.0f && mouse_raw_vy==0.0f)) return;
-    if (sign_x==0.0f) { sign_x=mouse_direct_axis("GOW3_MOUSE_DIRECT_X"); sign_y=mouse_direct_axis("GOW3_MOUSE_DIRECT_Y"); }
+    if (sign_x==0.0f) { sign_x=mouse_direct_axis("GR2_MOUSE_DIRECT_X"); sign_y=mouse_direct_axis("GR2_MOUSE_DIRECT_Y"); }
     /* The turn rate is x times a speed of its own (test 2026-10-22: scaling x down by the limits'
      * speed factor slowed the turn by as much), so x keeps the plain gain. */
     const float gain=input.mouse_sens/mouse_cfg.full_speed;
@@ -306,12 +306,12 @@ ABI void gow3_mouse_look_adjust(float *x, float *y) {
 /* On foot, the player's turn speeds (limits +0x0c heading, +0x1c pitch) cap how fast the view
  * turns and the accelerations (+0x10, +0x20) ramp a stick up to them: a mouse flick hits both.
  * For 0.3 s after the mouse last moved, speeds are raised by the "fast turns" setting (6x) and
- * accelerations by that times GOW3_MOUSE_DIRECT_ACCEL (50x); a gamepad keeps the game's own. */
-ABI void gow3_mouse_look_limits(float *limits) {
+ * accelerations by that times GR2_MOUSE_DIRECT_ACCEL (50x); a gamepad keeps the game's own. */
+ABI void gr2_mouse_look_limits(float *limits) {
     static float accel;
     if (!mouse_direct || now_us()-mouse_moved_us>300000) return;
     if (accel==0.0f) {
-        const char *a=getenv("GOW3_MOUSE_DIRECT_ACCEL");
+        const char *a=getenv("GR2_MOUSE_DIRECT_ACCEL");
         accel=a && *a && atof(a)>0 ? (float)atof(a) : 50.0f;
     }
     mouse_speed_boost=input.mouse_turn_boost>=1.0f ? input.mouse_turn_boost : 1.0f;
@@ -343,7 +343,7 @@ static int source_down(int source, const bool *k, uint32_t mouse, uint64_t now) 
     return k && source>0 && source<SDL_SCANCODE_COUNT && k[source];
 }
 
-/* Applies a GOW3_PAD_MAP/GOW3_KEY_MAP value; returns how many entries were used. Bad entries are
+/* Applies a GR2_PAD_MAP/GR2_KEY_MAP value; returns how many entries were used. Bad entries are
  * logged and skipped, so their PS4 button keeps its default. */
 static int apply_button_map(ButtonMap *map, const char *spec, bool keyboard) {
     if (!spec || !*spec) return 0;
@@ -383,14 +383,14 @@ static void load_button_maps(void) {
     static bool loaded;
     if (loaded) return;
     loaded=true;
-    const int pad=apply_button_map(&pad_map,getenv("GOW3_PAD_MAP"),false);
+    const int pad=apply_button_map(&pad_map,getenv("GR2_PAD_MAP"),false);
     load_mouse();
     /* Mouse look: the left button fires (R2) and the right one aims (L2), unless the map moves them. */
     if (mouse_cfg.look && key_map.count+2<=sizeof(key_map.entries)/sizeof(*key_map.entries)) {
         key_map.entries[key_map.count++]=(ButtonSource){MOUSE_SOURCE|1,BTN_R2};
         key_map.entries[key_map.count++]=(ButtonSource){MOUSE_SOURCE|2,BTN_L2};
     }
-    const int keys=apply_button_map(&key_map,getenv("GOW3_KEY_MAP"),true);
+    const int keys=apply_button_map(&key_map,getenv("GR2_KEY_MAP"),true);
     if (pad || keys) printf("Runtime: pad map: %d gamepad and %d keyboard buttons remapped\n",pad,keys);
 }
 
@@ -412,7 +412,7 @@ static uint32_t quick_menu_buttons(SDL_Gamepad *g, uint64_t now) {
         if (!back_hold.since) back_hold.since=now;
         if (!back_hold.opened && now-back_hold.since>=QUICK_MENU_HOLD_US) {
             back_hold.opened=1;
-            gow3gpu_quick_menu_open();
+            gr2gpu_quick_menu_open();
         }
     } else if (back_hold.since) {
         if (!back_hold.opened) back_hold.tap_until=now+QUICK_MENU_TAP_US;
@@ -488,8 +488,8 @@ static void sample_host(PadData *d) {
     d->timestamp=now_us();
     SDL_Gamepad *g=current_gamepad();
     sample_motion(g,d);
-    gow3gpu_input_settings(&input);
-    if (gow3gpu_overlay_captures_input()) { /* settings menu open: neutral input */
+    gr2gpu_input_settings(&input);
+    if (gr2gpu_overlay_captures_input()) { /* settings menu open: neutral input */
         if (back_hold.since) back_hold.opened=1; /* the press that opened it stays with the menu */
         return;
     }
@@ -554,7 +554,7 @@ static void sample_host(PadData *d) {
     uint32_t mbuttons=0;
     int wheel=0;
     const uint64_t now=now_us();
-    const int captured=mouse_cfg.look && gow3gpu_mouse_sample(&mdx,&mdy,&mbuttons,&wheel);
+    const int captured=mouse_cfg.look && gr2gpu_mouse_sample(&mdx,&mdy,&mbuttons,&wheel);
     if (wheel>0) wheel_until_us[0]=now+60000;
     if (wheel<0) wheel_until_us[1]=now+60000;
     int host_used=mdx!=0.0f || mdy!=0.0f || k[SDL_SCANCODE_W] || k[SDL_SCANCODE_A] || k[SDL_SCANCODE_S] ||
@@ -578,7 +578,7 @@ static void sample_host(PadData *d) {
         if (mdy==0.0f && SDL_fabsf(mouse_vy)<30.0f) mouse_vy=0.0f;
         if (mdx!=0.0f || mdy!=0.0f) mouse_moved_us=now;
         static float direct_smooth=-1.0f;
-        if (direct_smooth<0.0f) direct_smooth=env_float("GOW3_MOUSE_DIRECT_SMOOTH",0.012f);
+        if (direct_smooth<0.0f) direct_smooth=env_float("GR2_MOUSE_DIRECT_SMOOTH",0.012f);
         const float keep_direct=SDL_expf(-dt/direct_smooth);
         mouse_raw_vx=mouse_raw_vx*keep_direct+(mdx/dt)*(1.0f-keep_direct);
         mouse_raw_vy=mouse_raw_vy*keep_direct+((input.mouse_invert ? -mdy : mdy)/dt)*(1.0f-keep_direct);
@@ -599,17 +599,17 @@ static void sample_host(PadData *d) {
     key_axis(&d->left_y,k[SDL_SCANCODE_W],k[SDL_SCANCODE_S]);
 }
 
-/* GOW3_PAD_FILE=<file>: scripted input for automated runs. The file holds whitespace-separated
+/* GR2_PAD_FILE=<file>: scripted input for automated runs. The file holds whitespace-separated
  * tokens, re-read when it changes: button names (cross circle square triangle l1 r1 l2 r2 l3 r3
  * options touchpad touchpad_left touchpad_right up down left right) are held while listed;
  * touchpad is the left side; lx= ly= rx= ry= (0..255) override the sticks. An empty file
  * releases everything. */
 static struct { uint32_t buttons; int stick[4]; } injected={0,{-1,-1,-1,-1}};
-static int replay_armed;      /* 1 while a GOW3_PAD_REPLAY recording plays, 2 once it ended */
+static int replay_armed;      /* 1 while a GR2_PAD_REPLAY recording plays, 2 once it ended */
 static uint64_t replay_start; /* 0: (re)start at the next sample */
 static void read_inject(void) {
     static const char *path; static int checked; static uint64_t last_check; static struct timespec mtime;
-    if (!checked) { path=getenv("GOW3_PAD_FILE"); checked=1; }
+    if (!checked) { path=getenv("GR2_PAD_FILE"); checked=1; }
     if (!path || !*path) return;
     uint64_t now=now_us();
     if (now-last_check<20000) return;
@@ -631,7 +631,7 @@ static void read_inject(void) {
     for (int i=0;i<4;++i) injected.stick[i]=-1;
     char token[64];
     while (fscanf(f,"%63s",token)==1) {
-        if (!strcmp(token,"replay") && replay_armed!=1) { replay_armed=1; replay_start=0; } /* GOW3_PAD_REPLAY */
+        if (!strcmp(token,"replay") && replay_armed!=1) { replay_armed=1; replay_start=0; } /* GR2_PAD_REPLAY */
         for (size_t i=0;i<sizeof(ps_names)/sizeof(*ps_names);++i) if (!strcmp(token,ps_names[i].name)) injected.buttons|=ps_names[i].ps;
         for (int i=0;i<4;++i) if (!strncmp(token,sticks[i],3)) { int v=atoi(token+3); injected.stick[i]=v<0 ? 0 : v>255 ? 255 : v; }
     }
@@ -639,9 +639,9 @@ static void read_inject(void) {
     printf("Runtime: pad file: buttons 0x%x sticks %d %d %d %d\n",injected.buttons,
            injected.stick[0],injected.stick[1],injected.stick[2],injected.stick[3]);
 }
-/* GOW3_PAD_RECORD=<file>: F9 starts and stops recording the pad state (gamepad or keyboard) with
- * the time since F9; GOW3_PAD_REPLAY=<file> plays such a recording back, started by the token
- * "replay" in GOW3_PAD_FILE (scripted tests repeat a route the player ran once). Lines: ms buttons
+/* GR2_PAD_RECORD=<file>: F9 starts and stops recording the pad state (gamepad or keyboard) with
+ * the time since F9; GR2_PAD_REPLAY=<file> plays such a recording back, started by the token
+ * "replay" in GR2_PAD_FILE (scripted tests repeat a route the player ran once). Lines: ms buttons
  * lx ly rx ry l2 r2, written when the state changes. */
 typedef struct { uint32_t ms, buttons; uint8_t axes[4], l2, r2; } PadSample;
 static FILE *record_file;
@@ -649,7 +649,7 @@ static uint64_t record_start;
 static PadSample record_last;
 static void record_sample(const PadData *d) {
     static const char *path; static int checked, f9_was_down;
-    if (!checked) { path=getenv("GOW3_PAD_RECORD"); checked=1; }
+    if (!checked) { path=getenv("GR2_PAD_RECORD"); checked=1; }
     if (!path || !*path || !sdl_ready) return;
     const bool *k=SDL_GetKeyboardState(NULL);
     const int f9=k && k[SDL_SCANCODE_F9];
@@ -681,7 +681,7 @@ static void replay_sample(PadData *d) {
         static int loaded;
         if (!loaded) {
             loaded=1;
-            const char *path=getenv("GOW3_PAD_REPLAY");
+            const char *path=getenv("GR2_PAD_REPLAY");
             FILE *f=path ? fopen(path,"r") : NULL;
             PadSample s; unsigned v[8]; size_t cap=0;
             while (f && fscanf(f,"%u %u %u %u %u %u %u %u",&v[0],&v[1],&v[2],&v[3],&v[4],&v[5],&v[6],&v[7])==8) {
@@ -712,7 +712,7 @@ static void replay_sample(PadData *d) {
 static int hold_after_capture;
 static void sample(PadData *d) {
     sample_host(d);
-    if (gow3gpu_overlay_captures_input()) { hold_after_capture=1; click.side=-1; return; }
+    if (gr2gpu_overlay_captures_input()) { hold_after_capture=1; click.side=-1; return; }
     record_sample(d); /* the click sources as they are: a replay plays them again */
     read_inject();
     replay_sample(d);
@@ -780,7 +780,7 @@ static ABI int32_t pad_vibration(int32_t handle, const uint8_t *param) {
     pthread_mutex_lock(&lock);
     SDL_Gamepad *g=current_gamepad();
     /* The menu's vibration strength scales the game's motors (0: off). */
-    const unsigned percent=(unsigned)gow3gpu_vibration_percent();
+    const unsigned percent=(unsigned)gr2gpu_vibration_percent();
     if (g) SDL_RumbleGamepad(g,(uint16_t)(param[0]*257u*percent/100u),(uint16_t)(param[1]*257u*percent/100u),1000);
     pthread_mutex_unlock(&lock);
     return 0;

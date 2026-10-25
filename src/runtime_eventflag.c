@@ -97,7 +97,7 @@ static ABI int32_t evf_create(void **out, const char *name, uint32_t attr, uint6
     }
     *out = f;
     atomic_fetch_add(&created, 1);
-    if (getenv("GOW3_TRACE_EVF"))
+    if (getenv("GR2_TRACE_EVF"))
         printf("Runtime: event flag %p '%s' attr=0x%x pattern=0x%llx\n", (void *)f, name, attr, (unsigned long long)pattern);
     return 0;
 }

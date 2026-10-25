@@ -5,8 +5,8 @@
 #include <chrono>
 #include <xxhash.h>
 #include "video_core/renderer_vulkan/ui_composition.h"
-#include "gow3_settings.h"
-#include "gow3_toggles.h"
+#include "gr2_settings.h"
+#include "gr2_toggles.h"
 #include "video_core/renderer_vulkan/vk_frame_capture.h"
 #include "video_core/renderer_vulkan/vk_lighting_test.h"
 #include "video_core/renderer_vulkan/vk_pass_census.h"
@@ -27,7 +27,7 @@
 #include "video_core/renderer_vulkan/vk_pipeline_cache.h"
 #include "video_core/renderer_vulkan/vk_rasterizer.h"
 #include "video_core/renderer_vulkan/vk_gpu_profiler.h"
-#include "gow3_threads.h"
+#include "gr2_threads.h"
 #include "video_core/renderer_vulkan/vk_runtime.h"
 #include "video_core/renderer_vulkan/vk_scheduler.h"
 #include "video_core/renderer_vulkan/vk_shader_hle.h"
@@ -37,9 +37,9 @@
 namespace Vulkan {
 
 namespace {
-// gow3 (Killzone): see PendingDrawPolicy. GPU command thread only.
+// gr2 (Killzone): see PendingDrawPolicy. GPU command thread only.
 PendingDrawPolicy pending_policy;
-// gow3 (Killzone): see ResCensus (GOW3_RES_CENSUS=1). GPU command thread only.
+// gr2 (Killzone): see ResCensus (GR2_RES_CENSUS=1). GPU command thread only.
 ResCensus res_census;
 
 /// ResCensus: the constant buffers and user data of `stages`; each buffer of a shader is
@@ -143,11 +143,11 @@ template <typename Lookup>
 const GraphicsPipeline* ResolvePending(PipelineCache& cache, const GraphicsPipeline* pipeline,
                                        const AmdGpu::Regs& regs, Lookup&& lookup) {
     static const bool skip_pending = [] {
-        const char* env = std::getenv("GOW3_SKIP_PENDING_DRAWS");
+        const char* env = std::getenv("GR2_SKIP_PENDING_DRAWS");
         return env && env[0] == '1';
     }();
     const auto [target, width, color] = PendingTarget(regs);
-    pending_policy.Note(target, width, color, gow3_flip_count.load(std::memory_order_relaxed));
+    pending_policy.Note(target, width, color, gr2_flip_count.load(std::memory_order_relaxed));
     if (!pipeline && !skip_pending && cache.LookupPending()) {
         if (pending_policy.MayDrop(target, width, color)) {
             pending_policy.CountDropped(target, width);
@@ -210,7 +210,7 @@ Rasterizer::Rasterizer(const Instance& instance_, Scheduler& scheduler_, Runtime
         constant_ring = std::make_unique<ConstantRing>(instance, scheduler);
         draw_pipe = std::make_unique<DrawPipe>(&RunDrawPacket, this);
     }
-    // gow3: this thread joins the texture binding helper before it changes image state.
+    // gr2: this thread joins the texture binding helper before it changes image state.
     runtime.SetImageAccessHook(&JoinBindHelper, this);
     if (draw_pipe) {
         scheduler.SetBeforeSubmitHook(&DrainBeforeSubmit, this);
@@ -321,7 +321,7 @@ VideoCore::ImageId Rasterizer::FindTargetMemoized(VideoCore::TextureCache::Image
     };
     (append(parts), ...);
     const u64 generation = texture_cache.RegistryGeneration();
-    const bool memo_enabled = !Gow3Toggle::Disabled(Gow3Toggle::TextureBindingMemo);
+    const bool memo_enabled = !Gr2Toggle::Disabled(Gr2Toggle::TextureBindingMemo);
     if (memo_enabled && last.generation == generation && last.key_size == key_size &&
         std::memcmp(last.key.data(), key.data(), key_size) == 0) {
         texture_cache.MarkFound(last.image_id);
@@ -407,7 +407,7 @@ void Rasterizer::PrepareRenderState(const GraphicsPipeline* pipeline) {
     } else {
         db_desc.first = {};
     }
-    // gow3: the G-buffer pass (5+ color targets) holds the scene depth, and its constants the
+    // gr2: the G-buffer pass (5+ color targets) holds the scene depth, and its constants the
     // main camera (shadow passes bind the same layout with the light's camera).
     gbuffer_draw = camera_motion->Enabled() && std::popcount(key.mrt_mask) >= 5 && db_desc.first;
     if (gbuffer_draw) {
@@ -418,7 +418,7 @@ void Rasterizer::PrepareRenderState(const GraphicsPipeline* pipeline) {
     if (upscaler->Enabled() && cb_descs[0].first) {
         upscaler->OnColorTarget(cb_descs[0].first);
     }
-    // gow3: scene color: a full-size RGBA16F target drawn with the scene depth.
+    // gr2: scene color: a full-size RGBA16F target drawn with the scene depth.
     if (upscaler->Enabled() && db_desc.first && db_desc.first == camera_motion->Depth() &&
         cb_descs[0].first && std::popcount(key.mrt_mask) <= 2) {
         const auto& color = texture_cache.GetImage(cb_descs[0].first);
@@ -481,7 +481,7 @@ void Rasterizer::EliminateFastClear() {
     ScopeMarkerEnd();
 }
 
-// gow3: two-stage draw pipeline (vk_draw_pipe.h). Packet layout, 8-byte aligned parts:
+// gr2: two-stage draw pipeline (vk_draw_pipe.h). Packet layout, 8-byte aligned parts:
 // DrawPacket, u16 block indices, u32 block words (RegDirty::BlockWords each), then per stage a
 // PacketStage with its user data and flattened user data, then (verification) the full file.
 namespace {
@@ -518,7 +518,7 @@ constexpr u32 AlignPacket(u32 size) {
 }
 u32 VerifyInterval() {
     static const u32 interval = [] {
-        const char* env = std::getenv("GOW3_PIPE_VERIFY");
+        const char* env = std::getenv("GR2_PIPE_VERIFY");
         return env ? static_cast<u32>(std::strtoul(env, nullptr, 10)) : 0u;
     }();
     return interval;
@@ -526,24 +526,24 @@ u32 VerifyInterval() {
 } // namespace
 
 bool Rasterizer::DrawPipeWanted() {
-    const char* env = std::getenv("GOW3_DRAW_PIPE");
+    const char* env = std::getenv("GR2_DRAW_PIPE");
     if (env && env[0]) {
         return env[0] == '1';
     }
     // Killzone: off by default. Its chapter 2 cinematic made the draw recording thread and the
     // GPU command thread open/close rendering concurrently (a packet the pipeline does not
     // drain for), crashing the NVIDIA driver; with the pipeline off it plays at 60 FPS.
-    // GOW3_DRAW_PIPE=1 turns it back on (God of War III measured +18-19% with it).
+    // GR2_DRAW_PIPE=1 turns it back on (God of War III measured +18-19% with it).
     return false;
 }
 
 bool Rasterizer::UseDrawPipe() const {
-    return draw_pipe && !host_markers_enabled && !Gow3Toggle::Disabled(Gow3Toggle::DrawPipeline);
+    return draw_pipe && !host_markers_enabled && !Gr2Toggle::Disabled(Gr2Toggle::DrawPipeline);
 }
 
 bool Rasterizer::OnStageA() const {
 #ifdef _WIN32
-    // gow3 (Windows): libc++ compares std::thread::id through winpthreads' pthread_equal,
+    // gr2 (Windows): libc++ compares std::thread::id through winpthreads' pthread_equal,
     // which asks the kernel (GetThreadId) for both threads: two system calls per check, many
     // per draw. The numeric thread id comes from the TEB.
     return static_cast<u32>(gettid()) == liverpool->GetGpuCommandProcessorThreadId();
@@ -553,7 +553,7 @@ bool Rasterizer::OnStageA() const {
 }
 
 namespace {
-/// Stage A: cycles waited per drain site (GOW3_FRAME_STATS), keyed by function name and line.
+/// Stage A: cycles waited per drain site (GR2_FRAME_STATS), keyed by function name and line.
 std::unordered_map<const char*, std::unordered_map<u32, u64>> drain_sites;
 } // namespace
 
@@ -561,7 +561,7 @@ void Rasterizer::DrainDrawPipe(u32 reason, u32 line, const char* function) {
     if (!draw_pipe || !OnStageA()) {
         return;
     }
-    static const bool stats = std::getenv("GOW3_FRAME_STATS") != nullptr;
+    static const bool stats = std::getenv("GR2_FRAME_STATS") != nullptr;
     if (!stats) {
         draw_pipe->Drain(reason);
         return;
@@ -653,7 +653,7 @@ bool Rasterizer::PendingWriteOverlaps(VAddr address, u64 size) {
 void Rasterizer::CollectRingBindings(const Shader::Info& stage, const PreparedDraw* prepared,
                            boost::container::static_vector<RingBinding, Shader::NUM_BUFFERS>& out) {
     const PreparedStage* prepared_stage = nullptr;
-    if (prepared && !Gow3Toggle::Disabled(Gow3Toggle::PreparedResources)) {
+    if (prepared && !Gr2Toggle::Disabled(Gr2Toggle::PreparedResources)) {
         for (u32 i = 0; i < prepared->num_stages; ++i) {
             const auto& candidate = prepared->stages[i];
             if (&candidate.program->info == &stage &&
@@ -749,7 +749,7 @@ void Rasterizer::PostDraw(const Pipeline* pipeline, const PreparedDraw* used_pre
         if (stage) {
             auto& ring = rings[num_stages];
             ring.clear();
-            if (constant_ring && !Gow3Toggle::Disabled(Gow3Toggle::ConstantRing)) {
+            if (constant_ring && !Gr2Toggle::Disabled(Gr2Toggle::ConstantRing)) {
                 CollectRingBindings(*stage, used_prepared, ring);
             }
             ++num_stages;
@@ -850,7 +850,7 @@ void Rasterizer::RetireSubmission() {
 }
 
 bool Rasterizer::RunInOrder(OrderedTask task, const void* data, u32 size, u64 toggle) {
-    if (!UseDrawPipe() || Gow3Toggle::Disabled(toggle)) {
+    if (!UseDrawPipe() || Gr2Toggle::Disabled(toggle)) {
         DrainDrawPipe(DrawPipe::ReasonRasterizer);
         task(*this, static_cast<const u8*>(data));
         return false;
@@ -997,7 +997,7 @@ void Rasterizer::RunDrawPacket(void* context, const u8* data, u32 size) {
 }
 
 void Rasterizer::PrintPipeStats() {
-    static const bool stats = std::getenv("GOW3_FRAME_STATS") != nullptr;
+    static const bool stats = std::getenv("GR2_FRAME_STATS") != nullptr;
     if (!stats || (draw_pipe->packets & 1023) != 0) {
         return;
     }
@@ -1077,14 +1077,14 @@ bool Rasterizer::FilterDrawPasses() const {
 
 // gr2: Gravity Rush 2's comic-style outline pass (a geometry shader reading triangles with
 // adjacency) is mistranslated and draws long black streaks across the frame. Draws with an
-// adjacency topology are dropped unless GOW3_GS_OUTLINE=1 (the launcher's "Comic outline",
+// adjacency topology are dropped unless GR2_GS_OUTLINE=1 (the launcher's "Comic outline",
 // experimental). Found by HayatoG/gr2_pc (docs/BUG_LINHAS_PRETAS.md, TLG_SKIP_ADJACENCY).
 static bool SkipAdjacencyDraw(const GraphicsPipeline* pipeline) {
     static const bool draw_outline = [] {
-        const char* env = std::getenv("GOW3_GS_OUTLINE");
+        const char* env = std::getenv("GR2_GS_OUTLINE");
         const bool on = env && *env == '1';
         std::fprintf(stderr, "GPU: geometry-shader outline (adjacency draws) %s\n",
-                     on ? "drawn (GOW3_GS_OUTLINE=1)" : "skipped");
+                     on ? "drawn (GR2_GS_OUTLINE=1)" : "skipped");
         return on;
     }();
     if (draw_outline) {
@@ -1098,13 +1098,13 @@ static bool SkipAdjacencyDraw(const GraphicsPipeline* pipeline) {
 
 void Rasterizer::Draw(bool is_indexed, u32 index_offset, const PreparedDraw* prepared) {
     RENDERER_TRACE;
-    Gow3Stats::draws.fetch_add(1, std::memory_order_relaxed);
+    Gr2Stats::draws.fetch_add(1, std::memory_order_relaxed);
 
-    // gow3: with the draw pipeline this thread only selects the pipeline and hands the draw
+    // gr2: with the draw pipeline this thread only selects the pipeline and hands the draw
     // to the recording thread (DrawRecord there); draws FilterDraw handles itself run here.
     const bool pipelined = UseDrawPipe();
     if (pipelined && !FilterDrawPasses() &&
-        !Gow3Toggle::Disabled(Gow3Toggle::PipelinedMemoryWrites)) {
+        !Gr2Toggle::Disabled(Gr2Toggle::PipelinedMemoryWrites)) {
         PostDraw(nullptr, nullptr, false, 0);
         return;
     }
@@ -1116,9 +1116,9 @@ void Rasterizer::Draw(bool is_indexed, u32 index_offset, const PreparedDraw* pre
             return;
         }
     }
-    // gow3 (Killzone): a draw whose shaders or pipeline are still compiling waits for them
+    // gr2 (Killzone): a draw whose shaders or pipeline are still compiling waits for them
     // (a shader, then its pipeline: a few rounds) instead of being dropped, unless its target
-    // is redrawn every frame (ResolvePending, PendingDrawPolicy). GOW3_SKIP_PENDING_DRAWS=1
+    // is redrawn every frame (ResolvePending, PendingDrawPolicy). GR2_SKIP_PENDING_DRAWS=1
     // always drops them.
     const GraphicsPipeline* pipeline = ResolvePending(
         pipeline_cache, pipeline_cache.GetGraphicsPipeline({}, prepared), Regs(),
@@ -1131,7 +1131,7 @@ void Rasterizer::Draw(bool is_indexed, u32 index_offset, const PreparedDraw* pre
     }
     if (!pipeline) {
         static const u64 trace_addr = [] {
-            const char* env = std::getenv("GOW3_TRACE_ADDR");
+            const char* env = std::getenv("GR2_TRACE_ADDR");
             return env ? std::strtoull(env, nullptr, 16) : 0ull;
         }();
         static std::atomic<unsigned> skipped{0};
@@ -1155,7 +1155,7 @@ void Rasterizer::Draw(bool is_indexed, u32 index_offset, const PreparedDraw* pre
 
 void Rasterizer::DiagPassBoundary(bool force) {
     static const bool enabled = [] {
-        const char* env = std::getenv("GOW3_DIAG_IMAGES");
+        const char* env = std::getenv("GR2_DIAG_IMAGES");
         return env && *env == '1';
     }();
     if (!enabled) {
@@ -1202,7 +1202,7 @@ void Rasterizer::DrawRecord(const GraphicsPipeline* pipeline, const PreparedDraw
         }
         return;
     }
-    // gow3: the pass copying a finished frame to a display buffer; the previous draw's
+    // gr2: the pass copying a finished frame to a display buffer; the previous draw's
     // target is that frame.
     if (camera_motion->Enabled() && regs.color_buffers[0] &&
         FrameCapture::IsDisplayBuffer(regs.color_buffers[0].Address())) {
@@ -1215,13 +1215,13 @@ void Rasterizer::DrawRecord(const GraphicsPipeline* pipeline, const PreparedDraw
         camera_motion->SetJitter(upscaler->Jitter());
         object_motion->OnFrameStart();
         NoteFrameStart();
-        static const char* scene_debug = std::getenv("GOW3_SCENE_DEBUG");
+        static const char* scene_debug = std::getenv("GR2_SCENE_DEBUG");
         scene_debug_frame = scene_debug && std::remove(scene_debug) == 0;
         scene_targets->debug = scene_debug_frame;
     } else if (regs.color_buffers[0] &&
                FrameCapture::IsDisplayBuffer(regs.color_buffers[0].Address()) &&
                regs.color_buffers[0].Address() != last_display_buffer) {
-        // Without an upscaler: still count the frame (GOW3_GPU_PROFILE, GOW3_BUFFER_STATS),
+        // Without an upscaler: still count the frame (GR2_GPU_PROFILE, GR2_BUFFER_STATS),
         // once per display buffer since the HUD draws into it as well.
         // ponytail: assumes flips rotate display buffers; a single-buffer game counts one frame.
         last_display_buffer = regs.color_buffers[0].Address();
@@ -1239,7 +1239,7 @@ void Rasterizer::DrawRecord(const GraphicsPipeline* pipeline, const PreparedDraw
                          UiComposition::NativeViewport(viewport.xscale * 2, viewport.yscale * 2));
     }
     const PreparedDraw* draw_prepared = bind_prepared;
-    // gow3: vertex and index buffers are resolved while the helper binds textures (their
+    // gr2: vertex and index buffers are resolved while the helper binds textures (their
     // commands are recorded after BeginRendering, as before).
     draw_inputs = {pipeline, draw_prepared, index_offset, is_indexed, true, false};
     const bool bound = BindResources(pipeline);
@@ -1266,7 +1266,7 @@ void Rasterizer::DrawRecord(const GraphicsPipeline* pipeline, const PreparedDraw
         runtime.FlushBarriers();
     }
 
-    // gow3: screen-space (clip disabled) draws into the upscaler's output-size images.
+    // gr2: screen-space (clip disabled) draws into the upscaler's output-size images.
     push_data.xscale *= target_scale[0];
     push_data.xoffset *= target_scale[0];
     push_data.yscale *= target_scale[1];
@@ -1283,7 +1283,7 @@ void Rasterizer::DrawRecord(const GraphicsPipeline* pipeline, const PreparedDraw
         // since last frame (model constants follow the camera, the palette does not). The
         // check comes first: most gated draws are static world pieces with long index lists.
         static const bool all_motion = [] {
-            const char* value = std::getenv("GOW3_OBJECT_MOTION_ALL");
+            const char* value = std::getenv("GR2_OBJECT_MOTION_ALL");
             return value && value[0] == '1';
         }();
         bool gated = !all_motion;
@@ -1354,7 +1354,7 @@ void Rasterizer::DrawRecord(const GraphicsPipeline* pipeline, const PreparedDraw
         }
     }
     pipeline->BindResources(set_writes, push_data);
-    // gow3: jitter geometry drawn with the scene depth, not full-screen passes (a shifted
+    // gr2: jitter geometry drawn with the scene depth, not full-screen passes (a shifted
     // full-screen quad leaves an edge column unwritten). Every G-buffer draw is jittered (Killzone
     // draws small 6-index quads there), and so is Killzone's depth pre-pass (SceneDepth).
     draw_jitter = {};
@@ -1415,10 +1415,10 @@ void Rasterizer::DrawIndirect(bool is_indexed, VAddr arg_address, u32 offset, u3
                               u32 max_count, VAddr count_address, u16 vertex_sgpr_offset,
                               u16 instance_sgpr_offset) {
     RENDERER_TRACE;
-    // gow3: like direct draws, handed to the recording thread after the pipeline selection
+    // gr2: like direct draws, handed to the recording thread after the pipeline selection
     // (else the GPU thread waited here for a whole frame of queued draws).
     const bool pipelined = UseDrawPipe() && FilterDrawPasses() &&
-                           !Gow3Toggle::Disabled(Gow3Toggle::PipelinedIndirectDraws);
+                           !Gr2Toggle::Disabled(Gr2Toggle::PipelinedIndirectDraws);
     if (!pipelined) {
         DrainDrawPipe();
         scheduler.PopPendingOperations();
@@ -1490,7 +1490,7 @@ void Rasterizer::DrawIndirectRecord(const GraphicsPipeline* pipeline, bool is_in
         runtime.FlushBarriers();
     }
 
-    // gow3: screen-space (clip disabled) draws into the upscaler's output-size images.
+    // gr2: screen-space (clip disabled) draws into the upscaler's output-size images.
     push_data.xscale *= target_scale[0];
     push_data.xoffset *= target_scale[0];
     push_data.yscale *= target_scale[1];
@@ -1540,9 +1540,9 @@ void Rasterizer::DrawIndirectRecord(const GraphicsPipeline* pipeline, bool is_in
 
 void Rasterizer::DispatchDirect() {
     RENDERER_TRACE;
-    Gow3Stats::dispatches.fetch_add(1, std::memory_order_relaxed);
-    // gow3: like draws, handed to the draw recording thread after the pipeline selection.
-    const bool pipelined = UseDrawPipe() && !Gow3Toggle::Disabled(Gow3Toggle::PipelinedDispatch);
+    Gr2Stats::dispatches.fetch_add(1, std::memory_order_relaxed);
+    // gr2: like draws, handed to the draw recording thread after the pipeline selection.
+    const bool pipelined = UseDrawPipe() && !Gr2Toggle::Disabled(Gr2Toggle::PipelinedDispatch);
     if (!pipelined) {
         DrainDrawPipe();
     }
@@ -1617,10 +1617,10 @@ void Rasterizer::DispatchRecord(const ComputePipeline* pipeline) {
     });
     DebugState.IncDispatch();
 
-    // gow3 diagnostics: GOW3_DIAG_IMAGES=1 writes the images a dispatch read and wrote, after
-    // it, while a frame capture records (GOW3_CAPTURE_TRIGGER).
+    // gr2 diagnostics: GR2_DIAG_IMAGES=1 writes the images a dispatch read and wrote, after
+    // it, while a frame capture records (GR2_CAPTURE_TRIGGER).
     static const bool diag_images = [] {
-        const char* env = std::getenv("GOW3_DIAG_IMAGES");
+        const char* env = std::getenv("GR2_DIAG_IMAGES");
         return env && *env == '1';
     }();
     if (diag_images && FrameCapture::IsRecording()) {
@@ -1638,8 +1638,8 @@ void Rasterizer::DispatchRecord(const ComputePipeline* pipeline) {
 
 void Rasterizer::DispatchIndirect(VAddr address, u32 offset, u32 size) {
     RENDERER_TRACE;
-    // gow3: handed to the recording thread like direct dispatches.
-    const bool pipelined = UseDrawPipe() && !Gow3Toggle::Disabled(Gow3Toggle::PipelinedIndirectDraws);
+    // gr2: handed to the recording thread like direct dispatches.
+    const bool pipelined = UseDrawPipe() && !Gr2Toggle::Disabled(Gr2Toggle::PipelinedIndirectDraws);
     if (!pipelined) {
         DrainDrawPipe();
     }
@@ -1719,7 +1719,7 @@ void Rasterizer::OnSubmit() {
 
 const PreparedStage* Rasterizer::FindPreparedStage(const Shader::Info& stage) const {
     // Sharps a draw-preparation worker read from the same flattened user data.
-    if (!bind_prepared || Gow3Toggle::Disabled(Gow3Toggle::PreparedResources)) {
+    if (!bind_prepared || Gr2Toggle::Disabled(Gr2Toggle::PreparedResources)) {
         return nullptr;
     }
     for (u32 i = 0; i < bind_prepared->num_stages; ++i) {
@@ -1736,7 +1736,7 @@ const PreparedStage* Rasterizer::FindPreparedStage(const Shader::Info& stage) co
 
 bool Rasterizer::BindHelperWanted() {
     // A spinning helper pays off only with cores to spare (the recording thread spins too).
-    const char* env = std::getenv("GOW3_TEXTURE_HELPER");
+    const char* env = std::getenv("GR2_TEXTURE_HELPER");
     if (env && env[0]) {
         return env[0] == '1';
     }
@@ -1746,9 +1746,9 @@ bool Rasterizer::BindHelperWanted() {
 
 bool Rasterizer::HelperEligible(const Pipeline* pipeline) const {
     if (pipeline->IsCompute() || !bind_helper.Available() || FrameCapture::Active() ||
-        Gow3Toggle::Disabled(Gow3Toggle::TextureBindHelper) ||
-        Gow3Toggle::Disabled(Gow3Toggle::TextureBindingMemo) ||
-        Gow3Toggle::Disabled(Gow3Toggle::UpdateImageFastPath)) {
+        Gr2Toggle::Disabled(Gr2Toggle::TextureBindHelper) ||
+        Gr2Toggle::Disabled(Gr2Toggle::TextureBindingMemo) ||
+        Gr2Toggle::Disabled(Gr2Toggle::UpdateImageFastPath)) {
         return false;
     }
     for (const auto* stage : pipeline->GetStages()) {
@@ -1847,7 +1847,7 @@ bool Rasterizer::BindResources(const Pipeline* pipeline) {
     set_writes.clear();
     buffer_infos.clear();
     image_infos.clear();
-    // gow3: G-buffer passes sample material textures for a scene rendered below the output
+    // gr2: G-buffer passes sample material textures for a scene rendered below the output
     // size; the temporal upscaler restores the detail of the output's mip level (FSR guide:
     // log2(render / output)). Shadows, post-processing and UI keep the guest's bias.
     // The launcher's texture LOD bias (mip_lod_bias, iss_pc) adds to the G-buffer material draws
@@ -1858,9 +1858,9 @@ bool Rasterizer::BindResources(const Pipeline* pipeline) {
         std::popcount(static_cast<const GraphicsPipeline*>(pipeline)->GetGraphicsKey().mrt_mask &
                       0xff) >= 5;
     sampler_lod_bias = material_draw
-                           ? std::round(Gow3Settings::Get().mip_lod_bias.load() * 8.0f) / 8.0f
+                           ? std::round(Gr2Settings::Get().mip_lod_bias.load() * 8.0f) / 8.0f
                            : 0.0f;
-    if (material_draw && !Gow3Toggle::Disabled(Gow3Toggle::SceneMipBias)) {
+    if (material_draw && !Gr2Toggle::Disabled(Gr2Toggle::SceneMipBias)) {
         sampler_lod_bias += upscaler->SceneMipBias();
         static float reported = 0.0f;
         if (sampler_lod_bias != reported) {
@@ -1871,7 +1871,7 @@ bool Rasterizer::BindResources(const Pipeline* pipeline) {
 
     bool uses_dma = false;
 
-    static const bool stats = std::getenv("GOW3_FRAME_STATS") != nullptr;
+    static const bool stats = std::getenv("GR2_FRAME_STATS") != nullptr;
     if (stats && ((helper_full + helper_partial + helper_serial) & 1023) == 0) {
         static auto window = std::chrono::steady_clock::now();
         const auto now = std::chrono::steady_clock::now();
@@ -1908,7 +1908,7 @@ bool Rasterizer::BindResources(const Pipeline* pipeline) {
             uses_dma |= stage->uses_dma;
         }
     } else {
-        // gow3: textures on the helper, buffers here. Without mip arrays every stage's
+        // gr2: textures on the helper, buffers here. Without mip arrays every stage's
         // descriptors are [buffers][images][samplers], one each, so both sides know their
         // binding numbers and descriptor write slots up front.
         struct BufferStage {
@@ -1949,7 +1949,7 @@ bool Rasterizer::BindResources(const Pipeline* pipeline) {
             auto& stage = buffer_stages[i];
             BindBuffers(*stage.info, stage.prepared, stage.binding, push_data, stage.write_index);
         }
-        if (draw_inputs.pending && !Gow3Toggle::Disabled(Gow3Toggle::EarlyDrawInputs)) {
+        if (draw_inputs.pending && !Gr2Toggle::Disabled(Gr2Toggle::EarlyDrawInputs)) {
             ResolveVertexBuffers(draw_inputs.pipeline, draw_inputs.prepared);
             if (draw_inputs.is_indexed) {
                 ResolveIndexBuffer(draw_inputs.index_offset);
@@ -1982,7 +1982,7 @@ void Rasterizer::BindVertexBuffers(const GraphicsPipeline* pipeline, const Prepa
 }
 
 void Rasterizer::EmitVertexBuffers() {
-    // gow3: only the used entries go into the recording chunk (the static vectors hold 32 of
+    // gr2: only the used entries go into the recording chunk (the static vectors hold 32 of
     // each: ~3 KiB copied per draw).
     auto& v = vertex_binds;
     const bool dynamic_input = instance.IsVertexInputDynamicState();
@@ -2037,7 +2037,7 @@ void Rasterizer::ResolveVertexBuffers(const GraphicsPipeline* pipeline,
     const PreparedVertexInputs* ready =
         prepared && prepared->vertex.valid && instance.IsVertexInputDynamicState() && fetch &&
                 fetch->attributes.size() == prepared->vertex.count && !FrameCapture::Active() &&
-                !Gow3Toggle::Disabled(Gow3Toggle::PreparedResources)
+                !Gr2Toggle::Disabled(Gr2Toggle::PreparedResources)
             ? &prepared->vertex
             : nullptr;
     if (ready) {
@@ -2347,11 +2347,11 @@ bool Rasterizer::IsComputeImageClear(const Pipeline* pipeline) {
     return true;
 }
 
-// GOW3_CAMERA_DEBUG=N: the first N buffer bindings of G-buffer draws (camera constants search).
+// GR2_CAMERA_DEBUG=N: the first N buffer bindings of G-buffer draws (camera constants search).
 static void CameraDebug(bool gbuffer_draw, const Shader::Info& stage, u32 index, const char* kind,
                         u32 size) {
     static int left = [] {
-        const char* v = std::getenv("GOW3_CAMERA_DEBUG");
+        const char* v = std::getenv("GR2_CAMERA_DEBUG");
         return v ? std::atoi(v) : 0;
     }();
     static std::unordered_set<u64> seen;
@@ -2372,7 +2372,7 @@ void Rasterizer::BindBuffers(const Shader::Info& stage, const PreparedStage* pre
         const RingBinding* ring = num_ring_stages ? FindRingBinding(stage, buffer_index) : nullptr;
         if (ring) {
             // Copied by the GPU command thread into the constant ring (read-only).
-            // gow3: dump the ring's own copy, not the guest address. A binding whose bytes came
+            // gr2: dump the ring's own copy, not the guest address. A binding whose bytes came
             // from the host keeps `address` as a label only, and it can be zero; IsValidGpuMapping
             // merely range checks against the 40 bit GPU limit, so zero passed through and the
             // dump read address zero (crash on the frame capture key).
@@ -2483,7 +2483,7 @@ void Rasterizer::BindBuffers(const Shader::Info& stage, const PreparedStage* pre
                               vsharp.GetSize(), size, stage.pgm_hash);
                 }
                 const VideoCore::ResidencyTag tag{desc.is_written ? "shader-rw" : "shader-ro"};
-                // gow3: large shader buffer bindings make their whole range resident (VRAM).
+                // gr2: large shader buffer bindings make their whole range resident (VRAM).
                 if (size >= 32_MB) {
                     static std::atomic<int> logged{0};
                     if (logged.fetch_add(1) < 40) {
@@ -2534,7 +2534,7 @@ Rasterizer::ImageDescCacheEntry& Rasterizer::CachedImageDescEntry(const AmdGpu::
                                                                    u64 hash) {
     std::array<u64, 4> key;
     std::memcpy(key.data(), &sharp, sizeof(key));
-    // gow3: needs_native too, since FindImage resolves partial height views only for it.
+    // gr2: needs_native too, since FindImage resolves partial height views only for it.
     const u32 flags = u32(res.is_written) | u32(res.is_depth) << 1 | u32(res.is_array) << 2 |
                       u32(res.needs_native) << 3;
     // Two-way set associative: a frame binds a few thousand distinct T#s.
@@ -2542,7 +2542,7 @@ Rasterizer::ImageDescCacheEntry& Rasterizer::CachedImageDescEntry(const AmdGpu::
     const auto matches = [&](const ImageDescCacheEntry& e) {
         return e.flags == flags && e.sharp == key;
     };
-    const bool disabled = Gow3Toggle::Disabled(Gow3Toggle::ImageDescCache);
+    const bool disabled = Gr2Toggle::Disabled(Gr2Toggle::ImageDescCache);
     ImageDescCacheEntry* slot = nullptr;
     if (!disabled && matches(set[0])) {
         slot = &set[0];
@@ -2561,7 +2561,7 @@ Rasterizer::ImageDescCacheEntry& Rasterizer::CachedImageDescEntry(const AmdGpu::
     slot->last_use = ++desc_use_counter;
     auto& entry = *slot;
     if (entry.flags != flags || entry.sharp != key ||
-        Gow3Toggle::Disabled(Gow3Toggle::ImageDescCache)) {
+        Gr2Toggle::Disabled(Gr2Toggle::ImageDescCache)) {
         entry.desc = VideoCore::TextureCache::ImageDesc{sharp, res};
         entry.sharp = key;
         entry.flags = flags;
@@ -2603,15 +2603,15 @@ void Rasterizer::BindTextures(const Shader::Info& stage, const PreparedStage* pr
     // SampleSceneProxies: bindings that may read a reduced scene proxy instead of the native
     // image (normalized sampling only; see Shader::ImageResource::needs_native).
     boost::container::small_vector<bool, 16> binding_proxy_ok;
-    const bool sample_proxies = !Gow3Toggle::Disabled(Gow3Toggle::SampleSceneProxies) &&
+    const bool sample_proxies = !Gr2Toggle::Disabled(Gr2Toggle::SampleSceneProxies) &&
                                 !on_helper && scene_targets->Reduced();
 
     for (u32 image_index = 0; image_index < stage.images.size(); ++image_index) {
         const auto& image_desc = stage.images[image_index];
         const auto tsharp =
             prepared ? prepared->image_sharps[image_index] : image_desc.GetSharp(stage);
-        // gow3: a hash lookup per texture per draw for a diagnostic only.
-        static const bool warn_meta = std::getenv("GOW3_WARN_META_TEXTURE") != nullptr;
+        // gr2: a hash lookup per texture per draw for a diagnostic only.
+        static const bool warn_meta = std::getenv("GR2_WARN_META_TEXTURE") != nullptr;
         if (warn_meta && texture_cache.IsMeta(tsharp.Address())) {
             LOG_WARNING(Render_Vulkan, "Unexpected metadata read by a shader (texture)");
         }
@@ -2653,7 +2653,7 @@ void Rasterizer::BindTextures(const Shader::Info& stage, const PreparedStage* pr
         auto& desc_entry =
             prepared ? CachedImageDescEntry(tsharp, image_desc, prepared->image_hashes[image_index])
                      : CachedImageDescEntry(tsharp, image_desc);
-        // GOW3_SCENE_DEBUG: proxied scene targets this binding reads at the native size, and why.
+        // GR2_SCENE_DEBUG: proxied scene targets this binding reads at the native size, and why.
         const auto debug_native = [&](const VideoCore::Image& image) {
             if (!scene_debug_frame || proxy_candidate || !image.scene_proxy) return;
             std::printf("Scene native read: %s %016llx %s %ux%u needs_native %d written %d "
@@ -2665,11 +2665,11 @@ void Rasterizer::BindTextures(const Shader::Info& stage, const PreparedStage* pr
                         int(image_desc.is_written), num_bindings, int(mip_fallback_mode));
         };
         for (auto i = 0; i < num_bindings; i++) {
-            // gow3: a plain binding (no mip override) of the same T# resolves to the same image
+            // gr2: a plain binding (no mip override) of the same T# resolves to the same image
             // while no image was registered or unregistered.
             if (mip_fallback_mode == Shader::MipStorageFallbackMode::None &&
                 desc_entry.found_generation == texture_cache.RegistryGeneration() &&
-                !Gow3Toggle::Disabled(Gow3Toggle::TextureBindingMemo)) {
+                !Gr2Toggle::Disabled(Gr2Toggle::TextureBindingMemo)) {
                 desc_entry.pinned = bind_epoch;
                 auto& [image_id, _] =
                     image_bindings.emplace_back(desc_entry.found_id, &desc_entry.found_desc);
@@ -2757,7 +2757,7 @@ void Rasterizer::BindTextures(const Shader::Info& stage, const PreparedStage* pr
                 image_id, desc, memo_entry ? &memo_entry->view_memo : nullptr, !on_helper);
             const auto binding = image.binding;
 
-            // gow3: a proxied scene image sampled with normalized coordinates reads the proxy:
+            // gr2: a proxied scene image sampled with normalized coordinates reads the proxy:
             // no resample to the native size (the native image is not touched).
             if (binding_proxy_ok[binding_index] && !is_storage && !binding.force_general &&
                 !binding.is_target &&
@@ -2810,7 +2810,7 @@ void Rasterizer::BindTextures(const Shader::Info& stage, const PreparedStage* pr
             vk::ImageView view = *image_view.image_view;
             vk::ImageLayout layout = image.backing->state.layout;
             if (upscaler->Enabled()) {
-                // gow3: the display pass reads the upscaled frame (scaled presets).
+                // gr2: the display pass reads the upscaled frame (scaled presets).
                 upscaler->RedirectSampled(image_id, image_view.info, view, layout);
             }
             image_infos.emplace_back(VK_NULL_HANDLE, view, layout);
@@ -2908,7 +2908,7 @@ bool Rasterizer::BindTexturesFromSet(const Shader::Info& stage, const PreparedSt
                                      u32 first_image_idx, bool& barrier, TextureSet*& slot) {
     const u32 count = static_cast<u32>(stage.images.size());
     if (!prepared || count == 0 || count > TextureSet::MaxImages ||
-        Gow3Toggle::Disabled(Gow3Toggle::TextureSetMemo) || FrameCapture::Active()) {
+        Gr2Toggle::Disabled(Gr2Toggle::TextureSetMemo) || FrameCapture::Active()) {
         return false;
     }
     for (const auto& image : stage.images) {
@@ -2946,7 +2946,7 @@ bool Rasterizer::BindTexturesFromSet(const Shader::Info& stage, const PreparedSt
         const auto& image = texture_cache.GetImage(entry.id);
         // Proxy entries need a current proxy; native entries of a proxied image go through
         // BindTextures, which may sample the proxy instead.
-        const bool proxies_on = !Gow3Toggle::Disabled(Gow3Toggle::SampleSceneProxies);
+        const bool proxies_on = !Gr2Toggle::Disabled(Gr2Toggle::SampleSceneProxies);
         if (image.backing != entry.backing || image.binding.needs_rebind ||
             image.binding.is_target || !texture_cache.IsUpToDate(entry.id) ||
             (entry.proxy ? !proxies_on ||
@@ -2991,9 +2991,9 @@ bool Rasterizer::BindTexturesFromSet(const Shader::Info& stage, const PreparedSt
 }
 
 RenderState Rasterizer::BeginRendering(const GraphicsPipeline* pipeline) {
-    // gow3: RenderStateMemo (see BeginMemo).
-    const bool memo_on = !Gow3Toggle::Disabled(Gow3Toggle::RenderStateMemo) && !FrameCapture::Active();
-    if (Gow3Stats::enabled && ((begin_memo_hits + begin_memo_misses) & 0x3FFFF) == 0x3FFFF) {
+    // gr2: RenderStateMemo (see BeginMemo).
+    const bool memo_on = !Gr2Toggle::Disabled(Gr2Toggle::RenderStateMemo) && !FrameCapture::Active();
+    if (Gr2Stats::enabled && ((begin_memo_hits + begin_memo_misses) & 0x3FFFF) == 0x3FFFF) {
         std::printf("Render state memo: %llu hits, %llu misses; texture sets: %llu hits, %llu "
                     "misses\n",
                     static_cast<unsigned long long>(begin_memo_hits),
@@ -3052,18 +3052,18 @@ RenderState Rasterizer::BeginRendering(const GraphicsPipeline* pipeline) {
 }
 
 namespace {
-/// gow3: the current render pass draws into GOW3_TRACE_ADDR (stencil state of its draws is logged).
-bool gow3_trace_pass = false;
+/// gr2: the current render pass draws into GR2_TRACE_ADDR (stencil state of its draws is logged).
+bool gr2_trace_pass = false;
 } // namespace
 
 RenderState Rasterizer::BeginRenderingFull(const GraphicsPipeline* pipeline) {
     attachment_feedback_loop = false;
-    bool trace_this_pass = false; // GOW3_TRACE_ADDR names a color target of this pass
+    bool trace_this_pass = false; // GR2_TRACE_ADDR names a color target of this pass
     struct TraceReset {
         bool& flag;
-        ~TraceReset() { gow3_trace_pass = flag; }
+        ~TraceReset() { gr2_trace_pass = flag; }
     } trace_reset{trace_this_pass};
-    // gow3: frame analyzer census of this pass (sample counts and path, stencil, clears).
+    // gr2: frame analyzer census of this pass (sample counts and path, stencil, clears).
     const bool census_on = FrameCapture::Active();
     PassCensus::State census;
     using VulkanUpscalerTarget = TemporalUpscaler::Target;
@@ -3078,7 +3078,7 @@ RenderState Rasterizer::BeginRenderingFull(const GraphicsPipeline* pipeline) {
     // A proxy attachment cannot represent MSAA or a feedback loop that reads the
     // same image through the guest's native descriptor during this draw.
     bool reduced = scene_started && upscaler->RasterScaling() && key.num_samples == 1;
-    // GOW3_SCENE_DEBUG=<file>: once the file exists, why the passes of one frame keep the
+    // GR2_SCENE_DEBUG=<file>: once the file exists, why the passes of one frame keep the
     // native size (see NoteFrameStart).
     const bool debug_pass = scene_debug_frame && scene_started;
     std::string why;
@@ -3091,7 +3091,7 @@ RenderState Rasterizer::BeginRenderingFull(const GraphicsPipeline* pipeline) {
     }
     // Only this pass's attachments: slots past the mask's width keep earlier passes' targets,
     // often the G-buffer images the lighting passes sample (bound), which kept those native.
-    const u32 num_attachments = Gow3Toggle::Disabled(Gow3Toggle::SceneAttachmentsOnly)
+    const u32 num_attachments = Gr2Toggle::Disabled(Gr2Toggle::SceneAttachmentsOnly)
                                     ? u32(cb_descs.size())
                                     : u32(std::bit_width(key.mrt_mask));
     // All attachments of a reduced pass share one proxy size (scene or half resolution).
@@ -3133,9 +3133,9 @@ RenderState Rasterizer::BeginRenderingFull(const GraphicsPipeline* pipeline) {
         std::printf("Scene pass: reduced %d %s\n", reduced, why.c_str());
     }
     push_data.scene_size = reduced ? SceneResolution::Pack(scene_targets->Size()) : 0;
-    if (Gow3Stats::enabled) {
-        Gow3Stats::reduced_draws.fetch_add(reduced, std::memory_order_relaxed);
-        Gow3Stats::scene_draws.fetch_add(scene_started, std::memory_order_relaxed);
+    if (Gr2Stats::enabled) {
+        Gr2Stats::reduced_draws.fetch_add(reduced, std::memory_order_relaxed);
+        Gr2Stats::scene_draws.fetch_add(scene_started, std::memory_order_relaxed);
     }
     RenderState state;
     state.width = instance.GetMaxFramebufferWidth();
@@ -3199,7 +3199,7 @@ RenderState Rasterizer::BeginRenderingFull(const GraphicsPipeline* pipeline) {
         attachment.clear_value = clear_value.color.uint32;
         attachment.is_clear = is_clear;
         static const u64 trace_addr = [] {
-            const char* env = std::getenv("GOW3_TRACE_ADDR");
+            const char* env = std::getenv("GR2_TRACE_ADDR");
             return env ? std::strtoull(env, nullptr, 16) : 0ull;
         }();
         if (trace_addr && image->info.guest_address == trace_addr) {
@@ -3300,7 +3300,7 @@ RenderState Rasterizer::BeginRenderingFull(const GraphicsPipeline* pipeline) {
             attachment.stencil_clear = is_stencil_clear;
         }
         static const u64 trace_depth = [] {
-            const char* env = std::getenv("GOW3_TRACE_DEPTH");
+            const char* env = std::getenv("GR2_TRACE_DEPTH");
             return env ? std::strtoull(env, nullptr, 16) : 0ull;
         }();
         if (trace_depth && image.info.guest_address == trace_depth) {
@@ -3358,7 +3358,7 @@ RenderState Rasterizer::BeginRenderingFull(const GraphicsPipeline* pipeline) {
         state.depth_stencil_attachment = {};
     }
 
-    // gow3: a pass drawn into the upscaler's output-size images (UI, display pass): every
+    // gr2: a pass drawn into the upscaler's output-size images (UI, display pass): every
     // attachment must be redirected, viewports and scissors are scaled.
     target_scale = {1.0f, 1.0f};
     if (color_redirected || depth_redirected) {
@@ -3410,9 +3410,9 @@ RenderState Rasterizer::BeginRenderingFull(const GraphicsPipeline* pipeline) {
             target_scale = UiComposition::Scale(guest_extent.first, guest_extent.second,
                                                 redirect.width, redirect.height,
                                                 native_coordinates);
-            // GOW3_UI_DEBUG=N: the first N redirected passes (UI composition diagnosis).
+            // GR2_UI_DEBUG=N: the first N redirected passes (UI composition diagnosis).
             static int ui_debug = [] {
-                const char* v = std::getenv("GOW3_UI_DEBUG");
+                const char* v = std::getenv("GR2_UI_DEBUG");
                 return v ? std::atoi(v) : 0;
             }();
             if (ui_debug > 0) {
@@ -3467,7 +3467,7 @@ RenderState Rasterizer::BeginRenderingFull(const GraphicsPipeline* pipeline) {
             }
         }
     }
-    // gow3: object motion vector attachment of G-buffer pipelines.
+    // gr2: object motion vector attachment of G-buffer pipelines.
     if (key.motion_vectors) {
         object_motion->Attach(state, state.width, state.height);
     }
@@ -3599,7 +3599,7 @@ bool Rasterizer::InvalidateMemory(VAddr addr, u64 size, bool assume_locks) {
 }
 
 bool Rasterizer::OnWriteFault(VAddr addr, bool assume_locks, bool nowait) {
-    // gow3: a no-wait write takes the page over at once (BufferCache::NoWaitWrite): no draw pipe
+    // gr2: a no-wait write takes the page over at once (BufferCache::NoWaitWrite): no draw pipe
     // drain, no GPU wait. Images there are still invalidated.
     if (nowait && !assume_locks && IsMapped(addr, 8) && buffer_cache.NoWaitWrite(addr)) {
         texture_cache.InvalidateMemory(addr, 8);
@@ -3766,7 +3766,7 @@ void Rasterizer::UpdateViewportScissorState() const {
             const auto yoffset = vp_ctl.yoffset_enable ? vp.yoffset : 0.f;
             const auto yscale = vp_ctl.yscale_enable ? vp.yscale : 1.f;
 
-            // gow3: sub-pixel jitter of scene geometry for the temporal upscaler; the same
+            // gr2: sub-pixel jitter of scene geometry for the temporal upscaler; the same
             // shift as jittering the projection.
             viewport.x = (xoffset - xscale) * target_scale[0] + draw_jitter[0];
             viewport.y = (yoffset - yscale) * target_scale[1] + draw_jitter[1];
@@ -3831,7 +3831,7 @@ void Rasterizer::UpdateViewportScissorState() const {
 vk::Pipeline Rasterizer::SquarePass(const GraphicsPipeline& pipeline) const {
     const vk::Pipeline square = pipeline.SquarePassHandle();
     static const bool enabled = [] {
-        const char* env = std::getenv("GOW3_SQUARE_PASS");
+        const char* env = std::getenv("GR2_SQUARE_PASS");
         return !env || env[0] != '0';
     }();
     if (!square || !enabled) [[likely]] {
@@ -3876,7 +3876,7 @@ void Rasterizer::UpdateDepthStencilState() const {
     dynamic_state.SetDepthBiasEnabled(depth_bias_enabled);
     if (depth_bias_enabled) {
         const bool front = regs.polygon_control.enable_polygon_offset_front;
-        // gow3: GOW3_LIGHTING_TEST=bias passes the slope scale as the guest gives it.
+        // gr2: GR2_LIGHTING_TEST=bias passes the slope scale as the guest gives it.
         const float slope = front ? regs.poly_offset.front_scale : regs.poly_offset.back_scale;
         dynamic_state.SetDepthBias(
             front ? regs.poly_offset.front_offset : regs.poly_offset.back_offset,
@@ -3885,10 +3885,10 @@ void Rasterizer::UpdateDepthStencilState() const {
 
     const bool stencil_test_enabled = depth_stencil.stencil_test_enable;
     dynamic_state.SetStencilTestEnabled(stencil_test_enabled);
-    if (gow3_trace_pass) {
+    if (gr2_trace_pass) {
         // Ordered log of every draw into the traced color target: stencil role and scissor.
         static const u64 trace_addr = [] {
-            const char* env = std::getenv("GOW3_TRACE_ADDR");
+            const char* env = std::getenv("GR2_TRACE_ADDR");
             return env ? std::strtoull(env, nullptr, 16) : 0ull;
         }();
         static std::atomic<unsigned> seq{0};
@@ -3910,7 +3910,7 @@ void Rasterizer::UpdateDepthStencilState() const {
                              std::chrono::steady_clock::now().time_since_epoch().count() / 1000));
         }
     }
-    if (gow3_trace_pass && !stencil_test_enabled) {
+    if (gr2_trace_pass && !stencil_test_enabled) {
         static std::atomic<unsigned> lines{0};
         if (lines.fetch_add(1, std::memory_order_relaxed) < 200) {
             std::fprintf(stderr, "Addr draw without stencil test (cb0 mask %#x)\n",
@@ -3931,7 +3931,7 @@ void Rasterizer::UpdateDepthStencilState() const {
             .compare_op = LiverpoolToVK::CompareOp(regs.depth_control.stencil_bf_func),
         } : front_ops;
         dynamic_state.SetStencilOps(front_ops, back_ops);
-        if (gow3_trace_pass) {
+        if (gr2_trace_pass) {
             static std::string last;
             static unsigned lines = 0;
             const auto& tsc = regs.stencil_control;
@@ -4187,11 +4187,11 @@ void Rasterizer::NoteFrameStart() {
     if (auto* profiler = GpuProfiler::Get()) {
         profiler->BeginFrame();
     }
-    const u64 frame = Gow3Stats::gpu_frames.fetch_add(1, std::memory_order_relaxed) + 1;
-    // GOW3_BUFFER_STATS=1: how many earlier frames the GPU has not finished when the GPU thread
+    const u64 frame = Gr2Stats::gpu_frames.fetch_add(1, std::memory_order_relaxed) + 1;
+    // GR2_BUFFER_STATS=1: how many earlier frames the GPU has not finished when the GPU thread
     // starts a frame — the lag that decides whether guest memory can be read in place.
     static const bool stats = [] {
-        const char* value = std::getenv("GOW3_BUFFER_STATS");
+        const char* value = std::getenv("GR2_BUFFER_STATS");
         return value && value[0] == '1';
     }();
     if (!stats) {

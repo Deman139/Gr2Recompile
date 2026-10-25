@@ -1,5 +1,0 @@
-#include <winuser.h>
-CREATEPROCESS_MANIFEST_RESOURCE_ID RT_MANIFEST "gow3-probe.manifest"
-// The first icon is the one Explorer and the game window show. The repository's own icon, so a
-// fresh clone builds (Killzone's kzsf.ico was made from the player's dump and not committed).
-1 ICON "../../launcher/gow3.ico"

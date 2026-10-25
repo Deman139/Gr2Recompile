@@ -21,12 +21,12 @@ public:
     bool CanFit(std::uint64_t size) const {
         return entries.size() < MaxCopies() && size <= MaxBytes() && bytes <= MaxBytes() - size;
     }
-    /// gow3: copies that may be in flight before a new one waits for the GPU (a full drain).
+    /// gr2: copies that may be in flight before a new one waits for the GPU (a full drain).
     /// Killzone stayed under 64 copies and 64 MiB a frame; Gravity Rush 2 copies far more linear
-    /// images, and every overflow drained the GPU. GOW3_READBACK_COPIES / GOW3_READBACK_MB.
+    /// images, and every overflow drained the GPU. GR2_READBACK_COPIES / GR2_READBACK_MB.
     static std::size_t MaxCopies() {
         static const std::size_t value = [] {
-            const char* env = std::getenv("GOW3_READBACK_COPIES");
+            const char* env = std::getenv("GR2_READBACK_COPIES");
             const long n = env ? std::strtol(env, nullptr, 10) : 0;
             return n >= 16 && n <= 65536 ? std::size_t(n) : std::size_t{64};
         }();
@@ -34,7 +34,7 @@ public:
     }
     static std::uint64_t MaxBytes() {
         static const std::uint64_t value = [] {
-            const char* env = std::getenv("GOW3_READBACK_MB");
+            const char* env = std::getenv("GR2_READBACK_MB");
             const long n = env ? std::strtol(env, nullptr, 10) : 0;
             return (n >= 16 && n <= 4096 ? std::uint64_t(n) : std::uint64_t{64}) << 20;
         }();
@@ -74,7 +74,7 @@ public:
             }
         }
     }
-    /// gow3: a CPU access to [address, address + size) that shares pages with small copies but
+    /// gr2: a CPU access to [address, address + size) that shares pages with small copies but
     /// not their bytes stops waiting for them: each such copy is unwatched (`release` drops its
     /// page protection) and still published when the GPU is done. Returns the copies released.
     template <typename Release>

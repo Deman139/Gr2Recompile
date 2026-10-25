@@ -14,7 +14,7 @@
 #include <filesystem>
 #include <thread>
 #include <xxhash.h>
-#include "gow3_threads.h"
+#include "gr2_threads.h"
 
 #include "common/elf_info.h"
 #include "common/hash.h"
@@ -27,7 +27,7 @@
 #include "shader_recompiler/info.h"
 #include "shader_recompiler/recompiler.h"
 #include "shader_recompiler/runtime_info.h"
-#include "gow3_settings.h"
+#include "gr2_settings.h"
 #include "video_core/amdgpu/liverpool.h"
 #include "video_core/cache_storage.h"
 #include "video_core/renderer_vulkan/liverpool_to_vk.h"
@@ -326,7 +326,7 @@ const Shader::RuntimeInfo& PipelineCache::BuildRuntimeInfo(PipelineSelection& se
     return info;
 }
 
-// gow3 (iss_pc BP08, from Mrsuss b972798 and 0xCydral bdb9769): the driver's own pipeline cache
+// gr2 (iss_pc BP08, from Mrsuss b972798 and 0xCydral bdb9769): the driver's own pipeline cache
 // (the compiled ISA behind every vkCreate*Pipelines) is kept between sessions in
 // <cache>/driver-<serial>/vk_pipeline_cache_<vendor>_<device>_<pipelineCacheUUID>.vkc. The key
 // is in the file name, so a GPU or driver change finds no file and leaves the others alone:
@@ -334,7 +334,7 @@ const Shader::RuntimeInfo& PipelineCache::BuildRuntimeInfo(PipelineSelection& se
 // header (magic, version, size, XXH3 of the blob) and the blob; it is written to a temporary
 // name and renamed, so a crash leaves the old file or none. Independent of the shader cache
 // folder, which is pruned when the recompiler changes; the driver checks the blob again.
-// GOW3_DRIVER_CACHE=0 turns it off. It covers what pipeline binaries do not: compute pipelines
+// GR2_DRIVER_CACHE=0 turns it off. It covers what pipeline binaries do not: compute pipelines
 // and drivers without VK_KHR_pipeline_binary.
 namespace {
 constexpr u32 DriverCacheMagic = 0x4B435649; // "IVCK"
@@ -349,7 +349,7 @@ static_assert(sizeof(DriverCacheHeader) == 24);
 
 bool DriverCacheEnabled() {
     static const bool on = [] {
-        const char* v = std::getenv("GOW3_DRIVER_CACHE");
+        const char* v = std::getenv("GR2_DRIVER_CACHE");
         return !v || *v != '0';
     }();
     return on;
@@ -408,8 +408,8 @@ std::vector<u8> LoadDriverCacheBlob(const Instance& instance) {
 }
 } // namespace
 
-/// gow3: pipelines the driver created (graphics and compute): the saver only works when it moved.
-std::atomic<u64> g_gow3_driver_pipelines_created{0};
+/// gr2: pipelines the driver created (graphics and compute): the saver only works when it moved.
+std::atomic<u64> g_gr2_driver_pipelines_created{0};
 
 struct PipelineCache::DriverCacheSaver {
     std::thread thread;
@@ -417,7 +417,7 @@ struct PipelineCache::DriverCacheSaver {
     std::condition_variable cv;
     bool stop = false;
     u64 saved_hash = 0; ///< XXH3 of the last blob written (or loaded): unchanged data is not rewritten
-    /// g_gow3_driver_pipelines_created at the last save: nothing new means nothing to merge, copy
+    /// g_gr2_driver_pipelines_created at the last save: nothing new means nothing to merge, copy
     /// or hash.
     u64 saved_created = ~0ull;
     bool over_limit_logged = false;
@@ -429,7 +429,7 @@ bool PipelineCache::SaveDriverCache() {
     try {
         return SaveDriverCacheUnchecked();
     } catch (const std::exception& e) {
-        LOG_WARNING(Render_Vulkan, "gow3: driver pipeline cache save skipped: {}", e.what());
+        LOG_WARNING(Render_Vulkan, "gr2: driver pipeline cache save skipped: {}", e.what());
         return false;
     }
 }
@@ -437,7 +437,7 @@ bool PipelineCache::SaveDriverCache() {
 bool PipelineCache::SaveDriverCacheUnchecked() {
     // Pipelines the compiler workers built are only merged into pipeline_cache when they finish
     // (FinishCompilations): merge copies of all of them into a scratch cache for the blob.
-    const u64 created = g_gow3_driver_pipelines_created.load(std::memory_order_relaxed);
+    const u64 created = g_gr2_driver_pipelines_created.load(std::memory_order_relaxed);
     if (driver_saver && created == driver_saver->saved_created) {
         return true;
     }
@@ -457,18 +457,18 @@ bool PipelineCache::SaveDriverCacheUnchecked() {
     if (result != vk::Result::eSuccess || blob.size() < sizeof(VkPipelineCacheHeaderVersionOne)) {
         return false;
     }
-    // GOW3_DRIVER_CACHE_MAX_MB (default 1024, 0 = no limit): a bigger blob is not written, so the
+    // GR2_DRIVER_CACHE_MAX_MB (default 1024, 0 = no limit): a bigger blob is not written, so the
     // file never grows past it (the saved one keeps loading). Vulkan has no way to evict entries
     // from a pipeline cache; clearing the cache in the launcher starts it again.
     static const u64 max_bytes = [] {
-        const char* v = std::getenv("GOW3_DRIVER_CACHE_MAX_MB");
+        const char* v = std::getenv("GR2_DRIVER_CACHE_MAX_MB");
         return u64(v && *v ? std::max(0, std::atoi(v)) : 1024) << 20;
     }();
     if (max_bytes && blob.size() > max_bytes) {
         if (driver_saver && !driver_saver->over_limit_logged) {
             driver_saver->over_limit_logged = true;
             std::printf("GPU: driver pipeline cache not saved: %zu MB is over the %llu MB limit "
-                        "(GOW3_DRIVER_CACHE_MAX_MB)\n",
+                        "(GR2_DRIVER_CACHE_MAX_MB)\n",
                         blob.size() >> 20, static_cast<unsigned long long>(max_bytes >> 20));
         }
         if (driver_saver) {
@@ -498,27 +498,27 @@ bool PipelineCache::SaveDriverCacheUnchecked() {
     }
     if (!written || ec) {
         std::filesystem::remove(temp, ec);
-        LOG_ERROR(Render_Vulkan, "gow3: driver pipeline cache not written to {}", path.string());
+        LOG_ERROR(Render_Vulkan, "gr2: driver pipeline cache not written to {}", path.string());
         return false;
     }
     if (driver_saver) {
         driver_saver->saved_hash = hash;
         driver_saver->saved_created = created;
     }
-    LOG_INFO(Render_Vulkan, "gow3: driver pipeline cache saved ({} bytes)", blob.size());
+    LOG_INFO(Render_Vulkan, "gr2: driver pipeline cache saved ({} bytes)", blob.size());
     return true;
 }
 
 void PipelineCache::StartDriverCacheSaver() {
     // The process may end without destructors: the cache is also saved while the game runs,
-    // every GOW3_DRIVER_CACHE_SAVE_S seconds (default 60) when the driver built new pipelines.
+    // every GR2_DRIVER_CACHE_SAVE_S seconds (default 60) when the driver built new pipelines.
     driver_saver = new DriverCacheSaver;
     driver_saver->thread = std::thread([this] {
-        Common::SetCurrentThreadName("gow3:DriverCacheSave");
+        Common::SetCurrentThreadName("gr2:DriverCacheSave");
         auto* saver = driver_saver;
         std::unique_lock lock{saver->mutex};
         static const int save_seconds = [] {
-            const char* v = std::getenv("GOW3_DRIVER_CACHE_SAVE_S");
+            const char* v = std::getenv("GR2_DRIVER_CACHE_SAVE_S");
             return v && *v ? std::clamp(std::atoi(v), 10, 3600) : 60;
         }();
         while (!saver->stop) {
@@ -600,9 +600,9 @@ PipelineCache::PipelineCache(const Instance& instance_, Scheduler& scheduler_,
         .supports_shader_subgroup_clock = instance_.IsShaderSubgroupClockSupported(),
         .needs_manual_interpolation = instance.IsFragmentShaderBarycentricSupported() &&
                                       instance.GetDriverID() == vk::DriverId::eNvidiaProprietary,
-        // gow3: older NVIDIA (Pascal) has no barycentrics; GOW3_INTERP_INT_FIX=0/1 overrides.
+        // gr2: older NVIDIA (Pascal) has no barycentrics; GR2_INTERP_INT_FIX=0/1 overrides.
         .needs_integer_interpolation_fix = [&] {
-            if (const char* env = std::getenv("GOW3_INTERP_INT_FIX")) {
+            if (const char* env = std::getenv("GR2_INTERP_INT_FIX")) {
                 return env[0] == '1';
             }
             return !instance.IsFragmentShaderBarycentricSupported() &&
@@ -617,7 +617,7 @@ PipelineCache::PipelineCache(const Instance& instance_, Scheduler& scheduler_,
         .dref_broadcast = LightingTest::Current().dref,
     };
 
-    // gow3: start from the driver blob saved by an earlier session (same GPU and driver).
+    // gr2: start from the driver blob saved by an earlier session (same GPU and driver).
     std::vector<u8> driver_blob;
     if (DriverCacheEnabled()) {
         driver_blob = LoadDriverCacheBlob(instance);
@@ -636,34 +636,34 @@ PipelineCache::PipelineCache(const Instance& instance_, Scheduler& scheduler_,
     ASSERT_MSG(cache_result == vk::Result::eSuccess, "Failed to create pipeline cache: {}",
                vk::to_string(cache_result));
     pipeline_cache = std::move(cache);
-    // gow3: the compiler threads always exist; the in-game menu switches async compilation live
-    // (Gow3Settings::async_shaders, GOW3_ASYNC_SHADERS at start).
+    // gr2: the compiler threads always exist; the in-game menu switches async compilation live
+    // (Gr2Settings::async_shaders, GR2_ASYNC_SHADERS at start).
     {
-        // gow3 (Killzone): a first play compiles hundreds of pipelines (~200 ms each) while the
+        // gr2 (Killzone): a first play compiles hundreds of pipelines (~200 ms each) while the
         // game itself keeps a core or two busy: every hardware thread but 4 compiles (2..10).
-        // GOW3_COMPILE_THREADS sets the count.
-        const char* threads_env = std::getenv("GOW3_COMPILE_THREADS");
+        // GR2_COMPILE_THREADS sets the count.
+        const char* threads_env = std::getenv("GR2_COMPILE_THREADS");
         const auto count = threads_env && *threads_env
                                ? std::clamp(unsigned(std::atoi(threads_env)), 1u, 32u)
-                               : std::clamp(Gow3Threads::Available() - std::min(Gow3Threads::Available(), 4u), 2u, 10u);
-        const auto capture_count = std::min(2u, std::max(1u, Gow3Threads::Available() / 4));
+                               : std::clamp(Gr2Threads::Available() - std::min(Gr2Threads::Available(), 4u), 2u, 10u);
+        const auto capture_count = std::min(2u, std::max(1u, Gr2Threads::Available() / 4));
         for (unsigned i = 0; i < count; ++i) {
             auto [result, worker_cache] = instance.GetDevice().createPipelineCacheUnique({});
             ASSERT_MSG(result == vk::Result::eSuccess, "Failed to create compiler pipeline cache");
             worker_pipeline_caches.push_back(std::move(worker_cache));
         }
         capture_compiler = std::make_unique<AsyncCompiler>(capture_count, 8, [](unsigned index) {
-            Common::SetCurrentThreadName(("gow3:ShaderCapture" + std::to_string(index)).c_str());
+            Common::SetCurrentThreadName(("gr2:ShaderCapture" + std::to_string(index)).c_str());
             Common::SetCurrentThreadPriority(Common::ThreadPriority::High);
         });
         compiler = std::make_unique<AsyncCompiler>(count, 64, [](unsigned index) {
-            Common::SetCurrentThreadName(("gow3:ShaderCompile" + std::to_string(index)).c_str());
+            Common::SetCurrentThreadName(("gr2:ShaderCompile" + std::to_string(index)).c_str());
             Common::SetCurrentThreadPriority(Common::ThreadPriority::Low);
         });
-        LOG_INFO(Render_Vulkan, "gow3: async graphics compilation ready ({} capture, {} compile workers)",
+        LOG_INFO(Render_Vulkan, "gr2: async graphics compilation ready ({} capture, {} compile workers)",
                  capture_count, count);
     }
-    // gow3: the saver thread reads worker_pipeline_caches: start it only once the list is complete.
+    // gr2: the saver thread reads worker_pipeline_caches: start it only once the list is complete.
     if (DriverCacheEnabled()) {
         StartDriverCacheSaver();
         if (!driver_blob.empty()) {
@@ -683,16 +683,16 @@ PipelineCache::~PipelineCache() {
     }
 }
 
-// gow3: shader/pipeline compile time on the GPU thread, reported by GOW3_FRAME_STATS.
-std::atomic<u64> g_gow3_compile_ns;
-std::atomic<u32> g_gow3_compiles;
-std::atomic<u64> g_gow3_capture_ns, g_gow3_async_ns, g_gow3_compile_wait_ns;
-std::atomic<u64> g_gow3_snapshot_ns, g_gow3_guest_wait_ns;
-std::atomic<u32> g_gow3_pool_reuses;
-std::atomic<u32> g_gow3_pending_draws;
-/// gow3: source line of the last failed graphics key refresh (diagnosis of skipped draws).
-thread_local int g_gow3_fail_line = 0;
-int PipelineFailLine() { return g_gow3_fail_line; }
+// gr2: shader/pipeline compile time on the GPU thread, reported by GR2_FRAME_STATS.
+std::atomic<u64> g_gr2_compile_ns;
+std::atomic<u32> g_gr2_compiles;
+std::atomic<u64> g_gr2_capture_ns, g_gr2_async_ns, g_gr2_compile_wait_ns;
+std::atomic<u64> g_gr2_snapshot_ns, g_gr2_guest_wait_ns;
+std::atomic<u32> g_gr2_pool_reuses;
+std::atomic<u32> g_gr2_pending_draws;
+/// gr2: source line of the last failed graphics key refresh (diagnosis of skipped draws).
+thread_local int g_gr2_fail_line = 0;
+int PipelineFailLine() { return g_gr2_fail_line; }
 namespace {
 struct PhaseTimer {
     std::atomic<u64>& counter;
@@ -711,10 +711,10 @@ struct PhaseTimer {
 struct CompileTimer {
     std::chrono::steady_clock::time_point start = std::chrono::steady_clock::now();
     ~CompileTimer() {
-        g_gow3_compile_ns += u64(std::chrono::duration_cast<std::chrono::nanoseconds>(
+        g_gr2_compile_ns += u64(std::chrono::duration_cast<std::chrono::nanoseconds>(
                                    std::chrono::steady_clock::now() - start)
                                    .count());
-        ++g_gow3_compiles;
+        ++g_gr2_compiles;
     }
 };
 } // namespace
@@ -728,7 +728,7 @@ bool PipelineCache::QueueShader(Program& program, HwStage stage, SwStage l_stage
     if (!compiler->HasCapacity()) {
         return false;
     }
-    PhaseTimer snapshot{g_gow3_snapshot_ns};
+    PhaseTimer snapshot{g_gr2_snapshot_ns};
     auto build = std::make_shared<AsyncShaderCompilation>();
     build->device = instance.GetDevice();
     build->code.assign(params.code.begin(), params.code.end());
@@ -750,13 +750,13 @@ bool PipelineCache::QueueShader(Program& program, HwStage stage, SwStage l_stage
     snapshot.Stop();
     AsyncJob<bool> capture_job;
     if (!capture_job.Start(*capture_compiler, [this, build, binding] {
-        PhaseTimer capture{g_gow3_capture_ns};
+        PhaseTimer capture{g_gr2_capture_ns};
         auto [pools, reused] = compiler_pools.Acquire();
         build->pools = std::move(pools);
         if (reused) {
-            ++g_gow3_pool_reuses;
+            ++g_gr2_pool_reuses;
         }
-        // gow3: the GPU thread waits until all guest reads and specialization are captured.
+        // gr2: the GPU thread waits until all guest reads and specialization are captured.
         // The key keeps the runtime info as the lookup builds it: translation adjusts it
         // (InjectClipDistanceAttributes adds a fragment input on NVIDIA), and a key made after
         // that never matches again, so every draw queued a new permutation (iss_pc 33378a2).
@@ -770,7 +770,7 @@ bool PipelineCache::QueueShader(Program& program, HwStage stage, SwStage l_stage
         return false;
     }
     {
-        PhaseTimer waiting{g_gow3_guest_wait_ns};
+        PhaseTimer waiting{g_gr2_guest_wait_ns};
         capture_job.Wait();
     }
     if (!capture_job.Poll()) {
@@ -780,12 +780,12 @@ bool PipelineCache::QueueShader(Program& program, HwStage stage, SwStage l_stage
             specialization->info = &program.info;
             program.failed_permutations.push_back(std::move(*specialization));
         }
-        LOG_ERROR(Render_Vulkan, "gow3: shader {:#x}/{} capture failed: {}", params.hash,
+        LOG_ERROR(Render_Vulkan, "gr2: shader {:#x}/{} capture failed: {}", params.hash,
                   permutation, capture_job.Error());
         return false;
     }
     const bool queued = build->job.Start(*compiler, [this, build] {
-        PhaseTimer compile{g_gow3_async_ns};
+        PhaseTimer compile{g_gr2_async_ns};
         Shader::Gcn::ScopedFetchShaderSnapshot snapshot{build->fetch};
         auto spv = Shader::Backend::SPIRV::EmitSPIRV(profile, build->runtime, *build->ir,
                                                     build->binding);
@@ -829,7 +829,7 @@ void PipelineCache::PublishShaders(bool wait) {
                     program->failed_permutations.push_back(std::move(build->spec));
                 }
                 program->pending.reset();
-                LOG_ERROR(Render_Vulkan, "gow3: shader {:#x}/{} compilation failed: {}", hash,
+                LOG_ERROR(Render_Vulkan, "gr2: shader {:#x}/{} compilation failed: {}", hash,
                           build->permutation, build->job.Error());
                 retire();
             } else {
@@ -869,7 +869,7 @@ void PipelineCache::PublishGraphics(bool wait) {
         auto result = build->job.Poll();
         if (!result) {
             if (build->job.Failed() && !build->failure_logged) {
-                LOG_ERROR(Render_Vulkan, "gow3: pipeline {:#x} compilation failed: {}",
+                LOG_ERROR(Render_Vulkan, "gr2: pipeline {:#x} compilation failed: {}",
                           std::hash<GraphicsPipelineKey>{}(it.key()), build->job.Error());
                 build->failure_logged = true;
             }
@@ -890,7 +890,7 @@ bool PipelineCache::WaitForPending() {
         return false;
     }
     static const bool targeted = [] {
-        const char* env = std::getenv("GOW3_TARGETED_WAIT");
+        const char* env = std::getenv("GR2_TARGETED_WAIT");
         return !env || env[0] != '0';
     }();
     if (!targeted) {
@@ -937,13 +937,13 @@ void PipelineCache::FinishCompilations() {
         }
         const auto result = instance.GetDevice().mergePipelineCaches(*pipeline_cache, sources);
         if (result != vk::Result::eSuccess) {
-            LOG_ERROR(Render_Vulkan, "gow3: compiler cache merge failed: {}", vk::to_string(result));
+            LOG_ERROR(Render_Vulkan, "gr2: compiler cache merge failed: {}", vk::to_string(result));
         }
     }
 }
 
 bool PipelineCache::AsyncCompilation() const {
-    return compiler && Gow3Settings::Get().async_shaders.load(std::memory_order_relaxed);
+    return compiler && Gr2Settings::Get().async_shaders.load(std::memory_order_relaxed);
 }
 
 void PipelineCache::SeedWorkerCaches() {
@@ -963,7 +963,7 @@ void PipelineCache::ReportCompilerStats() {
                     "%.1f ms, compile %.1f ms; pools retained %zu, reused %u\n",
                     capture_compiler->Depth(), compiler->Depth(),
                     capture_compiler->QueueWaitNs() / 1e6, compiler->QueueWaitNs() / 1e6,
-                    compiler_pools.Retained(), g_gow3_pool_reuses.exchange(0));
+                    compiler_pools.Retained(), g_gr2_pool_reuses.exchange(0));
     }
 }
 
@@ -1025,7 +1025,7 @@ const GraphicsPipeline* PipelineCache::GetGraphicsPipeline(const DrawIndirectPar
     sel.draw_indirect_params = params;
     if (!RefreshGraphicsKey(sel)) {
         if (sel.compilation_pending) {
-            ++g_gow3_pending_draws;
+            ++g_gr2_pending_draws;
             lookup_pending = true;
         }
         return nullptr;
@@ -1036,7 +1036,7 @@ const GraphicsPipeline* PipelineCache::GetGraphicsPipeline(const DrawIndirectPar
             return found->second.get();
         }
         if (!pending_graphics.contains(sel.graphics_key) && compiler->HasCapacity()) {
-            PhaseTimer capture{g_gow3_snapshot_ns};
+            PhaseTimer capture{g_gr2_snapshot_ns};
             auto build = std::make_shared<AsyncGraphicsCompilation>();
             build->selection = sel;
             build->selection.regs = nullptr;
@@ -1053,7 +1053,7 @@ const GraphicsPipeline* PipelineCache::GetGraphicsPipeline(const DrawIndirectPar
             const bool queued = build->job.Start(*compiler, [this, build] {
                 // Only the vertex stage uses fetch-shader guest pointers during pipeline construction.
                 Shader::Gcn::ScopedFetchShaderSnapshot snapshot{build->fetch[u32(SwStage::Vertex)]};
-                PhaseTimer compile{g_gow3_async_ns};
+                PhaseTimer compile{g_gr2_async_ns};
                 auto& s = build->selection;
                 build->pipeline = std::make_unique<GraphicsPipeline>(
                     instance, scheduler, desc_heap, profile, s.graphics_key,
@@ -1065,7 +1065,7 @@ const GraphicsPipeline* PipelineCache::GetGraphicsPipeline(const DrawIndirectPar
                 pending_graphics.emplace(sel.graphics_key, std::move(build));
             }
         }
-        ++g_gow3_pending_draws;
+        ++g_gr2_pending_draws;
         lookup_pending = true;
         return nullptr;
     }
@@ -1129,7 +1129,7 @@ bool PipelineCache::RefreshGraphicsKey(PipelineSelection& sel) {
     const auto& regs = (*sel.regs);
     auto& key = sel.graphics_key;
 
-    // gow3: a depth/stencil buffer that cannot affect the draw is not attached: on the PC a
+    // gr2: a depth/stencil buffer that cannot affect the draw is not attached: on the PC a
     // smaller one would crop a full-screen pass (eltutz, vk_depth_stencil_state.h).
     const bool db_enabled = GetEffectiveDepthStencilState(regs).needs_attachment;
 
@@ -1209,10 +1209,10 @@ bool PipelineCache::RefreshGraphicsKey(PipelineSelection& sel) {
                 }
             }
         }
-        // GOW3_MOTION_SELECT_LOG=1: each G-buffer vertex shader once, with its buffer sizes
+        // GR2_MOTION_SELECT_LOG=1: each G-buffer vertex shader once, with its buffer sizes
         // and the selection, to find animated models that the size rule leaves out.
         static const bool select_log = [] {
-            const char* value = std::getenv("GOW3_MOTION_SELECT_LOG");
+            const char* value = std::getenv("GR2_MOTION_SELECT_LOG");
             return value && value[0] == '1';
         }();
         if (select_log && vs) {
@@ -1233,7 +1233,7 @@ bool PipelineCache::RefreshGraphicsKey(PipelineSelection& sel) {
         }
         // Keep the old broad path available for visual A/B tests.
         static const bool all_motion = [] {
-            const char* value = std::getenv("GOW3_OBJECT_MOTION_ALL");
+            const char* value = std::getenv("GR2_OBJECT_MOTION_ALL");
             return value && value[0] == '1';
         }();
         if (all_motion) {
@@ -1315,14 +1315,14 @@ bool PipelineCache::RefreshGraphicsStages(PipelineSelection& sel) {
         if (!regs.stage_enable.IsStageEnabled(stage_in_idx)) {
             key.stage_hashes[stage_out_idx] = 0;
             sel.infos[stage_out_idx] = nullptr;
-            { g_gow3_fail_line = __LINE__; return false; }
+            { g_gr2_fail_line = __LINE__; return false; }
         }
 
         const auto* pgm = regs.ProgramForStage(stage_in_idx);
         if (!pgm || !pgm->Address<u32*>()) {
             key.stage_hashes[stage_out_idx] = 0;
             sel.infos[stage_out_idx] = nullptr;
-            { g_gow3_fail_line = __LINE__; return false; }
+            { g_gr2_fail_line = __LINE__; return false; }
         }
 
         const auto params = AmdGpu::GetParams(*pgm);
@@ -1332,7 +1332,7 @@ bool PipelineCache::RefreshGraphicsStages(PipelineSelection& sel) {
             GetProgram(sel, stage_in, stage_out, params, binding);
         if (!sel.infos[stage_out_idx]) {
             sel.compilation_pending = true;
-            { g_gow3_fail_line = __LINE__; return false; }
+            { g_gr2_fail_line = __LINE__; return false; }
         }
         if (fetch_shader_) {
             sel.fetch_shader = fetch_shader_;
@@ -1345,7 +1345,7 @@ bool PipelineCache::RefreshGraphicsStages(PipelineSelection& sel) {
 
     bind_stage(HwStage::Fragment, SwStage::Fragment);
     if (sel.compilation_pending) {
-        { g_gow3_fail_line = __LINE__; return false; }
+        { g_gr2_fail_line = __LINE__; return false; }
     }
 
     const auto* fs_info = sel.infos[static_cast<u32>(SwStage::Fragment)];
@@ -1356,67 +1356,67 @@ bool PipelineCache::RefreshGraphicsStages(PipelineSelection& sel) {
     case AmdGpu::ShaderStageEnable::VgtStages::EsGs:
         if (!instance.IsGeometryStageSupported()) {
             LOG_WARNING(Render_Vulkan, "Geometry shader stage unsupported, skipping");
-            { g_gow3_fail_line = __LINE__; return false; }
+            { g_gr2_fail_line = __LINE__; return false; }
         }
         if (regs.vgt_gs_mode.onchip || regs.vgt_strmout_config.raw) {
             LOG_WARNING(Render_Vulkan, "Geometry shader features unsupported, skipping");
-            { g_gow3_fail_line = __LINE__; return false; }
+            { g_gr2_fail_line = __LINE__; return false; }
         }
         if (!bind_stage(HwStage::Export, SwStage::Vertex)) {
-            { g_gow3_fail_line = __LINE__; return false; }
+            { g_gr2_fail_line = __LINE__; return false; }
         }
         if (!bind_stage(HwStage::Geometry, SwStage::Geometry)) {
-            { g_gow3_fail_line = __LINE__; return false; }
+            { g_gr2_fail_line = __LINE__; return false; }
         }
         break;
     case AmdGpu::ShaderStageEnable::VgtStages::LsHs:
         if (!instance.IsTessellationSupported()) {
-            { g_gow3_fail_line = __LINE__; return false; }
+            { g_gr2_fail_line = __LINE__; return false; }
         }
         if (!bind_stage(HwStage::Hull, SwStage::TessellationControl)) {
-            { g_gow3_fail_line = __LINE__; return false; }
+            { g_gr2_fail_line = __LINE__; return false; }
         }
         if (!bind_stage(HwStage::Vertex, SwStage::TessellationEval)) {
-            { g_gow3_fail_line = __LINE__; return false; }
+            { g_gr2_fail_line = __LINE__; return false; }
         }
         if (!bind_stage(HwStage::Local, SwStage::Vertex)) {
-            { g_gow3_fail_line = __LINE__; return false; }
+            { g_gr2_fail_line = __LINE__; return false; }
         }
         break;
     case AmdGpu::ShaderStageEnable::VgtStages::LsHsEsGs:
         if (!instance.IsTessellationSupported()) {
-            { g_gow3_fail_line = __LINE__; return false; }
+            { g_gr2_fail_line = __LINE__; return false; }
         }
         if (!instance.IsGeometryStageSupported()) {
             LOG_WARNING(Render_Vulkan, "Geometry shader stage unsupported, skipping");
-            { g_gow3_fail_line = __LINE__; return false; }
+            { g_gr2_fail_line = __LINE__; return false; }
         }
         if (regs.vgt_gs_mode.onchip || regs.vgt_strmout_config.raw) {
             LOG_WARNING(Render_Vulkan, "Geometry shader features unsupported, skipping");
-            { g_gow3_fail_line = __LINE__; return false; }
+            { g_gr2_fail_line = __LINE__; return false; }
         }
         if (!bind_stage(HwStage::Hull, SwStage::TessellationControl)) {
-            { g_gow3_fail_line = __LINE__; return false; }
+            { g_gr2_fail_line = __LINE__; return false; }
         }
         if (!bind_stage(HwStage::Export, SwStage::TessellationEval)) {
-            { g_gow3_fail_line = __LINE__; return false; }
+            { g_gr2_fail_line = __LINE__; return false; }
         }
         if (!bind_stage(HwStage::Local, SwStage::Vertex)) {
-            { g_gow3_fail_line = __LINE__; return false; }
+            { g_gr2_fail_line = __LINE__; return false; }
         }
         if (!bind_stage(HwStage::Geometry, SwStage::Geometry)) {
-            { g_gow3_fail_line = __LINE__; return false; }
+            { g_gr2_fail_line = __LINE__; return false; }
         }
         break;
     case AmdGpu::ShaderStageEnable::VgtStages::Vs:
         bind_stage(HwStage::Vertex, SwStage::Vertex);
         if (sel.compilation_pending) {
-            { g_gow3_fail_line = __LINE__; return false; }
+            { g_gr2_fail_line = __LINE__; return false; }
         }
         break;
     default:
         LOG_WARNING(Render_Vulkan, "unimplemented shader stage {}", (u32)regs.stage_enable.raw);
-        { g_gow3_fail_line = __LINE__; return false; }
+        { g_gr2_fail_line = __LINE__; return false; }
     }
 
     const auto* vs_info = sel.infos[static_cast<u32>(SwStage::Vertex)];
@@ -1490,7 +1490,7 @@ PipelineCache::Result PipelineCache::GetProgram(PipelineSelection& sel, HwStage 
                                                 Shader::Backend::Bindings& binding) {
     auto runtime_info = BuildRuntimeInfo(sel, hw_stage, sw_stage);
     if (sel.worker) {
-        // gow3: draw-preparation worker: look up only, with the worker's own Info copy.
+        // gr2: draw-preparation worker: look up only, with the worker's own Info copy.
         auto& worker = *sel.worker;
         std::shared_lock lk{programs_mutex};
         const auto found_program = program_cache.find(params.hash);
@@ -1535,7 +1535,7 @@ PipelineCache::Result PipelineCache::GetProgram(PipelineSelection& sel, HwStage 
                                !EmulatorSettings.IsShaderCollect();
     if (!compile_async && it_pgm != program_cache.end() && it_pgm->second->pending) {
         {
-            PhaseTimer waiting{g_gow3_compile_wait_ns};
+            PhaseTimer waiting{g_gr2_compile_wait_ns};
             it_pgm->second->pending->job.Wait();
         }
         PublishShaders();
@@ -1602,7 +1602,7 @@ PipelineCache::Result PipelineCache::GetProgram(PipelineSelection& sel, HwStage 
 
     vk::ShaderModule module{};
 
-    // gow3: consecutive draws of a program almost always use the same permutation.
+    // gr2: consecutive draws of a program almost always use the same permutation.
     auto it = program->last_used < program->modules.size() &&
                       program->modules[program->last_used].spec == spec
                   ? program->modules.begin() + program->last_used

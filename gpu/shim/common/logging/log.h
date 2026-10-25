@@ -1,5 +1,5 @@
-// gow3: replaces shadPS4's spdlog-based logger with a small fmt sink.
-// Level from GOW3_GPU_LOG (trace|debug|info|warning|error; default warning).
+// gr2: replaces shadPS4's spdlog-based logger with a small fmt sink.
+// Level from GR2_GPU_LOG (trace|debug|info|warning|error; default warning).
 #pragma once
 #include <algorithm>
 #include <atomic>
@@ -28,7 +28,7 @@ using Level = spdlog::level;
 bool ShouldLog(Level level);
 void Write(std::string_view log_class, Level level, const char* file, int line, const char* function,
            std::string&& message);
-/// gow3: a call site logs its first messages only (GOW3_GPU_LOG_REPEATS, default 20; 0 = all).
+/// gr2: a call site logs its first messages only (GR2_GPU_LOG_REPEATS, default 20; 0 = all).
 /// Per-draw warnings otherwise flood the unbuffered stderr from the GPU command thread: in
 /// Killzone stream-out scenes the writes took most of that thread's time (6 FPS).
 bool AllowSite(std::atomic<unsigned>& count, const char* file, int line);
@@ -37,9 +37,9 @@ inline void Flush() {}
 
 #define LOG_GENERIC(log_class, log_level, fmt_str, ...)                                             \
     do {                                                                                           \
-        static std::atomic<unsigned> gow3_log_site_count{0};                                      \
+        static std::atomic<unsigned> gr2_log_site_count{0};                                      \
         if (Common::Log::ShouldLog(log_level) &&                                                   \
-            Common::Log::AllowSite(gow3_log_site_count, __FILE__, __LINE__)) {                     \
+            Common::Log::AllowSite(gr2_log_site_count, __FILE__, __LINE__)) {                     \
             Common::Log::Write(log_class, log_level, __FILE__, __LINE__, __func__,                 \
                                fmt::format(fmt_str __VA_OPT__(, ) __VA_ARGS__));                    \
         }                                                                                          \

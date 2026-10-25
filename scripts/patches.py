@@ -160,10 +160,9 @@ PATCHES_DIR=Path(__file__).resolve().parent.parent/'patches'
 # Built-in patch file per game: its title IDs, the AppVer its metadata is tagged with and the
 # title that also recognizes a release under an ID not listed. The signatures find the sites in
 # any region or version whose code matches, so the eboot.bin build is not checked.
-GAMES=[({'CUSA01623','CUSA01715','CUSA01720'},PATCHES_DIR/'God_of_War_III_Remastered.xml','01.02',
-        'God of War III'),
-       ({'CUSA00190','CUSA00191','CUSA00002','CUSA00085'},PATCHES_DIR/'Killzone_Shadow_Fall.xml','01.81',
-        'Killzone Shadow Fall')]
+# (title IDs, built-in patch file, version, title): none ship for Gravity Rush 2, whose patches
+# come from the player's user/patches folder (external_patches).
+GAMES=[]
 # The build the built-in Address values and third-party patch files are written for.
 REFERENCE_SHA256='d85c8135d330c3b601bf5dc3f1dd86bd6119fb8a9fce372bed2c9785f9a79299'
 DMEM_RETAIL_MB=4608  # runtime_memory.c POOL_SIZE default
@@ -329,14 +328,14 @@ def main():
     p.add_argument('--patches-config',type=Path,help='patches.json: enabled/disabled external patches')
     p.add_argument('--extra',default='',help='additional patch names, separated by ";"')
     p.add_argument('--out',type=Path,default=Path(__file__).resolve().parent.parent/'out')
-    p.add_argument('--game-dir',type=Path,default=Path(os.environ.get('GOW3_GAME_DIR','../CUSA01623')))
+    p.add_argument('--game-dir',type=Path,default=Path(os.environ.get('GR2_GAME_DIR','../CUSA01623')))
     a=p.parse_args()
     title=game_title_id(a.game_dir)
     profile=game_profile_for(a.game_dir)
     if not profile:
         # No built-in file (Gravity Rush 2): only the third-party files that name this title ID,
         # for the version the game reports (an update folder's param.sfo when one is used).
-        version=game_app_version(os.environ.get('GOW3_PATCH_DIR') or a.game_dir) or game_app_version(a.game_dir)
+        version=game_app_version(os.environ.get('GR2_PATCH_DIR') or a.game_dir) or game_app_version(a.game_dir)
         writes,selected=[],[]
         if a.patches_dir and title and version and (a.out/'eboot.elf').is_file():
             segments=eboot_segments((a.out/'eboot.elf').read_bytes())
@@ -351,7 +350,7 @@ def main():
     ids,xml,tag,_name=profile
     sha=eboot_sha256(a.game_dir)
     print(f'Patches: {title} {game_app_version(a.game_dir)}, eboot.bin sha256 {sha}')
-    names=selected_patches(xml,tag,a.extra,os.environ.get('GOW3_PATCHES_ONLY')=='1')
+    names=selected_patches(xml,tag,a.extra,os.environ.get('GR2_PATCHES_ONLY')=='1')
     elf=(a.out/'eboot.elf').read_bytes()
     segments=eboot_segments(elf)
     skipped={}
