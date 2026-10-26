@@ -496,6 +496,13 @@ def game_addons(game_dir):
         title_id = addcont.game_title_id(game_dir)
         if not title_id:
             return []
+        # The folder for DLC packages and the unpacked add-ons (shadPS4's addonInstallDir).
+        root = addcont.install_root(game_dir)
+        root.mkdir(exist_ok=True)
+        readme = root / 'README.txt'
+        if not readme.exists() and (PORT_DIR / 'game' / 'addcont' / 'README.txt').is_file() \
+                and readme != PORT_DIR / 'game' / 'addcont' / 'README.txt':
+            shutil.copyfile(PORT_DIR / 'game' / 'addcont' / 'README.txt', readme)
         addcont.install_packages(game_dir, title_id, log=lambda _message: None)
         return addcont.find_addons(game_dir, title_id)
     except Exception:  # noqa: BLE001 - DLC never stops the launcher

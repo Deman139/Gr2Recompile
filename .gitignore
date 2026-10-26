@@ -33,5 +33,8 @@ launcher/gr2.ico
 # The player's own game dump and PS4 modules, copied into the built-in folders (only the notes ship)
 /game/*
 !/game/README.txt
+!/game/addcont/
+/game/addcont/*
+!/game/addcont/README.txt
 /sys_modules/*
 !/sys_modules/README.txt

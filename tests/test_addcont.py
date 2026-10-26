@@ -65,6 +65,16 @@ class AddcontTest(unittest.TestCase):
         (folder / 'param.sfo').write_bytes(sfo({'CATEGORY': 'ac', 'CONTENT_ID': 'EP9000-CUSA04943_00-ACEUKIT17XXXXXXX'}))
         self.assertEqual([a[0] for a in addcont.find_addons(self.game, 'CUSA04943')], ['ACEUKIT17XXXXXXX'])
 
+    def test_packages_in_the_addcont_folder_are_installed_there(self):
+        root = self.game / 'addcont'
+        (root / 'CUSA04943').mkdir(parents=True)
+        (root / 'crow.pkg').write_bytes(package('EP9000-CUSA04943_00-ACEUCROWXXXXXXXX'))
+        (root / 'CUSA04943' / 'kit.pkg').write_bytes(package('EP9000-CUSA04943_00-ACEUKIT17XXXXXXX'))
+        addcont.install_packages(self.game, 'CUSA04943', log=lambda _m: None)
+        self.assertEqual(sorted(p.name for p in root.rglob('*.pkg')), [])
+        self.assertEqual([a[0] for a in addcont.find_addons(self.game, 'CUSA04943')],
+                         ['ACEUCROWXXXXXXXX', 'ACEUKIT17XXXXXXX'])
+
     def test_keep_leaves_the_package(self):
         (self.game / 'crow.pkg').write_bytes(package('EP9000-CUSA04943_00-ACEUCROWXXXXXXXX'))
         addcont.install_packages(self.game, 'CUSA04943', delete=False, log=lambda _m: None)

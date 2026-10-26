@@ -7,7 +7,8 @@ for this title is one add-on; its entitlement label is the end of the CONTENT_ID
 (EP9000-CUSA04943_00-ACEUCROWXXXXXXXX -> ACEUCROWXXXXXXXX).
 
 Unlock-key DLC packages (.pkg of a few hundred KiB: a license and a param.sfo, no data) dropped
-into the game folder (or next to it, or into addcont/) are unpacked into that layout by
+into addcont/ (the place meant for them; also addcont/<TITLE_ID>/, the game folder or the folder
+next to it) are unpacked into that layout by
 install_packages(); the param.sfo sits unencrypted in the package's entry table. The package is
 deleted once its folder is written, as the player asked. Packages with data (the PFS image) cannot
 be unpacked here and are left alone.
@@ -89,7 +90,7 @@ def install_packages(game, title_id, delete=True, log=print):
     """Unpacks the unlock-key packages of this title found in the game folder, next to it or in
     an addcont folder; returns the labels installed."""
     game = Path(game)
-    places = [game, game.parent, *roots(game)]
+    places = [*roots(game), *(r / title_id for r in roots(game)), game, game.parent]
     seen, installed = set(), []
     for place in places:
         try:
