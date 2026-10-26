@@ -1663,9 +1663,10 @@ class Launcher:
             open_folder(run_dir)
 
     def set_window_icon(self):
-        """The game's icon (sce_sys/icon0.png) on the launcher window, when Pillow can read it."""
+        """The game's icon (sce_sys/icon0.png) on the launcher window, when Pillow can read it. The
+        packaged launcher (installer, zip) keeps its own icon, the one its executable carries."""
         game = game_dir_of(self.settings)
-        if not game:
+        if not game or FROZEN:
             return
         try:
             from PIL import Image, ImageTk
