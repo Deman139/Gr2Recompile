@@ -3,10 +3,6 @@
 Players do not need this: the installer from the Releases page has everything. This is for
 building the port, the launcher and the installer from the source.
 
-> **Кратко по-русски.** Поставь [MSYS2](https://www.msys2.org), открой **MSYS2 CLANG64** и выполни
-> команды из шагов 1–2 ниже. Для инсталлера один раз выполни в PowerShell команду из шага 3, затем
-> `bash packaging/windows/package_gr2.sh`. DLSS (необязательно) собирается шагом 4.
-
 ## Everything comes from GitHub
 
 Nothing has to be on the computer beforehand except MSYS2 (and, for the installer, a Windows

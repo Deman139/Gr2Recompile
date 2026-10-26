@@ -188,7 +188,7 @@ TEXTS = {
         'game_ended': 'Игра закрылась с ошибкой (код {code}).\n\nОткрыть папку с логами, чтобы посмотреть, что случилось?',
         'cant_start': 'Не удалось запустить игру:\n{error}',
         'fix_folder': 'Сначала выбери подходящие папки (вкладка «Игра»).',
-        'footer_hint': 'Рекомпиляция PS4 на графическом ядре эмулятора shadPS4 · твой собственный дамп',
+        'footer_hint': 'Рекомпиляция PS4 на графическом ядре эмулятора shadPS4',
         'project': 'Проект на GitHub',
     },
     'en': {
@@ -302,7 +302,7 @@ TEXTS = {
         'game_ended': 'The game closed with an error (code {code}).\n\nOpen the logs folder to see what happened?',
         'cant_start': 'The game could not start:\n{error}',
         'fix_folder': 'Choose valid folders first (Game tab).',
-        'footer_hint': 'PS4 recompilation on the shadPS4 emulator graphics core · uses your own dump',
+        'footer_hint': 'PS4 recompilation on the shadPS4 emulator graphics core',
         'project': 'Project on GitHub',
     },
 }
