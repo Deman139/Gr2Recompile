@@ -18,10 +18,41 @@ source ./msys2-env.sh
 icon=launcher/gr2_launcher.ico
 version=$(sed -n "s/^VERSION = '\(.*\)'/\1/p" launcher/gr2_launcher.py)
 name='Gravity Rush 2'
+dest="out/gr2-stage/$name"
+# LOCALAPPDATA is not always passed into the MSYS2 shell: the user's folder then.
+local_app_data=$(cygpath -u "${LOCALAPPDATA:-C:\\Users\\$(id -un)\\AppData\\Local}")
+
+# The installer (packaging/windows/gr2_setup.iss) from the staged package, when Inno Setup 6 is
+# installed (winget puts it in the user's Programs folder, an installer run as administrator in
+# Program Files). --installer builds only it, from the package staged by an earlier run.
+build_installer() {
+    local iscc=${ISCC:-} candidate setup="dist/GravityRush2-Setup-v$version.exe"
+    if [[ -z $iscc ]]; then
+        for candidate in "$local_app_data/Programs/Inno Setup 6/ISCC.exe" \
+                         "/c/Program Files (x86)/Inno Setup 6/ISCC.exe" "/c/Program Files/Inno Setup 6/ISCC.exe"; do
+            [[ -f $candidate ]] && { iscc=$candidate; break; }
+        done
+    fi
+    if [[ -z $iscc ]]; then
+        echo 'Installer skipped: Inno Setup 6 not found (winget install JRSoftware.InnoSetup, or set ISCC=path/to/ISCC.exe)' >&2
+        return 0
+    fi
+    mkdir -p dist
+    echo "Installer: $iscc"
+    "$iscc" /Q "/DAppVersion=$version" "/DNumericVersion=$(sed 's/[^0-9.].*//; s/\.$//' <<< "$version")" \
+        "/DSourceDir=$(cygpath -w "$PWD/$dest")" "/DOutputDir=$(cygpath -w "$PWD/dist")" \
+        "/DPortDir=$(cygpath -w "$PWD")" "$(cygpath -w "$PWD/packaging/windows/gr2_setup.iss")"
+    du -sh "$setup"
+    echo "Installer: $PWD/$setup"
+}
+if [[ ${1:-} == --installer ]]; then
+    [[ -d $dest ]] || { echo "No staged package in $dest: run bash packaging/windows/package_gr2.sh first" >&2; exit 1; }
+    build_installer
+    exit 0
+fi
 
 python=${WINPYTHON:-}
 if [[ -z $python ]]; then
-    local_app_data=$(cygpath -u "${LOCALAPPDATA:-C:\\Users\\$(id -un)\\AppData\\Local}")
     for candidate in /c/Python3*/python.exe "/c/Program Files/Python3"*/python.exe \
                      "$local_app_data"/Programs/Python/Python3*/python.exe; do
         [[ -x $candidate ]] && python=$candidate
@@ -44,7 +75,6 @@ out/pyenv/Scripts/python.exe -m PyInstaller --noconfirm --clean --log-level WARN
     --workpath out/gr2-pyi-work --specpath out/gr2-pyi-work --paths "$(cygpath -w "$PWD/scripts")" "${hidden[@]}" \
     "$(cygpath -w "$PWD/launcher/gr2_launcher.py")"
 
-dest="out/gr2-stage/$name"
 rm -rf -- out/gr2-stage
 mkdir -p "$dest/bin" "$dest/launcher"
 cp -r "out/gr2-pyi-dist/$name/." "$dest/"
@@ -101,22 +131,6 @@ else
     cp -r "$dest/." "$play/"
 fi
 
-# The installer, when Inno Setup 6 is installed.
-iscc=${ISCC:-}
-if [[ -z $iscc ]]; then
-    for candidate in "/c/Program Files (x86)/Inno Setup 6/ISCC.exe" "/c/Program Files/Inno Setup 6/ISCC.exe" \
-                     "${LOCALAPPDATA:+$(cygpath -u "$LOCALAPPDATA")}/Programs/Inno Setup 6/ISCC.exe"; do
-        [[ -x $candidate ]] && { iscc=$candidate; break; }
-    done
-fi
-setup="dist/GravityRush2-Setup-v$version.exe"
-if [[ -n $iscc ]]; then
-    "$iscc" /Q "/DAppVersion=$version" "/DNumericVersion=$(sed 's/[^0-9.].*//; s/\.$//' <<< "$version")" "/DSourceDir=$(cygpath -w "$PWD/$dest")" \
-        "/DOutputDir=$(cygpath -w "$PWD/dist")" "/DPortDir=$(cygpath -w "$PWD")" \
-        "$(cygpath -w "$PWD/packaging/windows/gr2_setup.iss")"
-    du -sh "$setup"
-else
-    echo 'Installer skipped: Inno Setup 6 not found (winget install JRSoftware.InnoSetup, or set ISCC)' >&2
-fi
+build_installer
 du -sh "$dest" "$zip"
 echo "Play: $PWD/$play/$name.exe"
