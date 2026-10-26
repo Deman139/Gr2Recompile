@@ -1,113 +1,130 @@
-# Gravity Rush 2 for PC (work in progress)
+# Gravity Rush 2 for PC
 
-A Windows recompilation of **Gravity Rush 2** (PS4, CUSA04943 v01.11), built on the
-[Killzone Shadow Fall PC port](https://github.com/lesca-191204/killzone-shadowfall-pc) (itself
-based on [gow3_pc](https://github.com/FelipePrado0/gow3_pc) and
-[bloodborne_pc](https://github.com/deadinside28/bloodborne_pc)): the game's x86-64 code runs
-directly on the CPU, a C runtime replaces the PS4 system libraries, and the
-[shadPS4](https://github.com/shadps4-emu/shadPS4) emulator's video core translates the graphics to
-Vulkan. [GR2fork](https://github.com/junminlee2004/GR2fork) (shadPS4 for Gravity Rush 2) is the
-reference for game-specific behaviour.
+Рекомпиляция **Gravity Rush 2** (PS4) для Windows. Код игры выполняется прямо на процессоре, системные
+библиотеки PS4 заменены своими, а графику в Vulkan переводит ядро эмулятора
+[shadPS4](https://github.com/shadps4-emu/shadPS4). Файлов игры здесь нет: нужен твой собственный
+дамп с PS4.
 
-**Status: playable, work in progress** (60 FPS and up to 4K with the community patches; see below).
-No game, DLC or firmware files are included.
+*[English below](#english)*
 
-## What you need
+> Проект не связан с Sony Interactive Entertainment. Gravity Rush — товарный знак Sony Interactive
+> Entertainment.
 
-- Windows 10/11, a Vulkan 1.3 graphics card, 16 GB RAM.
-- The game folder from your own PS4 (decrypted: `eboot.bin`, `sce_module`, `sce_sys`, the
-  `.psarc` files), with the 01.11 update merged in.
-- Decrypted firmware modules dumped from your console (the files shadPS4 takes in
-  `user/sys_modules`): `libSceNgs2.sprx` (required: the game's audio engine), and
-  `libSceJson2.sprx`, `libSceRtc.sprx`, `libSceFreeTypeOt.sprx`, `libSceFontFt.sprx`,
-  `libSceFont.sprx`.
-- Optional: your DLC (costumes, *The Ark of Time – Raven's Choice*) as `.pkg` files.
+## Скачать и играть
 
-## Where the files go
+1. Скачай `GravityRush2-Setup-v<версия>.exe` со страницы [Releases](https://github.com/Deman139/Gr2Recompile/releases)
+   и установи (права администратора не нужны; не ставь в Program Files).
+2. Скопируй в папку установки:
+   - **`game\`** — свой дамп Gravity Rush 2 (CUSA04943) с обновлением **01.11**: `eboot.bin`,
+     `sce_module`, `sce_sys` и файлы `.psarc`;
+   - **`sys_modules\`** — системные модули со своей PS4 (`.sprx`): обязателен `libSceNgs2.sprx`,
+     желательны `libSceJson2`, `libSceRtc`, `libSceFreeTypeOt`, `libSceFontFt`, `libSceFont`;
+   - **`game\addcont\`** — DLC (`.pkg`), если есть: костюмы и *The Ark of Time – Raven's Choice*.
+3. Запусти **Gravity Rush 2** из меню «Пуск» и нажми «Играть».
 
-Next to the launcher there are three folders, each with a `README.txt`:
+Свои папки можно и не копировать, а указать в лаунчере.
 
-| Folder | What to copy there |
-|---|---|
-| `game/` | The game (`eboot.bin`, `sce_module`, `sce_sys`, `.psarc`), or its whole folder (`game/CUSA04943/`) |
-| `game/addcont/` | The DLC `.pkg` files: the launcher unpacks them into `addcont/CUSA04943/<label>/` and removes the packages |
-| `sys_modules/` | The `.sprx` firmware modules |
+**Требования:** Windows 10/11, видеокарта с Vulkan 1.3, 16 ГБ ОЗУ.
 
-A path typed or chosen in the launcher takes precedence. The DLC layout is the one shadPS4 reads,
-so an emulator can share it (its add-on folder: `<game>/addcont`); already unpacked DLC can be
-copied to `addcont/CUSA04943/<any folder>/` as they are. `GR2_DLC=0` starts without DLC.
+## Что есть
 
-## Launcher
+- Лаунчер на русском и английском: папки игры, графика, управление, дополнительные настройки.
+- 60 FPS и разрешение до 4K (патчи Junmin Lee), патчи производительности для людных мест.
+- Клавиатура и мышь с переназначением клавиш; геймпады Xbox, DualShock 4 и DualSense с гироскопом и
+  световой панелью; Steam Input.
+- Меню порта в игре (F12, на геймпаде R3 + L2), скриншоты (F11), FSR 1 и резкость, DLSS на RTX.
+- DLC из папки `game\addcont` (та же раскладка, что у shadPS4).
+- Резервные копии сохранений перед каждым запуском.
 
-`Gravity Rush 2.exe` (Russian and English): the game, update and modules folders, graphics options,
-keyboard / mouse / controller mapping (DualShock 4 and DualSense gyro and light bar included),
-shader and readback options, and shortcuts to saves, screenshots, logs and the cache. Its icon is
-`launcher/gr2_launcher.ico` until the game folder is known, then the game's own.
+## Известные проблемы
 
-Steam Input (Steam Controller, gyro to mouse, ...): add `Gravity Rush 2.exe` to Steam as a non-Steam
-game and turn Steam Input on in its controller settings. It keeps running until the launcher closes,
-so Steam keeps its virtual gamepad for the game.
+- Первый запуск и новые места: рывки, пока компилируются шейдеры; кэш шейдеров растёт.
+- «Подготавливать шейдеры из кэша» может давать графические артефакты (по умолчанию выключено).
+- При 60 FPS игра замедляется, если компьютер не держит 60 кадров.
+- Комиксный контур персонажей иногда даёт лишние чёрные линии: тогда выключи его.
+- Сохранение фото в фоторежиме пока не работает.
+- Сетевые функции PSN недоступны: игра работает офлайн.
 
-### 60 FPS and higher resolutions
+## Сообщить об ошибке
 
-Launcher → Graphics → Frame rate → 60 FPS, and Game resolution → 2560 × 1440 or 3840 × 2160, use
-Junmin Lee's patches for 01.11 (resolution: the game itself draws at that size; 4K adds the 128 MiB
-of direct memory its note asks for, and the readback size limit grows with the pixel count), from
-[GR2fork](https://github.com/junminlee2004/GR2fork) (its
-[patch repository](https://github.com/junminlee2004/GoldHEN_Patch_Repository)). The launcher downloads
-the patch file once into `user/patches` and selects the patches in `user/patches.json`; nothing is
-bundled. At 60 FPS the game steps its time 1/60 s per frame: below 60 FPS it slows down. Any other
-shadPS4/GoldHEN XML file in `user/patches` that names the game's title ID works the same way
-(`patches.json`: `{"enabled": ["<file>/<patch name>"], "disabled": [...]}`).
+Открой [Issue](https://github.com/Deman139/Gr2Recompile/issues): что делал, что случилось, видеокарта и
+приложи логи. Они в папке `user\logs\<дата_время>\` (`game.log`, `errors.log`); в лаунчере —
+кнопка «Логи» на вкладке «Игра».
 
-## Building from source (MSYS2 CLANG64)
+## Сборка из исходников
 
-Only needed to build the port yourself; the installer needs none of it. Install
-[MSYS2](https://www.msys2.org), then in the **MSYS2 CLANG64** shell install the compiler and the
-libraries the port is built with, and fetch the bundled third-party sources:
+См. [docs/BUILDING.md](docs/BUILDING.md).
 
-```bash
-pacman -S --needed git patch \
-  mingw-w64-clang-x86_64-{toolchain,cmake,ninja,pkgconf,python,tk,python-pillow} \
-  mingw-w64-clang-x86_64-{vulkan-headers,vulkan-loader,vulkan-memory-allocator,glslang} \
-  mingw-w64-clang-x86_64-{sdl3,fmt,boost,robin-map,xxhash,ffmpeg,zydis} \
-  mingw-w64-clang-x86_64-{spirv-tools,spirv-headers,spirv-cross}
-git submodule update --init --recursive
-```
+---
 
-Then build, and update later with `git pull` and the same command:
+<a id="english"></a>
+## English
 
-```bash
-bash build.sh
-```
+A Windows recompilation of **Gravity Rush 2** (PS4). The game's code runs directly on the CPU, the
+PS4 system libraries are replaced, and the [shadPS4](https://github.com/shadps4-emu/shadPS4)
+emulator's video core translates the graphics to Vulkan. No game files are included: you need your
+own PS4 dump.
 
-It makes the game executable (`out/`) and **`Gravity Rush 2.exe`** in the project folder
-(`packaging/windows/launcher_exe.c`), which starts the launcher with the MSYS2 CLANG64 Python
-without a console window. Its icon is the game's (from `sce_sys/icon0.png` once the game folder
-is known: rebuild after choosing it), else `launcher/gr2_launcher.ico`. Without the launcher:
+### Download and play
 
-```bash
-GR2_GAME=/d/Games/CUSA04943 GR2_SYS_MODULES=/d/ps4/sys_modules bash gr2.sh
-```
+1. Get `GravityRush2-Setup-v<version>.exe` from [Releases](https://github.com/Deman139/Gr2Recompile/releases)
+   and install it (no administrator rights; not into Program Files).
+2. Copy into the install folder:
+   - **`game\`**: your Gravity Rush 2 dump (CUSA04943) with update **01.11**: `eboot.bin`,
+     `sce_module`, `sce_sys` and the `.psarc` files;
+   - **`sys_modules\`**: the system modules from your PS4 (`.sprx`): `libSceNgs2.sprx` is required,
+     `libSceJson2`, `libSceRtc`, `libSceFreeTypeOt`, `libSceFontFt`, `libSceFont` are recommended;
+   - **`game\addcont\`**: your DLC (`.pkg`), if any: costumes and *The Ark of Time – Raven's Choice*.
+3. Start **Gravity Rush 2** from the Start menu and press Play.
 
-### Installer and portable package
+You can also point the launcher at your own folders instead of copying.
 
-`bash packaging/windows/package_gr2.sh` makes a build players can run without MSYS2 or Python:
-`dist/Gravity Rush 2/` (portable), a zip of it and, with Inno Setup 6, the installer
-`dist/GravityRush2-Setup-v<version>.exe` (`packaging/windows/gr2_setup.iss`). It needs a Windows
-Python and Inno Setup, installed once from PowerShell:
+**Requirements:** Windows 10/11, a Vulkan 1.3 graphics card, 16 GB RAM.
 
-```powershell
-winget install JRSoftware.InnoSetup Python.Python.3.12
-```
+### What's included
 
-The installer needs no administrator rights (default folder `%LOCALAPPDATA%\Programs\Gravity Rush 2`;
-Program Files is refused because the launcher writes next to itself), makes Start menu and desktop
-shortcuts and an uninstaller that keeps the player's game, DLC and modules and asks before removing
-saves and settings. No game files, DLC or system modules ship. DLSS ships when
-`packaging/windows/build_dlss.sh` made it, with NVIDIA's license.
+- Launcher in English and Russian: game folders, graphics, controls, advanced options.
+- 60 FPS and up to 4K (Junmin Lee's patches), performance patches for crowded areas.
+- Remappable keyboard and mouse; Xbox, DualShock 4 and DualSense controllers with gyro and light
+  bar; Steam Input.
+- In-game port menu (F12, R3 + L2 on a controller), screenshots (F11), FSR 1 and sharpening, DLSS on RTX.
+- DLC from `game\addcont` (the same layout shadPS4 uses).
+- Save backups before every launch.
 
-Notes for changing the port itself: [docs/development.md](docs/development.md).
+### Known issues
 
-This project is not affiliated with Sony Interactive Entertainment. Gravity Rush is a trademark
-of Sony Interactive Entertainment. GPL-2.0-or-later, like the projects it builds on.
+- First launch and new areas stutter while shaders compile; the shader cache grows.
+- "Prepare cached shaders" can cause graphical artifacts (off by default).
+- At 60 FPS the game slows down when the PC cannot hold 60 FPS.
+- The comic character outline can draw stray black lines: turn it off then.
+- Saving photos in photo mode does not work yet.
+- PSN features are unavailable: the game runs offline.
+
+### Reporting bugs
+
+Open an [issue](https://github.com/Deman139/Gr2Recompile/issues): what you did, what happened, your
+graphics card, and the logs from `user\logs\<date_time>\` (`game.log`, `errors.log`; the launcher's
+Logs button on the Game tab opens them).
+
+### Building from source
+
+See [docs/BUILDING.md](docs/BUILDING.md).
+
+---
+
+## Благодарности / Credits
+
+- [Killzone Shadow Fall PC port](https://github.com/lesca-191204/killzone-shadowfall-pc), the base of this port,
+  and the projects it builds on: [gow3_pc](https://github.com/FelipePrado0/gow3_pc),
+  [bloodborne_pc](https://github.com/deadinside28/bloodborne_pc).
+- The [shadPS4](https://github.com/shadps4-emu/shadPS4) team: the video core and much of the system emulation.
+- Junmin Lee ([GR2fork](https://github.com/junminlee2004/GR2fork)): the 60 FPS, resolution and
+  performance patches, and the reference for the game's behaviour.
+- [HayatoG/gr2_pc](https://github.com/HayatoG/gr2_pc): the comic outline finding.
+- [FSR-Vulkan](https://github.com/FireBurn/FSR-Vulkan), [Dear ImGui](https://github.com/ocornut/imgui),
+  [LibAtrac9](https://github.com/Thealexbarney/LibAtrac9), NVIDIA DLSS.
+
+## Лицензия / License
+
+GPL-2.0-or-later, like the projects it builds on. Third-party components keep their own licenses
+(NVIDIA DLSS: `NVIDIA-DLSS-LICENSE.txt` next to the game).
