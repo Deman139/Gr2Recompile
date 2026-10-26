@@ -3,10 +3,11 @@ set -euo pipefail
 cd -- "$(dirname -- "$0")"
 mkdir -p out
 # "Gravity Rush 2.exe" (packaging/windows/launcher_exe.c): the launcher as a Windows program, with
-# the game's own icon once the launcher knows the game folder (launcher/gr2.ico), else the port's.
+# the game's own icon once the game folder is known (launcher/gr2.ico), else the launcher's
+# default (launcher/gr2_launcher.ico).
 # A failure here only warns: the game itself is built.
 build_launcher_exe() {
-    local py icon=launcher/gr2_port.ico game rc_tool
+    local py icon=launcher/gr2_launcher.ico game rc_tool
     py=$(command -v python || true)
     if [[ ! -f launcher/gr2.ico && -n $py ]]; then
         game=''

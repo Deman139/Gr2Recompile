@@ -7,14 +7,15 @@
 # nvngx_dlss.dll with its license, when build_dlss.sh made them), the preparation scripts and run.py.
 # Run from an MSYS2 CLANG64 shell after `bash build.sh`. Freezing uses a Windows Python 3.10+
 # (python.org; WINPYTHON overrides) and a private venv in out/pyenv.
-# The icon is the port's own (launcher/gr2_port.ico): no game artwork ships.
+# The launcher's icon is its default one (launcher/gr2_launcher.ico); the window takes the game's
+# icon from the player's dump at run time.
 # No game files, DLC or PS4 system modules ship: the player copies their own into game/,
 # game/addcont/ and sys_modules/ or points the launcher at them.
 set -euo pipefail
 cd -- "$(dirname -- "$0")/../.."
 source ./msys2-env.sh
 [[ -f out/gr2-probe.exe ]] || { echo 'Build first: bash build.sh' >&2; exit 1; }
-icon=launcher/gr2_port.ico
+icon=launcher/gr2_launcher.ico
 version=$(sed -n "s/^VERSION = '\(.*\)'/\1/p" launcher/gr2_launcher.py)
 name='Gravity Rush 2'
 
@@ -110,7 +111,7 @@ if [[ -z $iscc ]]; then
 fi
 setup="dist/GravityRush2-Setup-v$version.exe"
 if [[ -n $iscc ]]; then
-    "$iscc" /Q "/DAppVersion=$version" "/DSourceDir=$(cygpath -w "$PWD/$dest")" \
+    "$iscc" /Q "/DAppVersion=$version" "/DNumericVersion=$(sed 's/[^0-9.].*//; s/\.$//' <<< "$version")" "/DSourceDir=$(cygpath -w "$PWD/$dest")" \
         "/DOutputDir=$(cygpath -w "$PWD/dist")" "/DPortDir=$(cygpath -w "$PWD")" \
         "$(cygpath -w "$PWD/packaging/windows/gr2_setup.iss")"
     du -sh "$setup"

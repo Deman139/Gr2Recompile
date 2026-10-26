@@ -39,7 +39,7 @@ FROZEN = getattr(sys, 'frozen', False)
 PORT_DIR = Path(sys.executable).resolve().parent if FROZEN else Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PORT_DIR / 'scripts'))
 
-VERSION = '0.1.0'
+VERSION = '4.72e'
 APP_NAME = 'Gravity Rush 2'
 TITLE_ID = 'CUSA04943'  # Europe: the release the port is built and tested on
 GAME_VERSION = '01.11'
@@ -95,7 +95,6 @@ TEXTS = {
                         'Если поле пустое, берётся папка sys_modules рядом с лаунчером: просто скопируй файлы .sprx туда.',
         'open_builtin': 'Открыть папку {name}',
         'dlc_found': 'DLC ({n}): {names}',
-        'using_builtin': ' (папка {name} рядом с лаунчером)',
         'browse': 'Обзор…', 'choose_game': 'Выбери папку игры (с eboot.bin)',
         'choose_update': 'Выбери папку обновления', 'choose_modules': 'Выбери папку с модулями (.sprx)',
         'no_folder': 'Папка игры ещё не выбрана.',
@@ -105,8 +104,8 @@ TEXTS = {
         'other_region': 'Издание {id}: не проверялось (порт сделан и проверен на {want}), может работать.',
         'need_update': 'Версия {ver}: нужно обновление {want}.',
         'bad_update': 'Папка обновления не подходит: нужна версия {ver_want}, а там {id} {ver}.',
-        'ready': 'Готово: {title} · {id} · версия {ver}',
-        'ready_update': 'Готово: {title} · {id} · версия {ver} (с обновлением)',
+        'ready': '{title} · {id} · версия {ver}',
+        'ready_update': '{title} · {id} · версия {ver} + обновление',
         'modules_none': 'Папка модулей ещё не выбрана.',
         'modules_missing': 'Нет обязательного модуля: {names}.',
         'modules_ok': 'Модули: {found} из {total}.',
@@ -121,19 +120,13 @@ TEXTS = {
         'mode_fullscreen': 'Полный экран',
         'window_size': 'Размер окна',
         'frame_rate': 'Частота кадров', 'fps_30': '30 FPS (как на PS4)',
-        'fps_60': '60 FPS (патч GR2fork, экспериментально)',
-        'fps_help': 'Патч 60 FPS Junmin Lee (GR2fork): игра считает время шагами по 1/60 секунды, поэтому '
-                    'если компьютер не держит 60 кадров, игра замедляется. Файл патча скачивается один раз '
-                    'из репозитория GR2fork в user/patches.',
-        'fps_failed': 'Не удалось подготовить патчи GR2fork (частота кадров, разрешение):\n{error}\n\n'
+        'fps_60': '60 FPS (патч, экспериментально)',
+        'fps_failed': 'Не удалось подготовить патчи (частота кадров, разрешение):\n{error}\n\n'
                       'Запустить игру без них (30 FPS, 1080p)?',
         'game_resolution': 'Разрешение игры', 'res_1080': '1920 × 1080 (как на PS4)',
-        'res_1440': '2560 × 1440 (патч GR2fork)', 'res_2160': '3840 × 2160 (патч GR2fork)',
-        'game_resolution_help': 'В каком разрешении игра рисует кадр (патч разрешения Junmin Lee, GR2fork), '
-                                'в отличие от размера окна, до которого кадр 1080p только растягивается. '
-                                'Выше разрешение — чётче и тяжелее для видеокарты. Окно лучше поставить того же размера.',
+        'res_1440': '2560 × 1440 (патч)', 'res_2160': '3840 × 2160 (патч)',
         'window_size_help': 'Только в оконном режиме. Картинка игры масштабируется под окно.',
-        'vsync': 'Вертикальная синхронизация (VSync)', 'vsync_help': 'Без разрывов кадра.',
+        'vsync': 'Вертикальная синхронизация (VSync)',
         'anisotropy': 'Анизотропная фильтрация', 'aniso_game': 'Как в игре',
         'mip_bias': 'Чёткость дальних текстур', 'mip_game': 'Как в игре',
         'mip_sharper': 'чётче', 'mip_softer': 'мягче',
@@ -141,8 +134,8 @@ TEXTS = {
         'fsr1': 'Масштабирование FSR 1',
         'fsr1_help': 'Для экранов выше 1080p (1440p, 4K): чётче обычного растяжения. На 1080p ничего не меняет.',
         'sharpen': 'Повышение резкости (RCAS)', 'show_fps': 'Показывать FPS на экране',
-        'gs_outline': 'Комиксный контур персонажей (экспериментально)',
-        'perf_heading': 'Производительность (патчи GR2fork)',
+        'gs_outline': 'Комиксный контур персонажей',
+        'perf_heading': 'Производительность (патчи)',
         'perf_help': 'В людных местах частоту кадров ограничивает число объектов на экране, а не видеокарта: '
                      'эти патчи Junmin Lee убирают часть объектов и эффектов.',
         'perf_crowd': 'Прохожие, птицы, патрульные роботы', 'crowd_full': 'Как в игре',
@@ -150,8 +143,7 @@ TEXTS = {
         'perf_particles': 'Вдвое меньше частиц (дым, пыль, обломки)',
         'perf_shadows': 'Без динамических теней (статичные и запечённые остаются)',
         'perf_haze': 'Без марева (искажение над огнём и взрывами)',
-        'gs_outline_help': 'Контур рисуется геометрическим шейдером, который порт пока переводит неверно: '
-                           'по всему кадру появляются чёрные линии. Выключено — линий нет, но без части контура.',
+        'gs_outline_help': 'Выключи, если в кадре видны артефакты (например, лишние чёрные линии).',
         'graphics_note': 'Во время игры F12 открывает меню порта (на геймпаде R3 + L2), F11 делает скриншот. '
                          'Игра на PS4 работает в 30 FPS, порт держит ту же частоту.',
         'keyboard': 'Клавиатура', 'controller': 'Геймпад',
@@ -173,21 +165,17 @@ TEXTS = {
         'smart_pending': 'Пропускать отрисовку, пока компилируется шейдер',
         'smart_pending_help': 'Почти без рывков при первом посещении мест. Выключи, если пропадают или мигают '
                               'объекты или свет: тогда игра ждёт каждый шейдер.',
-        'precompile': 'Подготавливать шейдеры из кэша при запуске',
-        'precompile_help': 'Меньше рывков в уже пройденных местах, но запуск дольше. Пока не включай: '
-                           'с шейдерами из кэша листва на деревьях разлетается (ищу причину).',
+        'precompile': 'Подготавливать шейдеры из кэша при запуске (возможны артефакты)',
+        'precompile_help': 'Меньше рывков в уже пройденных местах, но запуск дольше. '
+                           'Может приводить к графическим артефактам.',
         'readback_heading': 'Копирование с видеокарты',
-        'no_gpu_copies': 'Не копировать данные с видеокарты (как GR2fork)',
-        'no_gpu_copies_help': 'Игра не получает обратно изображения и буферы, которые рисует видеокарта. '
-                              'Так работает GR2fork: быстрее и без разлетающейся листвы при 60 FPS. '
-                              'Если игра начнёт вылетать при запуске — выключи.',
+        'no_gpu_copies': 'Не копировать данные с видеокарты',
+        'no_gpu_copies_help': 'Игра не получает обратно изображения и буферы, которые рисует видеокарта: '
+                              'так быстрее. Если игра начнёт вылетать при запуске — выключи.',
         'readback_max': 'Предел размера копируемых изображений',
-        'readback_max_help': 'Изображения крупнее остаются на видеокарте. 2 МБ дают 30 FPS; больше — '
-                             'медленнее, но если где-то появятся артефакты, попробуй увеличить.',
-        'perf_diag': 'Диагностика производительности (статистика в логах)',
-        'perf_diag_help': 'Каждые 5 секунд пишет в лог FPS, худший кадр, ожидания видеокарты и профиль '
-                          'потоков (profile.txt рядом с логом). F9 в игре записывает устройство кадра '
-                          '(папка captures рядом с логом). Немного снижает FPS.',
+        'readback_max_help': 'Изображения крупнее остаются на видеокарте. 2 МБ — стандартное значение для '
+                             'порта; изменение может как улучшить, так и ухудшить производительность.',
+        'perf_diag': 'Диагностика производительности (DEBUG)',
         'stale_readback': 'Не ждать видеокарту при чтении',
         'stale_help': 'Больше FPS. Выключи, если освещение или объекты выглядят неправильно.',
         'deferred_readback': 'Отложенное копирование с видеокарты',
@@ -200,7 +188,7 @@ TEXTS = {
         'game_ended': 'Игра закрылась с ошибкой (код {code}).\n\nОткрыть папку с логами, чтобы посмотреть, что случилось?',
         'cant_start': 'Не удалось запустить игру:\n{error}',
         'fix_folder': 'Сначала выбери подходящие папки (вкладка «Игра»).',
-        'footer_hint': 'Нативный порт для Windows · твой собственный дамп',
+        'footer_hint': 'Рекомпиляция PS4 на графическом ядре эмулятора shadPS4 · твой собственный дамп',
         'project': 'Проект на GitHub',
     },
     'en': {
@@ -221,7 +209,6 @@ TEXTS = {
                         'field empty, the sys_modules folder next to the launcher is used: just copy the .sprx files there.',
         'open_builtin': 'Open the {name} folder',
         'dlc_found': 'DLC ({n}): {names}',
-        'using_builtin': ' (the {name} folder next to the launcher)',
         'browse': 'Browse…', 'choose_game': 'Choose the game folder (the one with eboot.bin)',
         'choose_update': 'Choose the update folder', 'choose_modules': 'Choose the modules folder (.sprx)',
         'no_folder': 'No game folder chosen yet.',
@@ -231,8 +218,8 @@ TEXTS = {
         'other_region': 'Release {id}: untested (the port was built and tested on {want}), it may work.',
         'need_update': 'Version {ver}: update {want} is missing.',
         'bad_update': 'The update folder does not fit: version {ver_want} is needed, it holds {id} {ver}.',
-        'ready': 'Ready: {title} · {id} · version {ver}',
-        'ready_update': 'Ready: {title} · {id} · version {ver} (with update)',
+        'ready': '{title} · {id} · version {ver}',
+        'ready_update': '{title} · {id} · version {ver} + update',
         'modules_none': 'No modules folder chosen yet.',
         'modules_missing': 'A required module is missing: {names}.',
         'modules_ok': 'Modules: {found} of {total}.',
@@ -247,19 +234,13 @@ TEXTS = {
         'mode_fullscreen': 'Fullscreen',
         'window_size': 'Window size',
         'frame_rate': 'Frame rate', 'fps_30': '30 FPS (as on PS4)',
-        'fps_60': '60 FPS (GR2fork patch, experimental)',
-        'fps_help': 'Junmin Lee\'s 60 FPS patch (GR2fork): the game steps its time 1/60 s per frame, so it '
-                    'slows down when the PC cannot hold 60 FPS. The patch file is downloaded once from the '
-                    'GR2fork repository into user/patches.',
-        'fps_failed': 'Could not prepare the GR2fork patches (frame rate, resolution):\n{error}\n\n'
+        'fps_60': '60 FPS (patch, experimental)',
+        'fps_failed': 'Could not prepare the patches (frame rate, resolution):\n{error}\n\n'
                       'Start the game without them (30 FPS, 1080p)?',
         'game_resolution': 'Game resolution', 'res_1080': '1920 × 1080 (as on PS4)',
-        'res_1440': '2560 × 1440 (GR2fork patch)', 'res_2160': '3840 × 2160 (GR2fork patch)',
-        'game_resolution_help': 'The resolution the game draws at (Junmin Lee\'s resolution patch, GR2fork), '
-                                'unlike the window size, to which a 1080p frame is only stretched. Higher is '
-                                'sharper and heavier on the GPU. Best with a window of the same size.',
+        'res_1440': '2560 × 1440 (patch)', 'res_2160': '3840 × 2160 (patch)',
         'window_size_help': 'Windowed mode only. The game image is scaled to the window.',
-        'vsync': 'VSync (vertical sync)', 'vsync_help': 'Prevents tearing.',
+        'vsync': 'VSync (vertical sync)',
         'anisotropy': 'Anisotropic filtering', 'aniso_game': 'Game default',
         'mip_bias': 'Distant texture sharpness', 'mip_game': 'Game default',
         'mip_sharper': 'sharper', 'mip_softer': 'softer',
@@ -267,8 +248,8 @@ TEXTS = {
         'fsr1': 'FSR 1 upscaling',
         'fsr1_help': 'For screens above 1080p (1440p, 4K): sharper than plain stretching. No change at 1080p.',
         'sharpen': 'Sharpening (RCAS)', 'show_fps': 'Show FPS on screen',
-        'gs_outline': 'Comic outline around characters (experimental)',
-        'perf_heading': 'Performance (GR2fork patches)',
+        'gs_outline': 'Comic outline around characters',
+        'perf_heading': 'Performance (patches)',
         'perf_help': 'In busy places the frame rate is limited by the number of objects on screen, not by the '
                      'graphics card: these patches by Junmin Lee remove some objects and effects.',
         'perf_crowd': 'Pedestrians, birds, patrol robots', 'crowd_full': 'As in the game',
@@ -276,8 +257,7 @@ TEXTS = {
         'perf_particles': 'Half the particles (smoke, dust, debris)',
         'perf_shadows': 'No dynamic shadows (static and baked ones stay)',
         'perf_haze': 'No heat haze (distortion over fire and explosions)',
-        'gs_outline_help': 'The outline is drawn by a geometry shader the port still translates wrongly: '
-                           'black streaks across the frame. Off: no streaks, part of the outline is missing.',
+        'gs_outline_help': 'Turn it off if you see artifacts in the frame (for example stray black lines).',
         'graphics_note': 'In game, F12 opens the port menu (on a controller: R3 + L2) and F11 takes a screenshot. '
                          'The game runs at 30 FPS on PS4; the port keeps that rate.',
         'keyboard': 'Keyboard', 'controller': 'Controller',
@@ -299,21 +279,17 @@ TEXTS = {
         'smart_pending': 'Skip draws while their shader compiles',
         'smart_pending_help': 'Almost no stutter the first time you visit a place. Turn it off if objects or '
                               'lights go missing or flicker: the game then waits for every shader.',
-        'precompile': 'Prepare cached shaders at startup',
-        'precompile_help': 'Less stutter in places you already visited, but a longer start. Keep it off for '
-                           'now: with cached shaders the tree foliage scatters (being investigated).',
+        'precompile': 'Prepare cached shaders at startup (may cause artifacts)',
+        'precompile_help': 'Less stutter in places you already visited, but a longer start. '
+                           'It can cause graphical artifacts.',
         'readback_heading': 'Copies from the graphics card',
-        'no_gpu_copies': "Don't copy data back from the graphics card (like GR2fork)",
-        'no_gpu_copies_help': 'The game does not get back the images and buffers the graphics card draws. '
-                              'This is how GR2fork runs: faster, and no scattered foliage at 60 FPS. '
-                              'Turn it off if the game starts crashing at launch.',
+        'no_gpu_copies': "Don't copy data back from the graphics card",
+        'no_gpu_copies_help': 'The game does not get back the images and buffers the graphics card draws: '
+                              'faster. Turn it off if the game starts crashing at launch.',
         'readback_max': 'Size limit of copied images',
-        'readback_max_help': 'Larger images stay on the graphics card. 2 MB gives 30 FPS; more is slower, '
-                             'but try raising it if artifacts appear somewhere.',
-        'perf_diag': 'Performance diagnostics (statistics in the logs)',
-        'perf_diag_help': 'Every 5 seconds the log gets the FPS, the worst frame, GPU waits and a thread '
-                          'profile (profile.txt beside the log). F9 in the game records the structure of a '
-                          'frame (captures folder beside the log). Costs a little FPS.',
+        'readback_max_help': 'Larger images stay on the graphics card. 2 MB is the port\'s standard value; '
+                             'changing it can make performance better or worse.',
+        'perf_diag': 'Performance diagnostics (DEBUG)',
         'stale_readback': 'GPU readbacks without waiting',
         'stale_help': 'More FPS. Turn it off if lighting or objects look wrong.',
         'deferred_readback': 'Deferred GPU readbacks',
@@ -326,7 +302,7 @@ TEXTS = {
         'game_ended': 'The game closed with an error (code {code}).\n\nOpen the logs folder to see what happened?',
         'cant_start': 'The game could not start:\n{error}',
         'fix_folder': 'Choose valid folders first (Game tab).',
-        'footer_hint': 'Native Windows port · uses your own dump',
+        'footer_hint': 'PS4 recompilation on the shadPS4 emulator graphics core · uses your own dump',
         'project': 'Project on GitHub',
     },
 }
@@ -546,7 +522,7 @@ LAUNCHER_DEFAULTS = {'game_dir': '', 'update_dir': '', 'modules_dir': '', 'langu
                      'mouse_sens': 1.0, 'mouse_invert': False, 'pad_dead_zone': 6, 'pad_speaker': 100,
                      'smart_pending': True, 'precompile': False, 'readback_max_kb': 2048, 'menu_key': 'F12',
                      'gs_outline': True, 'fps': '60', 'game_resolution': '3840x2160',
-                     'perf_diag': True, 'perf_crowd': 'full', 'perf_particles': False,
+                     'perf_diag': False, 'perf_crowd': 'full', 'perf_particles': False,
                      'perf_shadows': False, 'perf_haze': False, 'no_gpu_copies': False}
 # The banner picture shipped with the launcher.
 BANNER_FILE = PORT_DIR / 'launcher' / 'banner.jpg'
@@ -1112,7 +1088,9 @@ class Launcher:
     def row(self, parent, label):
         frame = self.tk.Frame(parent, bg=PANEL)
         frame.pack(fill='x', pady=self.px(5))
-        self.tk.Label(frame, text=label, bg=PANEL, fg=TEXT, font=self.font(10), width=30, anchor='w').pack(side='left')
+        # 30 characters line the choices up; a longer label (Russian) gets its whole text.
+        self.tk.Label(frame, text=label, bg=PANEL, fg=TEXT, font=self.font(10), width=max(30, len(label) + 2),
+                      anchor='w').pack(side='left')
         return frame
 
     def choice(self, parent, label, values, labels, current, on_change, help_text=None):
@@ -1256,13 +1234,9 @@ class Launcher:
         game_dir, modules_dir = game_dir_of(self.settings), modules_dir_of(self.settings)
         ok, message, needs_update, other = check_game(game_dir, self.settings['update_dir'])
         modules_ok, modules_message, partial = check_modules(modules_dir)
-        if game_dir and not self.settings.get('game_dir'):
-            message += tr('using_builtin', name='game')
         addons = game_addons(game_dir) if ok else []
         if addons:
             message += '\n' + tr('dlc_found', n=len(addons), names=', '.join(addon_name(t) for _l, _f, t in addons))
-        if modules_dir and not self.settings.get('modules_dir') and Path(modules_dir) in (MODULES_HOME, MODULES_HOME / 'sys_modules'):
-            modules_message += tr('using_builtin', name='sys_modules')
         self.game_ok = ok and modules_ok
         self.needs_update = needs_update
         if getattr(self, 'game_status', None) is not None and self.game_status.winfo_exists():
@@ -1336,12 +1310,12 @@ class Launcher:
                     lambda v: self.set_setting('window_size', v), tr('window_size_help'))
         fps = self.settings.get('fps') if self.settings.get('fps') in FPS_CHOICES else '30'
         self.choice(parent, tr('frame_rate'), FPS_CHOICES, [tr('fps_30'), tr('fps_60')], fps,
-                    lambda v: self.set_setting('fps', v), tr('fps_help'))
+                    lambda v: self.set_setting('fps', v))
         resolution = (self.settings.get('game_resolution') if self.settings.get('game_resolution') in
                       RESOLUTION_CHOICES else '1920x1080')
         self.choice(parent, tr('game_resolution'), RESOLUTION_CHOICES,
                     [tr('res_1080'), tr('res_1440'), tr('res_2160')], resolution,
-                    lambda v: self.set_setting('game_resolution', v), tr('game_resolution_help'))
+                    lambda v: self.set_setting('game_resolution', v))
         self.choice(parent, tr('anisotropy'), ANISOTROPY, [tr('aniso_game'), '2x', '4x', '8x', '16x'],
                     self.graphics['anisotropy'], lambda v: self.set_graphic('anisotropy', v))
         self.choice(parent, tr('mip_bias'), MIP_BIASES,
@@ -1351,7 +1325,7 @@ class Launcher:
                     self.graphics['mip_lod_bias'], lambda v: self.set_graphic('mip_lod_bias', v),
                     tr('mip_bias_help'))
         self.tk.Frame(parent, bg=PANEL, height=self.px(8)).pack()
-        self.check(parent, tr('vsync'), 'vsync', tr('vsync_help'))
+        self.check(parent, tr('vsync'), 'vsync')
         self.check(parent, tr('fsr1'), 'fsr1')
         self.note(parent, '      ' + tr('fsr1_help'))
         self.check(parent, tr('sharpen'), 'rcas')
@@ -1557,7 +1531,7 @@ class Launcher:
         self.note(parent, '      ' + tr('async_help'))
         self.setting_check(parent, tr('smart_pending'), 'smart_pending', tr('smart_pending_help'))
         self.setting_check(parent, tr('precompile'), 'precompile', tr('precompile_help'))
-        self.setting_check(parent, tr('perf_diag'), 'perf_diag', tr('perf_diag_help'))
+        self.setting_check(parent, tr('perf_diag'), 'perf_diag')
         self.heading(parent, tr('readback_heading'), pady=(16, 4))
         self.setting_check(parent, tr('no_gpu_copies'), 'no_gpu_copies', tr('no_gpu_copies_help'))
         limit = self.settings.get('readback_max_kb', 2048)
@@ -1725,7 +1699,9 @@ def main():
     import tkinter as tk
     from tkinter import filedialog, messagebox, ttk
     root = tk.Tk()
-    icon = next((p for p in (PORT_DIR / 'launcher' / 'gr2.ico', PORT_DIR / 'launcher' / 'gr2_port.ico')
+    # The game's icon (made from the dump by build.sh), else the launcher's default; the window
+    # takes the dump's icon0.png as soon as the game folder is known (set_window_icon).
+    icon = next((p for p in (PORT_DIR / 'launcher' / name for name in ('gr2.ico', 'gr2_launcher.ico', 'gr2_port.ico'))
                  if p.is_file()), None)
     if icon:
         try:

@@ -1,5 +1,5 @@
 ; Gravity Rush 2 port installer (Inno Setup 6). Built by package_gr2.sh from its staging folder:
-;   ISCC /DAppVersion=0.1.0 /DSourceDir=...\out\gr2-stage\Gravity Rush 2 /DOutputDir=...\dist /DPortDir=... gr2_setup.iss
+;   ISCC /DAppVersion=4.72e /DNumericVersion=4.72 /DSourceDir=...\out\gr2-stage\Gravity Rush 2 /DOutputDir=...\dist /DPortDir=... gr2_setup.iss
 ; Installs for the current user without administrator rights: the launcher keeps its settings,
 ; saves, logs and the game/, game\addcont\ and sys_modules\ folders next to itself, so it goes into
 ; a folder the player can write (default %LOCALAPPDATA%\Programs\Gravity Rush 2), never Program Files.
@@ -9,6 +9,10 @@
 
 #ifndef AppVersion
   #define AppVersion "0.0.0"
+#endif
+; The Windows file version takes digits only (4.72e -> 4.72).
+#ifndef NumericVersion
+  #define NumericVersion "0.0.0"
 #endif
 #ifndef SourceDir
   #error Pass /DSourceDir=<staging folder> (package_gr2.sh does)
@@ -28,7 +32,7 @@ AppName={#AppName}
 AppVersion={#AppVersion}
 AppVerName={#AppName} (PC port) {#AppVersion}
 AppPublisher=Gr2Recompile
-VersionInfoVersion={#AppVersion}
+VersionInfoVersion={#NumericVersion}
 DefaultDirName={autopf}\{#AppName}
 DefaultGroupName={#AppName}
 DisableProgramGroupPage=yes
@@ -39,7 +43,7 @@ ArchitecturesInstallIn64BitMode=x64compatible
 MinVersion=10.0
 OutputDir={#OutputDir}
 OutputBaseFilename=GravityRush2-Setup-v{#AppVersion}
-SetupIconFile={#PortDir}\launcher\gr2_port.ico
+SetupIconFile={#PortDir}\launcher\gr2_launcher.ico
 UninstallDisplayIcon={app}\{#AppExe}
 UninstallDisplayName={#AppName} (PC port)
 Compression=lzma2/max

@@ -77,8 +77,9 @@ Inno Setup 6 (`winget install JRSoftware.InnoSetup`), the installer
 administrator rights (default folder `%LOCALAPPDATA%\Programs\Gravity Rush 2`, any writable folder
 works; Program Files is refused because the launcher writes next to itself), makes Start menu and
 desktop shortcuts and an uninstaller that keeps the player's game, DLC and modules and asks before
-removing saves and settings. Nothing from the game ships: no game files, DLC, system modules or
-artwork (the icon is the port's own). DLSS ships when `build_dlss.sh` made it, with NVIDIA's license.
+removing saves and settings. No game files, DLC or system modules ship. The launcher's icon is
+`launcher/gr2_launcher.ico` (Kat); its window takes the game's icon from the dump once the game
+folder is known. DLSS ships when `build_dlss.sh` made it, with NVIDIA's license.
 
 Steam Input (Steam Controller, gyro to mouse, ...): add `Gravity Rush 2.exe` to Steam as a non-Steam
 game and turn Steam Input on in its controller settings. It keeps running until the launcher closes,
