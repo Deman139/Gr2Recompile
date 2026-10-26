@@ -39,7 +39,8 @@ build_installer() {
     fi
     mkdir -p dist
     echo "Installer: $iscc"
-    "$iscc" /Q "/DAppVersion=$version" "/DNumericVersion=$(sed 's/[^0-9.].*//; s/\.$//' <<< "$version")" \
+    # MSYS2 would take /Q and /D... for Unix paths and rewrite them: no argument conversion here.
+    MSYS2_ARG_CONV_EXCL='*' "$iscc" /Q "/DAppVersion=$version" "/DNumericVersion=$(sed 's/[^0-9.].*//; s/\.$//' <<< "$version")" \
         "/DSourceDir=$(cygpath -w "$PWD/$dest")" "/DOutputDir=$(cygpath -w "$PWD/dist")" \
         "/DPortDir=$(cygpath -w "$PWD")" "$(cygpath -w "$PWD/packaging/windows/gr2_setup.iss")"
     du -sh "$setup"
