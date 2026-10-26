@@ -70,9 +70,15 @@ game folder: rebuild after choosing it), else the port's own. The launcher needs
 pacman -S --needed mingw-w64-clang-x86_64-tk mingw-w64-clang-x86_64-python-pillow
 ```
 
-A package players can run without MSYS2 or Python (`dist/Gravity Rush 2/Gravity Rush 2.exe`):
-`bash packaging/windows/package_gr2.sh` (needs a python.org Python; the icon is made once from
-your dump, as the script says).
+A package players can run without MSYS2 or Python: `bash packaging/windows/package_gr2.sh`
+(needs a python.org Python) makes `dist/Gravity Rush 2/` (portable), a zip of it and, with
+Inno Setup 6 (`winget install JRSoftware.InnoSetup`), the installer
+`dist/GravityRush2-Setup-v<version>.exe` (`packaging/windows/gr2_setup.iss`). The installer needs no
+administrator rights (default folder `%LOCALAPPDATA%\Programs\Gravity Rush 2`, any writable folder
+works; Program Files is refused because the launcher writes next to itself), makes Start menu and
+desktop shortcuts and an uninstaller that keeps the player's game, DLC and modules and asks before
+removing saves and settings. Nothing from the game ships: no game files, DLC, system modules or
+artwork (the icon is the port's own). DLSS ships when `build_dlss.sh` made it, with NVIDIA's license.
 
 Steam Input (Steam Controller, gyro to mouse, ...): add `Gravity Rush 2.exe` to Steam as a non-Steam
 game and turn Steam Input on in its controller settings. It keeps running until the launcher closes,

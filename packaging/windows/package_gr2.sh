@@ -1,17 +1,20 @@
 #!/usr/bin/env bash
-# Builds dist/Gravity Rush 2/ and dist/GravityRush2-v<version>-windows.zip: the launcher
+# Builds dist/Gravity Rush 2/, dist/GravityRush2-v<version>-windows.zip and, with Inno Setup 6
+# installed (winget install JRSoftware.InnoSetup; ISCC overrides), the installer
+# dist/GravityRush2-Setup-v<version>.exe (packaging/windows/gr2_setup.iss): the launcher
 # (Gravity Rush 2.exe, frozen with PyInstaller so players need no Python), the game executable
-# (bin/GravityRush2.exe) with the MSYS2 CLANG64 DLLs it needs, the preparation scripts and run.py.
+# (bin/GravityRush2.exe) with the MSYS2 CLANG64 DLLs it needs, DLSS (gr2_dlss.dll and NVIDIA's
+# nvngx_dlss.dll with its license, when build_dlss.sh made them), the preparation scripts and run.py.
 # Run from an MSYS2 CLANG64 shell after `bash build.sh`. Freezing uses a Windows Python 3.10+
 # (python.org; WINPYTHON overrides) and a private venv in out/pyenv.
-# The icon is made from the player's own dump once (it is not in the repository):
-#   python packaging/windows/make_game_icon.py "<game>/sce_sys/icon0.png" launcher/gr2.ico
-# No game files and no PS4 system modules ship: the player points the launcher at their own.
+# The icon is the port's own (launcher/gr2_port.ico): no game artwork ships.
+# No game files, DLC or PS4 system modules ship: the player copies their own into game/,
+# game/addcont/ and sys_modules/ or points the launcher at them.
 set -euo pipefail
 cd -- "$(dirname -- "$0")/../.."
 source ./msys2-env.sh
 [[ -f out/gr2-probe.exe ]] || { echo 'Build first: bash build.sh' >&2; exit 1; }
-[[ -f launcher/gr2.ico ]] || { echo 'launcher/gr2.ico is missing: python packaging/windows/make_game_icon.py <game>/sce_sys/icon0.png launcher/gr2.ico' >&2; exit 1; }
+icon=launcher/gr2_port.ico
 version=$(sed -n "s/^VERSION = '\(.*\)'/\1/p" launcher/gr2_launcher.py)
 name='Gravity Rush 2'
 
@@ -34,7 +37,7 @@ for module in argparse base64 collections hashlib json re shutil socket struct t
     hidden+=(--hidden-import "$module")
 done
 out/pyenv/Scripts/python.exe -m PyInstaller --noconfirm --clean --log-level WARN --windowed --copy-metadata pillow \
-    --name "$name" --icon "$(cygpath -w "$PWD/launcher/gr2.ico")" --distpath out/gr2-pyi-dist \
+    --name "$name" --icon "$(cygpath -w "$PWD/$icon")" --distpath out/gr2-pyi-dist \
     --workpath out/gr2-pyi-work --specpath out/gr2-pyi-work --paths "$(cygpath -w "$PWD/scripts")" "${hidden[@]}" \
     "$(cygpath -w "$PWD/launcher/gr2_launcher.py")"
 
@@ -42,13 +45,24 @@ dest="out/gr2-stage/$name"
 rm -rf -- out/gr2-stage
 mkdir -p "$dest/bin" "$dest/launcher"
 cp -r "out/gr2-pyi-dist/$name/." "$dest/"
-cp launcher/gr2.ico launcher/banner.jpg "$dest/launcher/"
+cp "$icon" launcher/banner.jpg "$dest/launcher/"
 # The game executable without debug information (out/ keeps the symbols for crash reports).
 llvm-strip --strip-debug -o "$dest/bin/GravityRush2.exe" out/gr2-probe.exe
 # Every DLL it loads from the CLANG64 tree (SDL3, FFmpeg, Vulkan loader, ...).
 ldd "$dest/bin/GravityRush2.exe" | awk '/\/clang64\/bin\// {print $3}' | sort -u | while read -r dll; do
     cp -u "$dll" "$dest/bin/"
 done
+# DLSS: the bridge (a gow3_dlss.dll built before the rename works under the new name: the game
+# looks for either export) and NVIDIA's runtime, which ships only with NVIDIA's license.
+bridge=$(ls out/gr2_dlss.dll out/gow3_dlss.dll 2>/dev/null | head -1 || true)
+if [[ -n $bridge && -f out/nvngx_dlss.dll && -f out/NVIDIA-DLSS-LICENSE.txt ]]; then
+    cp "$bridge" "$dest/bin/gr2_dlss.dll"
+    cp out/nvngx_dlss.dll "$dest/bin/"
+    cp out/NVIDIA-DLSS-LICENSE.txt "$dest/"
+    echo "DLSS included ($bridge, nvngx_dlss.dll, NVIDIA-DLSS-LICENSE.txt)"
+else
+    echo 'DLSS not included: run packaging/windows/build_dlss.sh first (out/gr2_dlss.dll, nvngx_dlss.dll, NVIDIA-DLSS-LICENSE.txt)' >&2
+fi
 cp -r scripts "$dest/"
 cp run.py LICENSE README.md "$dest/"
 # Empty folders the player may copy the game and the PS4 modules into (the launcher finds them).
@@ -82,6 +96,24 @@ else
     mkdir -p "$play"
     find "$play" -mindepth 1 -maxdepth 1 ! -name user -exec rm -rf {} +
     cp -r "$dest/." "$play/"
+fi
+
+# The installer, when Inno Setup 6 is installed.
+iscc=${ISCC:-}
+if [[ -z $iscc ]]; then
+    for candidate in "/c/Program Files (x86)/Inno Setup 6/ISCC.exe" "/c/Program Files/Inno Setup 6/ISCC.exe" \
+                     "${LOCALAPPDATA:+$(cygpath -u "$LOCALAPPDATA")}/Programs/Inno Setup 6/ISCC.exe"; do
+        [[ -x $candidate ]] && { iscc=$candidate; break; }
+    done
+fi
+setup="dist/GravityRush2-Setup-v$version.exe"
+if [[ -n $iscc ]]; then
+    "$iscc" /Q "/DAppVersion=$version" "/DSourceDir=$(cygpath -w "$PWD/$dest")" \
+        "/DOutputDir=$(cygpath -w "$PWD/dist")" "/DPortDir=$(cygpath -w "$PWD")" \
+        "$(cygpath -w "$PWD/packaging/windows/gr2_setup.iss")"
+    du -sh "$setup"
+else
+    echo 'Installer skipped: Inno Setup 6 not found (winget install JRSoftware.InnoSetup, or set ISCC)' >&2
 fi
 du -sh "$dest" "$zip"
 echo "Play: $PWD/$play/$name.exe"

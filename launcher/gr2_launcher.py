@@ -1725,8 +1725,9 @@ def main():
     import tkinter as tk
     from tkinter import filedialog, messagebox, ttk
     root = tk.Tk()
-    icon = PORT_DIR / 'launcher' / 'gr2.ico'
-    if icon.is_file():
+    icon = next((p for p in (PORT_DIR / 'launcher' / 'gr2.ico', PORT_DIR / 'launcher' / 'gr2_port.ico')
+                 if p.is_file()), None)
+    if icon:
         try:
             root.iconbitmap(default=str(icon))
         except tk.TclError:
