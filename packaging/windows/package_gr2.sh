@@ -20,7 +20,9 @@ name='Gravity Rush 2'
 
 python=${WINPYTHON:-}
 if [[ -z $python ]]; then
-    for candidate in /c/Python3*/python.exe "${LOCALAPPDATA:-/c/Users/$USER/AppData/Local}"/Programs/Python/Python3*/python.exe; do
+    local_app_data=$(cygpath -u "${LOCALAPPDATA:-C:\\Users\\$(id -un)\\AppData\\Local}")
+    for candidate in /c/Python3*/python.exe "/c/Program Files/Python3"*/python.exe \
+                     "$local_app_data"/Programs/Python/Python3*/python.exe; do
         [[ -x $candidate ]] && python=$candidate
     done
 fi
